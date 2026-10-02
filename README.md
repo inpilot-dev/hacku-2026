@@ -21,6 +21,18 @@ just demo
 
 Open the local URL printed by the command. Stopping it removes only that temporary wallet. To keep demo records across restarts, set `MANDATE_DEMO_DATA_DIR` to a dedicated local directory first. See [the frontend runbook](apps/web/README.md) and [`just --list`](justfile) for more commands.
 
+If `just` is unavailable, install only the demo runtime and launch directly:
+
+```bash
+uv venv .venv --allow-existing
+uv pip install --python .venv/bin/python -r services/api/requirements-wallet.txt
+npm ci --prefix apps/web
+npm run build --prefix apps/web
+PYTHON_BIN="$PWD/.venv/bin/python" ./scripts/run-demo.sh
+```
+
+This starts a fresh, disposable local wallet and serves the built web app and API from one loopback origin. See [Noah's detailed demo runbook](docs/noah-demo-runbook.md) for the presentation and reset sequence.
+
 ## Current integration state
 
 - **Wallet:** mandate confirmation/revocation, quote calculation, atomic reservations, payment-route comparison, one-time approval and sandbox receipt are connected to the UI.
