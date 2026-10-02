@@ -11,7 +11,7 @@ help:
 
 # Install Python (.venv) and npm dependencies
 install:
-    uv venv .venv -q
+    uv venv .venv -q --allow-existing
     uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/mcp-wallet/requirements.txt "mcp>=1.10,<2"
     cd apps/web && npm ci
 
@@ -41,3 +41,12 @@ demo:
 test:
     cd services/api && {{venv_python}} -m pytest -q
     cd services/mcp-wallet && {{venv_python}} -m pytest -q
+    cd services/agent && {{venv_python}} -m pytest -q
+
+# Capture a fresh observed Wellcome catalog into data/catalog (makes ~8 HTTP requests)
+capture:
+    cd services/agent && {{venv_python}} -m catalog_capture
+
+# Run only the backend, pricing quotes from the observed Wellcome catalog
+backend-observed:
+    cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/wellcome.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000
