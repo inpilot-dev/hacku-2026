@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Iterator
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 BUSY_TIMEOUT_MS = 5000
 
 

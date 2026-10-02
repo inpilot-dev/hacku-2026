@@ -26,7 +26,7 @@ from .catalog import Catalog, CatalogError
 from .clock import SystemClock, iso, parse, period_bounds
 from .drafts import DraftLookup, InMemoryDrafts
 from .errors import ApiError, conflict, invalid, not_found
-from .rails import PaymentRail, SandboxRail
+from .rails import PaymentRail, RailDeclined, TapAndGoSingleUseCardSimulator, rail_info
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
 
 PAYLOAD_VERSION = 1
@@ -54,7 +54,7 @@ class Wallet:
         self.catalog = catalog
         self.clock = clock or SystemClock()
         self.draft_lookup = draft_lookup or InMemoryDrafts()
-        self.rail = rail or SandboxRail()
+        self.rail = rail or TapAndGoSingleUseCardSimulator()
         self.authorization_ttl = timedelta(seconds=authorization_ttl_s)
         self.quote_ttl = timedelta(seconds=quote_ttl_s)
 
@@ -94,6 +94,14 @@ class Wallet:
             actor_id=actor if isinstance(actor, str) else actor.actor_id,
             mandate_id=mandate_id, transaction_id=transaction_id, occurred_at=iso(now),
         )
+
+    @staticmethod
+    def _rail(fn, *args):
+        """Rail calls share the ledger transaction; a decline rolls the whole change back."""
+        try:
+            return fn(*args)
+        except RailDeclined as exc:
+            raise ApiError(500, "INTERNAL_ERROR", f"Payment rail declined an approved step: {exc}") from None
 
     # mandates
 
@@ -216,7 +224,7 @@ class Wallet:
                 "UPDATE budget_periods SET reserved_minor = reserved_minor - ?, version = version + 1 WHERE id = ?",
                 (r["amount_minor"], pid),
             )
-        self.rail.void(r["id"])
+        self._rail(self.rail.void, conn, r, now)
         r["status"] = status
 
     def _expire_overdue(self, conn, now: datetime) -> None:
@@ -305,9 +313,10 @@ class Wallet:
                 (m["id"], m["owner_id"], m["delegatee_id"], m["parent_mandate_id"], m["draft_id"], m["version"],
                  m["status"], json.dumps(pol), m["expires_at"], m["created_at"], None),
             )
+            card_ref = self._rail(self.rail.issue, conn, m, now)
             self._event(conn, actor.actor_id, "mandate_confirmed", {
                 "draft_id": req["draft_id"], "delegatee_id": m["delegatee_id"], "parent_mandate_id": parent_id,
-                "version": 1, "policy": pol,
+                "version": 1, "policy": pol, "rail": rail_info(self.rail, card_ref),
             }, actor=actor, now=now, mandate_id=m["id"])
             return 201, self._mandate_out(m, now)
 
@@ -338,6 +347,8 @@ class Wallet:
                 f"WHERE id IN ({placeholders}) AND status = 'active'",
                 (iso(now), *ids),
             )
+            for revoked_id in ids:
+                self._rail(self.rail.close, conn, revoked_id, now)
             cancelled = []
             for row in conn.execute(
                 f"SELECT * FROM reservations WHERE mandate_id IN ({placeholders}) AND status = 'reserved' "
@@ -482,13 +493,13 @@ class Wallet:
                     if cur.rowcount != 1:
                         raise ApiError(500, "INTERNAL_ERROR", "Budget changed during authorization.")
                 reservation_id = r["id"]
-                self.rail.hold(r["id"], amount, "HKD")
+                hold_ref = self._rail(self.rail.hold, conn, r, now)
                 claims = self._claims(r, quote["merchant_id"])
                 seq = self._event(conn, leaf["owner_id"], "authorization_approved", {
                     "decision_id": decision_id, "reservation_id": r["id"], "quote_id": quote["id"],
                     "basket_hash": quote["basket_hash"], "merchant_id": quote["merchant_id"],
                     "amount_minor": amount, "expires_at": r["expires_at"], "token_id": r["token_id"],
-                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot,
+                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot, "rail": rail_info(self.rail, hold_ref),
                 }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
                 body = {
                     **base,
@@ -625,7 +636,7 @@ class Wallet:
                     "version = version + 1 WHERE id = ?",
                     (r["amount_minor"], r["amount_minor"], pid),
                 )
-            self.rail.capture(r["id"], r["amount_minor"], "HKD")
+            capture_ref = self._rail(self.rail.capture, conn, r, now)
             decision_id = _id("dec")
             receipt = {
                 "id": _id("rcpt"),
@@ -643,6 +654,7 @@ class Wallet:
             }
             seq = self._event(conn, leaf["owner_id"], "payment_completed", {
                 "decision_id": decision_id, "receipt": receipt, "mandate_version": leaf["version"],
+                "rail": rail_info(self.rail, capture_ref),
             }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
             conn.execute("INSERT INTO payments VALUES (?,?,?,?,?,?,?)",
                          (receipt["id"], r["transaction_id"], r["id"], decision_id, seq, json.dumps(receipt),

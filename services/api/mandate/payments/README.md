@@ -35,3 +35,11 @@ Set `MANDATE_DEMO_TOKENS` for real demo tokens, as described in `auth.py`.
 | Token is not enough to pay | Payment re-checks the chain's status, expiry and version, the reservation state, and the stored quote, then re-prices the quote |
 | Release exactly once | A status-guarded `UPDATE ... WHERE status = 'reserved'` |
 | No tokens at rest | Ed25519 is deterministic, so replays re-sign the persisted claims |
+
+## Payment rail
+
+`rails.py` defines a `PaymentRail` interface that maps ledger states to card steps: issue a card on confirm,
+hold on reserve, capture on pay, void on cancel or expiry, and close the card on revoke. The default rail is
+`TapAndGoSingleUseCardSimulator`, a **local simulation** shaped like HKT's Tap & Go Single Use Card. There is no
+Tap & Go sandbox, and no money moves. Receipts say `payment_mode: "sandbox"`, and audit payloads record
+`rail: {name, simulated: true, ref}`. A Stripe test-mode manual-capture adapter would implement the same interface.

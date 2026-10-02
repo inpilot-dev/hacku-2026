@@ -110,3 +110,25 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     created_at    TEXT NOT NULL,
     PRIMARY KEY (actor_id, operation, key)
 );
+
+-- Simulated card rail (mandate/payments/rails.py). One virtual card per
+-- mandate; one hold per reservation. Not a real issuer: no money moves.
+CREATE TABLE IF NOT EXISTS simulated_cards (
+    id          TEXT PRIMARY KEY,
+    mandate_id  TEXT NOT NULL UNIQUE REFERENCES mandates(id),
+    limit_minor INTEGER NOT NULL CHECK (limit_minor >= 1),
+    currency    TEXT NOT NULL,
+    expires_at  TEXT NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('active', 'closed')),
+    issued_at   TEXT NOT NULL,
+    closed_at   TEXT
+);
+
+CREATE TABLE IF NOT EXISTS simulated_card_ops (
+    reservation_id TEXT PRIMARY KEY REFERENCES reservations(id),
+    card_id        TEXT NOT NULL REFERENCES simulated_cards(id),
+    hold_id        TEXT NOT NULL UNIQUE,
+    amount_minor   INTEGER NOT NULL CHECK (amount_minor >= 0),
+    status         TEXT NOT NULL CHECK (status IN ('held', 'captured', 'voided')),
+    updated_at     TEXT NOT NULL
+);
