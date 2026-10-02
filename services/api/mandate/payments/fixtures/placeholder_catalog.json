@@ -1,0 +1,372 @@
+{
+  "_note": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo.",
+  "merchants": {
+    "demo_store_a": {
+      "revision": "placeholder-a-1",
+      "data_mode": "observed_snapshot",
+      "evidence_ids": [
+        "ev_merchant_a"
+      ]
+    },
+    "demo_store_b": {
+      "revision": "placeholder-b-1",
+      "data_mode": "observed_snapshot",
+      "evidence_ids": [
+        "ev_merchant_b"
+      ]
+    },
+    "demo_store_c": {
+      "revision": "placeholder-c-1",
+      "data_mode": "observed_snapshot",
+      "evidence_ids": [
+        "ev_merchant_c"
+      ]
+    }
+  },
+  "products": [
+    {
+      "id": "p_a_apples",
+      "merchant_id": "demo_store_a",
+      "title": "Apples 1kg",
+      "description": "Placeholder listing text.",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 2890,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_apples"
+      ]
+    },
+    {
+      "id": "p_a_milk",
+      "merchant_id": "demo_store_a",
+      "title": "Fresh milk 2L",
+      "description": "Placeholder listing text.",
+      "category": "dairy",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 3650,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_milk"
+      ]
+    },
+    {
+      "id": "p_a_eggs",
+      "merchant_id": "demo_store_a",
+      "title": "Eggs x10",
+      "description": "Placeholder listing text.",
+      "category": "eggs",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 3290,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_eggs"
+      ]
+    },
+    {
+      "id": "p_a_rice",
+      "merchant_id": "demo_store_a",
+      "title": "Jasmine rice 5kg",
+      "description": "Placeholder listing text.",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 8900,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_rice"
+      ]
+    },
+    {
+      "id": "p_a_beer",
+      "merchant_id": "demo_store_a",
+      "title": "Lager 6-pack",
+      "description": "Placeholder listing text.",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 7800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_beer"
+      ]
+    },
+    {
+      "id": "p_a_tonic",
+      "merchant_id": "demo_store_a",
+      "title": "Herbal tonic",
+      "description": "Placeholder listing text.",
+      "category": "unknown",
+      "category_status": "unknown",
+      "unit_label": "each",
+      "unit_price_minor": 4800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_a_tonic"
+      ]
+    },
+    {
+      "id": "p_a_fish",
+      "merchant_id": "demo_store_a",
+      "title": "Fresh grouper",
+      "description": "Placeholder listing text.",
+      "category": "seafood",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 15800,
+      "currency": "HKD",
+      "available": false,
+      "evidence_ids": [
+        "ev_p_a_fish"
+      ]
+    },
+    {
+      "id": "p_b_detergent",
+      "merchant_id": "demo_store_b",
+      "title": "Laundry detergent 3L",
+      "description": "Placeholder listing text.",
+      "category": "household",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 6990,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_b_detergent"
+      ]
+    },
+    {
+      "id": "p_b_bread",
+      "merchant_id": "demo_store_b",
+      "title": "Wholemeal bread",
+      "description": "Placeholder listing text.",
+      "category": "bakery",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 2350,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_b_bread"
+      ]
+    },
+    {
+      "id": "p_c_snacks",
+      "merchant_id": "demo_store_c",
+      "title": "Snack box",
+      "description": "Placeholder listing text.",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "each",
+      "unit_price_minor": 5000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_p_c_snacks"
+      ]
+    }
+  ],
+  "delivery_contexts": [
+    {
+      "id": "ctx_a_standard",
+      "merchant_id": "demo_store_a",
+      "fee_rules": [
+        {
+          "label": "Delivery (orders under HK$400)",
+          "min_subtotal_minor": 0,
+          "max_subtotal_minor": 39999,
+          "amount_minor": 3000,
+          "evidence_ids": [
+            "ev_fee_a_std"
+          ]
+        },
+        {
+          "label": "Delivery (orders HK$400+)",
+          "min_subtotal_minor": 40000,
+          "max_subtotal_minor": null,
+          "amount_minor": 0,
+          "evidence_ids": [
+            "ev_fee_a_free"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ctx_b_standard",
+      "merchant_id": "demo_store_b",
+      "fee_rules": [
+        {
+          "label": "Delivery",
+          "min_subtotal_minor": 0,
+          "max_subtotal_minor": null,
+          "amount_minor": 2500,
+          "evidence_ids": [
+            "ev_fee_b_std"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ctx_c_standard",
+      "merchant_id": "demo_store_c",
+      "fee_rules": [
+        {
+          "label": "Delivery",
+          "min_subtotal_minor": 0,
+          "max_subtotal_minor": null,
+          "amount_minor": 2000,
+          "evidence_ids": [
+            "ev_fee_c_std"
+          ]
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_p_a_apples",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_milk",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_eggs",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_rice",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_beer",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_tonic",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_a_fish",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_b_detergent",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_b_bread",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_p_c_snacks",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "product_price",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_fee_a_std",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "delivery_fee",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_fee_a_free",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "delivery_fee",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_fee_b_std",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "delivery_fee",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_fee_c_std",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "delivery_fee",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_merchant_a",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "merchant_identity",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_merchant_b",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "merchant_identity",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    },
+    {
+      "id": "ev_merchant_c",
+      "source_url": "https://example.invalid/placeholder",
+      "observed_at": "2026-10-02T12:00:00+08:00",
+      "kind": "merchant_identity",
+      "capture_path": null,
+      "conditions": "PLACEHOLDER: not an observation. Replace with captured data before the compliance demo."
+    }
+  ]
+}

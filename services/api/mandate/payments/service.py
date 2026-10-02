@@ -1,0 +1,703 @@
+"""The wallet ledger: every financial state transition, each in one SQLite write transaction.
+
+Within a transaction the wallet (1) expires overdue reservations, (2) checks
+idempotency and transaction uniqueness, (3) evaluates policy against
+persisted state, (4) writes the state change and (5) appends the audit event
+on the same connection. Nothing commits until all five succeed.
+
+Operations return ``(http_status, body)`` with ``body`` already shaped like
+the contract response.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+from datetime import datetime, timedelta
+from typing import Callable
+
+from mandate.storage.db import Database
+
+from . import policy as rules
+from .audit_shim import append_event, sha256_hex, stream_for_owner
+from .auth import Actor
+from .catalog import Catalog, CatalogError
+from .clock import SystemClock, iso, parse, period_bounds
+from .drafts import DraftLookup, InMemoryDrafts
+from .errors import ApiError, conflict, invalid, not_found
+from .rails import PaymentRail, SandboxRail
+from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
+
+PAYLOAD_VERSION = 1
+
+
+def _id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex}"
+
+
+class Wallet:
+    def __init__(
+        self,
+        db: Database,
+        signer: Signer,
+        catalog: Catalog,
+        *,
+        clock=None,
+        draft_lookup: DraftLookup | None = None,
+        rail: PaymentRail | None = None,
+        authorization_ttl_s: int = 120,
+        quote_ttl_s: int = 600,
+    ):
+        self.db = db
+        self.signer = signer
+        self.catalog = catalog
+        self.clock = clock or SystemClock()
+        self.draft_lookup = draft_lookup or InMemoryDrafts()
+        self.rail = rail or SandboxRail()
+        self.authorization_ttl = timedelta(seconds=authorization_ttl_s)
+        self.quote_ttl = timedelta(seconds=quote_ttl_s)
+
+    # ------------------------------------------------------------------ helpers
+
+    def _now(self) -> datetime:
+        return self.clock.now()
+
+    def _idempotent(self, actor: Actor, operation: str, key: str, request: dict,
+                    op: Callable[[sqlite3.Connection, datetime], tuple[int, dict]]) -> tuple[int, dict, bool]:
+        """Run ``op`` once per (actor, operation, key); replay the saved outcome for the same request."""
+        request_hash = sha256_hex(request)
+        with self.db.write_tx() as conn:
+            row = conn.execute(
+                "SELECT request_hash, status_code, response_json FROM idempotency_keys "
+                "WHERE actor_id = ? AND operation = ? AND key = ?",
+                (actor.actor_id, operation, key),
+            ).fetchone()
+            if row is not None:
+                if row["request_hash"] != request_hash:
+                    raise conflict("This Idempotency-Key was already used with a different request.",
+                                   code="IDEMPOTENCY_CONFLICT")
+                return row["status_code"], json.loads(row["response_json"]), True
+            now = self._now()
+            self._expire_overdue(conn, now)
+            status, body = op(conn, now)
+            conn.execute(
+                "INSERT INTO idempotency_keys VALUES (?,?,?,?,?,?,?)",
+                (actor.actor_id, operation, key, request_hash, status, json.dumps(body), iso(now)),
+            )
+        return status, body, False
+
+    def _event(self, conn, owner_id: str, event_type: str, payload: dict, *, actor: Actor | str,
+               now: datetime, mandate_id: str | None = None, transaction_id: str | None = None) -> int:
+        return append_event(
+            conn, stream_for_owner(owner_id), event_type, {"payload_version": PAYLOAD_VERSION, **payload},
+            actor_id=actor if isinstance(actor, str) else actor.actor_id,
+            mandate_id=mandate_id, transaction_id=transaction_id, occurred_at=iso(now),
+        )
+
+    # mandates
+
+    @staticmethod
+    def _mandate_row(row) -> dict:
+        m = dict(row)
+        m["policy"] = json.loads(m.pop("policy_json"))
+        return m
+
+    def _load_mandate(self, conn, mandate_id: str) -> dict | None:
+        row = conn.execute("SELECT * FROM mandates WHERE id = ?", (mandate_id,)).fetchone()
+        return self._mandate_row(row) if row else None
+
+    def _chain(self, conn, leaf: dict) -> list[dict]:
+        chain, seen = [leaf], {leaf["id"]}
+        while chain[-1]["parent_mandate_id"]:
+            parent = self._load_mandate(conn, chain[-1]["parent_mandate_id"])
+            if parent is None or parent["id"] in seen:
+                raise ApiError(500, "INTERNAL_ERROR", "Broken delegation chain.")
+            chain.append(parent)
+            seen.add(parent["id"])
+        return chain
+
+    @staticmethod
+    def _can_see_mandate(actor: Actor, m: dict) -> bool:
+        if actor.role == "user":
+            return m["owner_id"] == actor.actor_id
+        if actor.role == "agent":
+            return m["delegatee_id"] == actor.actor_id
+        return False
+
+    @staticmethod
+    def _mandate_out(m: dict, now: datetime) -> dict:
+        status = m["status"]
+        if status == "active" and parse(m["expires_at"]) <= now:
+            status = "expired"
+        return {
+            "id": m["id"],
+            "owner_id": m["owner_id"],
+            "delegatee_id": m["delegatee_id"],
+            "parent_mandate_id": m["parent_mandate_id"],
+            "version": m["version"],
+            "status": status,
+            "policy": m["policy"],
+            "created_at": m["created_at"],
+            "revoked_at": m["revoked_at"],
+        }
+
+    # budgets
+
+    def _ensure_periods(self, conn, chain: list[dict], now: datetime) -> list[dict]:
+        """Current budget period rows for every limit on every mandate in the chain."""
+        rows = []
+        for m in chain:
+            for limit in m["policy"]["period_limits"]:
+                start, end = period_bounds(limit["period"], now)
+                period_id = f"bp_{m['id']}_{limit['period']}_{start:%Y%m%d}"
+                conn.execute(
+                    "INSERT OR IGNORE INTO budget_periods (id, mandate_id, period, starts_at, ends_at, limit_minor) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (period_id, m["id"], limit["period"], iso(start), iso(end), limit["limit_minor"]),
+                )
+                rows.append(dict(conn.execute("SELECT * FROM budget_periods WHERE id = ?", (period_id,)).fetchone()))
+        return rows
+
+    @staticmethod
+    def _budget_out(b: dict) -> dict:
+        return {
+            "mandate_id": b["mandate_id"],
+            "period_id": b["id"],
+            "period": b["period"],
+            "starts_at": b["starts_at"],
+            "ends_at": b["ends_at"],
+            "currency": "HKD",
+            "limit_minor": b["limit_minor"],
+            "paid_minor": b["paid_minor"],
+            "reserved_minor": b["reserved_minor"],
+            "available_minor": b["limit_minor"] - b["paid_minor"] - b["reserved_minor"],
+            "version": b["version"],
+        }
+
+    def _budgets_by_ids(self, conn, period_ids: list[str]) -> list[dict]:
+        out = []
+        for pid in period_ids:
+            out.append(self._budget_out(dict(conn.execute("SELECT * FROM budget_periods WHERE id = ?", (pid,)).fetchone())))
+        return out
+
+    # reservations
+
+    @staticmethod
+    def _period_ids(conn, reservation_id: str) -> list[str]:
+        return [r[0] for r in conn.execute(
+            "SELECT period_id FROM reservation_periods WHERE reservation_id = ? ORDER BY rowid", (reservation_id,))]
+
+    def _reservation_out(self, conn, r: dict) -> dict:
+        return {
+            "id": r["id"],
+            "transaction_id": r["transaction_id"],
+            "mandate_id": r["mandate_id"],
+            "mandate_version": r["mandate_version"],
+            "quote_id": r["quote_id"],
+            "basket_hash": r["basket_hash"],
+            "amount_minor": r["amount_minor"],
+            "currency": "HKD",
+            "status": r["status"],
+            "expires_at": r["expires_at"],
+            "affected_period_ids": self._period_ids(conn, r["id"]),
+        }
+
+    def _close_reservation(self, conn, r: dict, status: str, now: datetime) -> None:
+        """Release a reserved amount exactly once. The status guard makes a second release a no-op."""
+        cur = conn.execute(
+            "UPDATE reservations SET status = ?, closed_at = ? WHERE id = ? AND status = 'reserved'",
+            (status, iso(now), r["id"]),
+        )
+        if cur.rowcount != 1:
+            return
+        for pid in self._period_ids(conn, r["id"]):
+            conn.execute(
+                "UPDATE budget_periods SET reserved_minor = reserved_minor - ?, version = version + 1 WHERE id = ?",
+                (r["amount_minor"], pid),
+            )
+        self.rail.void(r["id"])
+        r["status"] = status
+
+    def _expire_overdue(self, conn, now: datetime) -> None:
+        overdue = conn.execute(
+            "SELECT r.*, m.owner_id FROM reservations r JOIN mandates m ON m.id = r.mandate_id "
+            "WHERE r.status = 'reserved' AND r.expires_at <= ?",
+            (iso(now),),
+        ).fetchall()
+        for row in overdue:
+            r = dict(row)
+            self._close_reservation(conn, r, "expired", now)
+            self._event(conn, r["owner_id"], "reservation_expired", {
+                "reservation_id": r["id"], "released_minor": r["amount_minor"], "expired_at": r["expires_at"],
+            }, actor="system_wallet", now=now, mandate_id=r["mandate_id"], transaction_id=r["transaction_id"])
+
+    # quotes
+
+    def _load_quote(self, conn, quote_id: str, actor: Actor) -> dict | None:
+        row = conn.execute("SELECT * FROM quotes WHERE id = ?", (quote_id,)).fetchone()
+        if row is None or row["family_id"] != actor.family_id:
+            return None
+        return dict(row)
+
+    def _claims(self, r: dict, merchant_id: str) -> dict:
+        return {
+            "transaction_id": r["transaction_id"],
+            "reservation_id": r["id"],
+            "mandate_id": r["mandate_id"],
+            "mandate_version": r["mandate_version"],
+            "quote_id": r["quote_id"],
+            "basket_hash": r["basket_hash"],
+            "merchant_id": merchant_id,
+            "amount_minor": r["amount_minor"],
+            "currency": "HKD",
+            "audience": AUDIENCE,
+            "issued_at": r["issued_at"],
+            "expires_at": r["expires_at"],
+            "token_id": r["token_id"],
+        }
+
+    # ---------------------------------------------------------------- mandates
+
+    def confirm_mandate(self, actor: Actor, key: str, req: dict) -> tuple[int, dict]:
+        def op(conn, now):
+            draft = self.draft_lookup(req["draft_id"])
+            if draft is None or draft["owner_id"] != actor.actor_id:
+                raise not_found("Draft")
+            if parse(draft["expires_at"]) <= now:
+                raise conflict("This draft has expired; create a new draft.")
+            pol = req["policy"]
+            problems = rules.validate_policy(pol, now)
+            if problems:
+                raise invalid("Policy is invalid.", problems=problems)
+            if conn.execute("SELECT 1 FROM mandates WHERE draft_id = ?", (req["draft_id"],)).fetchone():
+                raise conflict("This draft was already confirmed.")
+
+            parent_id = draft.get("parent_mandate_id")
+            if parent_id:
+                parent = self._load_mandate(conn, parent_id)
+                if parent is None or parent["owner_id"] != actor.actor_id:
+                    raise invalid("Parent mandate is not yours to delegate.", reason_code="PARENT_MANDATE_INVALID")
+                for ancestor in self._chain(conn, parent):
+                    if rules.mandate_state_violation(ancestor, now):
+                        raise invalid("Parent mandate is not active.", reason_code="PARENT_MANDATE_INVALID")
+                narrowing = rules.narrowing_problems(pol, parent["policy"])
+                if narrowing:
+                    raise invalid("A child mandate can only narrow its parent.",
+                                  reason_code="POLICY_NOT_NARROWER", problems=narrowing)
+
+            m = {
+                "id": _id("m"),
+                "owner_id": actor.actor_id,
+                "delegatee_id": draft["delegatee_id"],
+                "parent_mandate_id": parent_id,
+                "draft_id": req["draft_id"],
+                "version": 1,
+                "status": "active",
+                "policy": pol,
+                "expires_at": iso(parse(pol["expires_at"])),
+                "created_at": iso(now),
+                "revoked_at": None,
+            }
+            conn.execute(
+                "INSERT INTO mandates (id, owner_id, delegatee_id, parent_mandate_id, draft_id, version, status, "
+                "policy_json, expires_at, created_at, revoked_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (m["id"], m["owner_id"], m["delegatee_id"], m["parent_mandate_id"], m["draft_id"], m["version"],
+                 m["status"], json.dumps(pol), m["expires_at"], m["created_at"], None),
+            )
+            self._event(conn, actor.actor_id, "mandate_confirmed", {
+                "draft_id": req["draft_id"], "delegatee_id": m["delegatee_id"], "parent_mandate_id": parent_id,
+                "version": 1, "policy": pol,
+            }, actor=actor, now=now, mandate_id=m["id"])
+            return 201, self._mandate_out(m, now)
+
+        status, body, _ = self._idempotent(actor, "confirmMandate", key, req, op)
+        return status, body
+
+    def get_mandate(self, actor: Actor, mandate_id: str) -> dict:
+        with self.db.read() as conn:
+            m = self._load_mandate(conn, mandate_id)
+        if m is None or not self._can_see_mandate(actor, m):
+            raise not_found("Mandate")
+        return self._mandate_out(m, self._now())
+
+    def revoke_mandate(self, actor: Actor, key: str, mandate_id: str, req: dict) -> tuple[int, dict]:
+        def op(conn, now):
+            m = self._load_mandate(conn, mandate_id)
+            if m is None or m["owner_id"] != actor.actor_id:
+                raise not_found("Mandate")
+            if m["status"] == "revoked":
+                raise conflict("This mandate is already revoked.")
+            # The mandate and every descendant lose authority in this transaction.
+            ids = [r[0] for r in conn.execute(
+                "WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT m.id FROM mandates m JOIN tree t "
+                "ON m.parent_mandate_id = t.id) SELECT id FROM tree", (mandate_id,))]
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(
+                f"UPDATE mandates SET status = 'revoked', version = version + 1, revoked_at = ? "
+                f"WHERE id IN ({placeholders}) AND status = 'active'",
+                (iso(now), *ids),
+            )
+            cancelled = []
+            for row in conn.execute(
+                f"SELECT * FROM reservations WHERE mandate_id IN ({placeholders}) AND status = 'reserved' "
+                f"ORDER BY created_at", ids,
+            ).fetchall():
+                r = dict(row)
+                self._close_reservation(conn, r, "cancelled", now)
+                cancelled.append(r["id"])
+                self._event(conn, m["owner_id"], "reservation_cancelled", {
+                    "reservation_id": r["id"], "released_minor": r["amount_minor"], "reason": "mandate_revoked",
+                    "revoked_mandate_id": mandate_id,
+                }, actor=actor, now=now, mandate_id=r["mandate_id"], transaction_id=r["transaction_id"])
+            updated = self._load_mandate(conn, mandate_id)
+            seq = self._event(conn, m["owner_id"], "mandate_revoked", {
+                "version": updated["version"], "reason": req.get("reason"), "revoked_mandate_ids": ids,
+                "cancelled_reservation_ids": cancelled,
+            }, actor=actor, now=now, mandate_id=mandate_id)
+            return 200, {
+                "mandate": self._mandate_out(updated, now),
+                "cancelled_reservation_ids": cancelled,
+                "event_sequence": seq,
+            }
+
+        status, body, _ = self._idempotent(actor, "revokeMandate", key, {"mandate_id": mandate_id, **req}, op)
+        return status, body
+
+    # ------------------------------------------------------------------ quotes
+
+    def create_quote(self, actor: Actor, req: dict) -> dict:
+        try:
+            priced = self.catalog.price(req["merchant_id"], req["items"], req["delivery_context_id"])
+        except CatalogError as exc:
+            if exc.kind == "not_found":
+                raise not_found(str(exc)) from None
+            if exc.kind == "unavailable":
+                raise conflict(str(exc)) from None
+            raise invalid(str(exc)) from None
+        expected = req.get("expected_revision")
+        if expected is not None and expected != priced["revision"]:
+            raise conflict("Catalog revision changed; fetch the catalog again.",
+                           expected_revision=expected, current_revision=priced["revision"])
+
+        with self.db.write_tx() as conn:
+            now = self._now()
+            quote = {"id": _id("q"), **priced, "created_at": iso(now), "expires_at": iso(now + self.quote_ttl)}
+            quote["basket_hash"] = sha256_hex(quote)
+            conn.execute(
+                "INSERT INTO quotes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (quote["id"], actor.family_id, actor.actor_id, quote["merchant_id"], quote["revision"],
+                 quote["total_minor"], quote["basket_hash"],
+                 json.dumps({"items": req["items"], "delivery_context_id": req["delivery_context_id"]}),
+                 json.dumps(quote), quote["expires_at"], quote["created_at"]),
+            )
+            self._event(conn, actor.family_id, "quote_created", {
+                "quote_id": quote["id"], "merchant_id": quote["merchant_id"], "revision": quote["revision"],
+                "total_minor": quote["total_minor"], "basket_hash": quote["basket_hash"],
+                "data_mode": quote["data_mode"],
+            }, actor=actor, now=now)
+        return quote
+
+    def get_quote(self, actor: Actor, quote_id: str) -> dict:
+        with self.db.read() as conn:
+            q = self._load_quote(conn, quote_id, actor)
+        if q is None:
+            raise not_found("Quote")
+        return json.loads(q["body_json"])
+
+    # ----------------------------------------------------------- authorization
+
+    def authorize(self, actor: Actor, key: str, req: dict) -> tuple[int, dict]:
+        def op(conn, now):
+            prior = conn.execute("SELECT * FROM auth_decisions WHERE transaction_id = ?",
+                                 (req["transaction_id"],)).fetchone()
+            if prior is not None:
+                if (prior["actor_id"], prior["mandate_id"], prior["quote_id"]) != (
+                        actor.actor_id, req["mandate_id"], req["quote_id"]):
+                    raise conflict("This transaction_id was already used for a different purchase.",
+                                   reason_code="TRANSACTION_CONFLICT")
+                return 200, json.loads(prior["response_json"])
+
+            leaf = self._load_mandate(conn, req["mandate_id"])
+            if leaf is None or leaf["delegatee_id"] != actor.actor_id:
+                raise not_found("Mandate")
+            qrow = self._load_quote(conn, req["quote_id"], actor)
+            if qrow is None:
+                raise not_found("Quote")
+            quote = json.loads(qrow["body_json"])
+
+            chain = self._chain(conn, leaf)
+            budgets = self._ensure_periods(conn, chain, now)
+            ev = rules.evaluate(chain, quote, budgets, now)
+            decision_id = _id("dec")
+            base = {
+                "decision_id": decision_id,
+                "transaction_id": req["transaction_id"],
+                "mandate_id": leaf["id"],
+                "mandate_version": leaf["version"],
+                "rule_ids": ev.rule_ids,
+                "evaluated_at": iso(now),
+            }
+            snapshot = [{"mandate_id": m["id"], "version": m["version"], "policy": m["policy"]} for m in chain]
+            reservation_id = None
+
+            if ev.status == "approved":
+                expires = min(
+                    [now + self.authorization_ttl, parse(quote["expires_at"])]
+                    + [parse(m["expires_at"]) for m in chain]
+                    + [parse(b["ends_at"]) for b in budgets]
+                )
+                amount = quote["total_minor"]
+                r = {
+                    "id": _id("res"),
+                    "transaction_id": req["transaction_id"],
+                    "mandate_id": leaf["id"],
+                    "mandate_version": leaf["version"],
+                    "quote_id": quote["id"],
+                    "basket_hash": quote["basket_hash"],
+                    "merchant_id": quote["merchant_id"],
+                    "amount_minor": amount,
+                    "status": "reserved",
+                    "token_id": _id("tok"),
+                    "issued_at": iso(now),
+                    "expires_at": iso(expires),
+                    "created_at": iso(now),
+                }
+                conn.execute(
+                    "INSERT INTO reservations (id, transaction_id, mandate_id, mandate_version, quote_id, basket_hash, "
+                    "merchant_id, amount_minor, status, token_id, issued_at, expires_at, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    tuple(r[k] for k in ("id", "transaction_id", "mandate_id", "mandate_version", "quote_id",
+                                         "basket_hash", "merchant_id", "amount_minor", "status", "token_id",
+                                         "issued_at", "expires_at", "created_at")),
+                )
+                for b in budgets:
+                    conn.execute("INSERT INTO reservation_periods VALUES (?,?)", (r["id"], b["id"]))
+                    # The guarded UPDATE re-asserts the budget rule; the table CHECK backs it up.
+                    cur = conn.execute(
+                        "UPDATE budget_periods SET reserved_minor = reserved_minor + ?, version = version + 1 "
+                        "WHERE id = ? AND paid_minor + reserved_minor + ? <= limit_minor",
+                        (amount, b["id"], amount),
+                    )
+                    if cur.rowcount != 1:
+                        raise ApiError(500, "INTERNAL_ERROR", "Budget changed during authorization.")
+                reservation_id = r["id"]
+                self.rail.hold(r["id"], amount, "HKD")
+                claims = self._claims(r, quote["merchant_id"])
+                seq = self._event(conn, leaf["owner_id"], "authorization_approved", {
+                    "decision_id": decision_id, "reservation_id": r["id"], "quote_id": quote["id"],
+                    "basket_hash": quote["basket_hash"], "merchant_id": quote["merchant_id"],
+                    "amount_minor": amount, "expires_at": r["expires_at"], "token_id": r["token_id"],
+                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot,
+                }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
+                body = {
+                    **base,
+                    "status": "approved",
+                    "message": f"Approved {rules.money(amount)} at {quote['merchant_id']}; funds reserved until {r['expires_at']}.",
+                    "event_sequence": seq,
+                    "reservation": self._reservation_out(conn, r),
+                    "claims": claims,
+                    "budgets": self._budgets_by_ids(conn, [b["id"] for b in budgets]),
+                }
+            else:
+                violations = ev.hard + ev.review
+                seq = self._event(conn, leaf["owner_id"], "authorization_refused", {
+                    "decision_id": decision_id, "status": ev.status, "quote_id": quote["id"],
+                    "basket_hash": quote["basket_hash"], "merchant_id": quote["merchant_id"],
+                    "amount_minor": quote["total_minor"], "violations": violations,
+                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot,
+                }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
+                body = {
+                    **base,
+                    "status": ev.status,
+                    "message": violations[0]["message"] if ev.status == "refused"
+                    else "A person needs to review this purchase before it can go ahead.",
+                    "event_sequence": seq,
+                    "violations": violations,
+                    "budgets": [self._budget_out(b) for b in budgets],
+                }
+            conn.execute(
+                "INSERT INTO auth_decisions VALUES (?,?,?,?,?,?,?,?,?)",
+                (req["transaction_id"], decision_id, actor.actor_id, leaf["id"], quote["id"], body["status"],
+                 reservation_id, json.dumps(body), iso(now)),
+            )
+            return 200, body
+
+        status, body, _ = self._idempotent(actor, "authorizePurchase", key, req, op)
+        if body.get("status") == "approved":
+            # Tokens are never stored; Ed25519 re-signing of the same claims yields the same token.
+            body = {**body, "authorization_token": self.signer.sign(body["claims"])}
+        return status, body
+
+    # ----------------------------------------------------------------- payment
+
+    def pay(self, actor: Actor, key: str, req: dict) -> tuple[int, dict]:
+        def op(conn, now):
+            row = conn.execute("SELECT * FROM reservations WHERE transaction_id = ?",
+                               (req["transaction_id"],)).fetchone()
+            if row is None:
+                raise not_found("Authorized transaction")
+            r = dict(row)
+            leaf = self._load_mandate(conn, r["mandate_id"])
+            if leaf["delegatee_id"] != actor.actor_id:
+                raise not_found("Authorized transaction")
+
+            def refuse(code: str, rule: str, message: str, release: bool, mandate: dict | None = None) -> tuple[int, dict]:
+                released = 0
+                if release and r["status"] == "reserved":
+                    # A refusal after the token verified ends this authorization; free its funds now.
+                    self._close_reservation(conn, r, "cancelled", now)
+                    released = r["amount_minor"]
+                decision_id = _id("dec")
+                v = [rules.violation(code, mandate or leaf, rule, message)]
+                seq = self._event(conn, leaf["owner_id"], "payment_refused", {
+                    "decision_id": decision_id, "reservation_id": r["id"], "quote_id": req["quote_id"],
+                    "violations": v, "reservation_status": r["status"], "released_minor": released,
+                }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
+                return 200, {"status": "refused", "decision_id": decision_id, "transaction_id": r["transaction_id"],
+                             "violations": v, "message": message, "event_sequence": seq}
+
+            # Signature first: an unverified token must not touch the reservation.
+            try:
+                claims = self.signer.verify(req["authorization_token"], now, check_expiry=False)
+            except TokenInvalid:
+                return refuse("AUTHORIZATION_INVALID", "authorization", "The authorization token is not valid.", False)
+            bound = (claims.get("transaction_id") == r["transaction_id"] and claims.get("reservation_id") == r["id"]
+                     and claims.get("token_id") == r["token_id"])
+            if not bound:
+                return refuse("AUTHORIZATION_INVALID", "authorization",
+                              "The authorization token belongs to a different transaction.", False)
+
+            paid = conn.execute("SELECT * FROM payments WHERE transaction_id = ?", (r["transaction_id"],)).fetchone()
+            if paid is not None:
+                if req["quote_id"] != r["quote_id"]:
+                    raise conflict("This transaction was already paid for a different quote.",
+                                   reason_code="TRANSACTION_CONFLICT")
+                return 200, {"status": "completed", "decision_id": paid["decision_id"],
+                             "receipt": json.loads(paid["receipt_json"]), "replayed": True,
+                             "event_sequence": paid["event_sequence"]}
+
+            if req["quote_id"] != r["quote_id"] or claims.get("quote_id") != r["quote_id"]:
+                return refuse("QUOTE_CHANGED", "quote", "The quote differs from the one that was authorized.", True)
+            try:
+                self.signer.verify(req["authorization_token"], now)
+            except TokenExpired:
+                return refuse("AUTHORIZATION_EXPIRED", "authorization",
+                              f"The authorization expired at {r['expires_at']}.", True)
+            # Current authority first, so a revoked mandate is reported as revoked rather
+            # than as the reservation that revocation cancelled.
+            for m in self._chain(conn, leaf):
+                state = rules.mandate_state_violation(m, now)
+                if state:
+                    return refuse(state["code"], "status", state["message"], True, m)
+            if r["status"] == "cancelled":
+                return refuse("RESERVATION_CANCELLED", "reservation", "The reservation was cancelled.", False)
+            if r["status"] == "expired":
+                return refuse("RESERVATION_EXPIRED", "reservation", f"The reservation expired at {r['expires_at']}.", False)
+            if leaf["version"] != r["mandate_version"]:
+                return refuse("MANDATE_VERSION_CHANGED", "version",
+                              "The mandate changed after this purchase was authorized.", True)
+
+            qrow = conn.execute("SELECT * FROM quotes WHERE id = ?", (r["quote_id"],)).fetchone()
+            quote = json.loads(qrow["body_json"])
+            if quote["basket_hash"] != r["basket_hash"] or quote["total_minor"] != r["amount_minor"]:
+                return refuse("QUOTE_CHANGED", "quote", "The stored quote no longer matches the reservation.", True)
+            # The trusted adapter re-prices the basket: a changed fee or catalog revision needs a new quote.
+            original = json.loads(qrow["request_json"])
+            try:
+                fresh = self.catalog.price(quote["merchant_id"], original["items"], original["delivery_context_id"])
+            except CatalogError as exc:
+                return refuse("QUOTE_CHANGED", "quote", f"The basket can no longer be priced: {exc}", True)
+            fields = ("revision", "items", "charges", "subtotal_minor", "total_minor")
+            if any(fresh[f] != quote[f] for f in fields):
+                return refuse("QUOTE_CHANGED", "quote",
+                              f"The shop's price changed from {rules.money(quote['total_minor'])} to "
+                              f"{rules.money(fresh['total_minor'])}; a new quote is needed.", True)
+
+            # Commit: reserved -> paid in every period, exactly once.
+            cur = conn.execute("UPDATE reservations SET status = 'paid', closed_at = ? WHERE id = ? AND status = 'reserved'",
+                               (iso(now), r["id"]))
+            if cur.rowcount != 1:
+                raise ApiError(500, "INTERNAL_ERROR", "Reservation changed during payment.")
+            for pid in self._period_ids(conn, r["id"]):
+                conn.execute(
+                    "UPDATE budget_periods SET reserved_minor = reserved_minor - ?, paid_minor = paid_minor + ?, "
+                    "version = version + 1 WHERE id = ?",
+                    (r["amount_minor"], r["amount_minor"], pid),
+                )
+            self.rail.capture(r["id"], r["amount_minor"], "HKD")
+            decision_id = _id("dec")
+            receipt = {
+                "id": _id("rcpt"),
+                "transaction_id": r["transaction_id"],
+                "reservation_id": r["id"],
+                "mandate_id": leaf["id"],
+                "quote_id": r["quote_id"],
+                "merchant_id": r["merchant_id"],
+                "basket_hash": r["basket_hash"],
+                "amount_minor": r["amount_minor"],
+                "currency": "HKD",
+                "payment_mode": self.rail.mode,
+                "status": "paid",
+                "paid_at": iso(now),
+            }
+            seq = self._event(conn, leaf["owner_id"], "payment_completed", {
+                "decision_id": decision_id, "receipt": receipt, "mandate_version": leaf["version"],
+            }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
+            conn.execute("INSERT INTO payments VALUES (?,?,?,?,?,?,?)",
+                         (receipt["id"], r["transaction_id"], r["id"], decision_id, seq, json.dumps(receipt),
+                          receipt["paid_at"]))
+            return 200, {"status": "completed", "decision_id": decision_id, "receipt": receipt,
+                         "replayed": False, "event_sequence": seq}
+
+        status, body, replayed = self._idempotent(actor, "commitPayment", key, req, op)
+        if replayed and body.get("status") == "completed":
+            body = {**body, "replayed": True}
+        return status, body
+
+    def get_payment(self, actor: Actor, transaction_id: str) -> dict:
+        with self.db.read() as conn:
+            row = conn.execute(
+                "SELECT p.receipt_json, m.owner_id, m.delegatee_id FROM payments p "
+                "JOIN reservations r ON r.id = p.reservation_id JOIN mandates m ON m.id = r.mandate_id "
+                "WHERE p.transaction_id = ?", (transaction_id,)).fetchone()
+        if row is None or not self._can_see_mandate(actor, {"owner_id": row["owner_id"], "delegatee_id": row["delegatee_id"]}):
+            raise not_found("Payment")
+        return json.loads(row["receipt_json"])
+
+    # ------------------------------------------------------------ cancellation
+
+    def cancel_reservation(self, actor: Actor, key: str, reservation_id: str, req: dict) -> tuple[int, dict]:
+        def op(conn, now):
+            row = conn.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,)).fetchone()
+            if row is None:
+                raise not_found("Reservation")
+            r = dict(row)
+            leaf = self._load_mandate(conn, r["mandate_id"])
+            if not self._can_see_mandate(actor, leaf):
+                raise not_found("Reservation")
+            if r["status"] != "reserved":
+                raise conflict(f"Reservation is already {r['status']}.", reservation_status=r["status"])
+            self._close_reservation(conn, r, "cancelled", now)
+            seq = self._event(conn, leaf["owner_id"], "reservation_cancelled", {
+                "reservation_id": r["id"], "released_minor": r["amount_minor"], "reason": req.get("reason"),
+            }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
+            return 200, {"reservation": self._reservation_out(conn, r), "released_minor": r["amount_minor"],
+                         "event_sequence": seq}
+
+        status, body, _ = self._idempotent(actor, "cancelReservation", key,
+                                           {"reservation_id": reservation_id, **req}, op)
+        return status, body
+
+    # ------------------------------------------------------------------ wallet
+
+    def budget(self, actor: Actor, mandate_id: str) -> dict:
+        with self.db.write_tx() as conn:
+            now = self._now()
+            leaf = self._load_mandate(conn, mandate_id)
+            if leaf is None or not self._can_see_mandate(actor, leaf):
+                raise not_found("Mandate")
+            self._expire_overdue(conn, now)
+            budgets = self._ensure_periods(conn, self._chain(conn, leaf), now)
+            return {"mandate_id": mandate_id, "applicable_budgets": [self._budget_out(b) for b in budgets],
+                    "server_time": iso(now)}
