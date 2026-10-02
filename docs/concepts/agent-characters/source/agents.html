@@ -1,0 +1,253 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>html,body{margin:0;background:transparent}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+// Mandate agent characters: fuzzy shell-textured fur, faces drawn directly on the fur.
+// render.html?c=<agent>&s=<state>&size=<px>
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const qs = new URLSearchParams(location.search);
+const CHAR = qs.get('c') || 'kumi', STATE = qs.get('s') || 'idle';
+const SIZE = +(qs.get('size') || 1024);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(SIZE, SIZE); renderer.setClearColor(0, 0);
+renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.6;
+const camera = new THREE.PerspectiveCamera(22, 1, 0.1, 100);
+camera.position.set(0, 1.7, 9.4); camera.lookAt(0, 1.2, 0);
+
+const KEY = new THREE.Vector3(-0.5, 0.8, 0.9).normalize();
+const FILL = new THREE.Vector3(0.9, 0.2, 0.5).normalize();
+for (const [d, c, i] of [[KEY, 0xfff6ec, 2.2], [FILL, 0xeef3ff, 0.8], [new THREE.Vector3(0.2, 0.6, -1), 0xffffff, 1.3]]) {
+  const l = new THREE.DirectionalLight(c, i); l.position.copy(d).multiplyScalar(10); scene.add(l);
+}
+scene.add(new THREE.HemisphereLight(0xffffff, 0x9a948e, 0.6));
+
+// ---------- fur ----------
+const SHELLS = 60, FUR = 0.09;
+const furVS = `
+uniform float uLayer; uniform float uLen; uniform vec3 uGravity;
+varying vec3 vBase; varying vec3 vN; varying vec3 vWPos; varying vec3 vON;
+void main(){
+  vBase = position; vON = normal;
+  vec3 p = position + normal * uLen * uLayer;
+  vec4 wp = modelMatrix * vec4(p, 1.0);
+  wp.xyz += uGravity * uLen * uLayer * uLayer;
+  vWPos = wp.xyz; vN = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * wp;
+}`;
+const furFS = `
+uniform float uLayer; uniform vec3 uColor; uniform float uDensity; uniform vec3 uKey; uniform vec3 uFill;
+varying vec3 vBase; varying vec3 vN; varying vec3 vWPos; varying vec3 vON;
+float hash(vec3 p){ p = fract(p*0.3183099 + 0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+void main(){
+  vec3 q = vBase * uDensity; vec3 c = floor(q); vec3 f = fract(q);
+  float h = hash(c), h2 = hash(c + 7.31);
+  vec3 ctr = vec3(hash(c+11.1), hash(c+23.7), hash(c+5.3)) * 0.5 + 0.25;
+  float r = (1.0 - uLayer) * (0.62 + 0.3*h);
+  vec3 dv = f - ctr; vec3 on = normalize(vON); dv -= dot(dv, on) * on;
+  if (uLayer > 0.0 && (length(dv) > r || uLayer > 0.5 + 0.5*h2)) discard;
+  vec3 N = normalize(vN), V = normalize(cameraPosition - vWPos);
+  vec3 base = uColor * (0.9 + 0.2*h);
+  float k = max(dot(N, uKey), 0.0) * 0.55 + 0.45;
+  float fl = max(dot(N, uFill), 0.0);
+  float rm = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+  float ao = mix(0.5, 1.12, pow(uLayer, 0.7));
+  vec3 col = base * (0.32 + 0.9*k*k + 0.22*fl) * ao + rm * 0.45 * mix(base, vec3(1.0), 0.35) * uLayer;
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+function fur(geo, color, { len = FUR, density = 105, gravity = -0.25 } = {}) {
+  const g = new THREE.Group(), c = new THREE.Color(color);
+  for (let i = 0; i < SHELLS; i++) g.add(new THREE.Mesh(geo, new THREE.ShaderMaterial({
+    vertexShader: furVS, fragmentShader: furFS,
+    uniforms: { uLayer: { value: i / (SHELLS - 1) }, uLen: { value: len }, uGravity: { value: new THREE.Vector3(0, gravity, 0) },
+      uColor: { value: c }, uDensity: { value: density }, uKey: { value: KEY }, uFill: { value: FILL } },
+  })));
+  return g;
+}
+function sphereGeo(fn, ws = 180, hs = 140) {
+  const g = new THREE.SphereGeometry(1, ws, hs), p = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); fn(v); p.setXYZ(i, v.x, v.y, v.z); }
+  g.computeVertexNormals(); return g;
+}
+const sgn = (x, e) => Math.sign(x) * Math.pow(Math.abs(x), e);
+
+// ---------- materials & textures ----------
+const M = {
+  ink: new THREE.MeshPhysicalMaterial({ color: 0x111111, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.1 }),
+  matte: new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.55 }),
+  eyeWhite: new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.15, clearcoat: 1 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xf2c25a, metalness: 1, roughness: 0.25 }),
+  tongue: new THREE.MeshStandardMaterial({ color: 0xff6f7d, roughness: 0.5 }),
+  tear: new THREE.MeshPhysicalMaterial({ color: 0x8fd6ff, roughness: 0.05, clearcoat: 1 }),
+};
+function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+const shadowTex = canvasTex(256, 256, (x, w) => { const g = x.createRadialGradient(128, 128, 0, 128, 128, 128); g.addColorStop(0, 'rgba(0,0,0,0.5)'); g.addColorStop(0.6, 'rgba(0,0,0,0.15)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, w, w); });
+function sprite(draw, scale, pos) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(256, 256, draw), transparent: true, depthWrite: false })); s.scale.setScalar(scale); s.position.set(...pos); return s; }
+const star = (color) => (x) => { x.fillStyle = color; x.translate(128, 128); x.beginPath(); for (let i = 0; i < 4; i++) { x.rotate(Math.PI / 2); x.moveTo(0, -110); x.quadraticCurveTo(14, -14, 110, 0); x.quadraticCurveTo(14, 14, 0, 110); } x.fill(); };
+const glyph = (t, color) => (x) => { x.fillStyle = color; x.font = '800 200px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(t, 128, 140); };
+
+// ---------- character + surface helpers ----------
+const root = new THREE.Group(); scene.add(root);
+const shadow = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 2.2), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, toneMapped: false }));
+shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.005; scene.add(shadow);
+const char = new THREE.Group(); root.add(char); char.rotation.y = -0.2;
+
+let probe;
+function body(geo, color, opts) { probe = new THREE.Mesh(geo); char.add(fur(geo, color, opts)); }
+const ray = new THREE.Raycaster();
+let LIFT = FUR * 0.85;
+function surf(x, y, lift = LIFT) {
+  ray.set(new THREE.Vector3(x, y, 10), new THREE.Vector3(0, 0, -1));
+  const hit = ray.intersectObject(probe)[0];
+  if (!hit) return { p: new THREE.Vector3(x, y, 0), n: new THREE.Vector3(0, 0, 1) };
+  const n = hit.face.normal.clone().normalize();
+  return { p: hit.point.clone().addScaledVector(n, lift), n };
+}
+const Z = new THREE.Vector3(0, 0, 1);
+function place(obj, x, y, lift) { const { p, n } = surf(x, y, lift); obj.position.copy(p); obj.quaternion.setFromUnitVectors(Z, n); char.add(obj); return obj; }
+function curve(pts, r = 0.03, mat = M.matte, lift) {
+  const v = pts.map(([x, y]) => surf(x, y, lift).p);
+  char.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(v), 40, r, 12, false), mat));
+  for (const e of [v[0], v[v.length - 1]]) { const c = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), mat); c.position.copy(e); char.add(c); }
+}
+const arc = (cx, cy, w, h, n = 11) => Array.from({ length: n }, (_, i) => { const t = i / (n - 1); return [cx - w + 2 * w * t, cy + h * (1 - (2 * t - 1) ** 2)]; });
+
+// faces: eyes at (±ex, ey)
+function eyes(kind, ex, ey, o = {}) {
+  for (const s of [-1, 1]) {
+    const x = s * ex;
+    if (kind === 'capsule') { const e = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), M.ink); e.scale.set(0.11, 0.2, 0.06); place(e, x, ey); }
+    if (kind === 'dot') { const e = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), M.ink); e.scale.set(0.11, 0.12, 0.06); place(e, x + (o.look?.[0] || 0), ey + (o.look?.[1] || 0)); }
+    if (kind === 'googly') {
+      const r = o.r || 0.29, w = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), M.eyeWhite); w.scale.z = 0.75; place(w, x, ey, FUR * 0.4);
+      const [lx, ly] = o.look || [0, 0];
+      const p = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 32, 24), M.ink); p.scale.z = 0.5;
+      const { p: c, n } = surf(x, ey, FUR * 0.4); p.position.copy(c).add(new THREE.Vector3(lx * r * 0.45, ly * r * 0.45, r * 0.62)); p.quaternion.setFromUnitVectors(Z, n); char.add(p);
+      if (o.lid) { const lid = new THREE.Mesh(new THREE.SphereGeometry(r * 1.04, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.42), new THREE.MeshStandardMaterial({ color: o.lid, roughness: 0.8 })); lid.position.copy(c); lid.rotation.x = 0.5; lid.scale.z = 0.8; char.add(lid); }
+    }
+    if (kind === 'happy') curve(arc(x, ey - 0.05, 0.14, 0.12), 0.04);
+    if (kind === 'sleep') curve(arc(x, ey, 0.14, -0.08), 0.038);
+  }
+}
+function brows(kind, ex, ey) { for (const s of [-1, 1]) { const i = kind === 'sad' ? 0.05 : -0.06; curve([[s * (ex + 0.13), ey - i], [s * (ex - 0.1), ey + i]], 0.034); } }
+function mouth(kind, my, w = 0.13) {
+  if (kind === 'smile') curve(arc(0, my, w, -0.07), 0.034);
+  if (kind === 'sad') curve(arc(0, my - 0.04, w * 0.9, 0.06), 0.034);
+  if (kind === 'flat') curve([[-w * 0.8, my], [w * 0.8, my]], 0.034);
+  if (kind === 'o') { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), M.ink); m.scale.set(0.05, 0.06, 0.03); place(m, 0, my); }
+  if (kind === 'open') {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M.ink); m.scale.set(w * 1.15, w * 1.1, 0.03); place(m, 0, my + 0.03);
+    const t = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), M.tongue); t.scale.set(w * 0.6, w * 0.32, 0.02); place(t, 0, my - 0.05, LIFT + 0.012);
+  }
+}
+function glasses(ex, ey, R = 0.25) {
+  const rings = [-1, 1].map(s => { const t = new THREE.Mesh(new THREE.TorusGeometry(R, 0.042, 16, 64), M.matte); place(t, s * ex, ey, FUR * 0.85 + 0.07); return t; });
+  curve([[-ex + R, ey + 0.02], [0, ey + 0.05], [ex - R, ey + 0.02]], 0.028, M.matte, FUR * 0.85 + 0.07);
+}
+function tear(x, y) { const t = new THREE.Mesh(new THREE.SphereGeometry(0.05, 24, 16), M.tear); t.scale.set(1, 1.4, 0.6); place(t, x, y, FUR + 0.03); }
+function sparkles() { [[0.45, [-1.4, 2.4, 0.4]], [0.3, [1.4, 2.6, 0.4]], [0.22, [1.55, 1.85, 0.4]]].forEach(([s, p]) => root.add(sprite(star('#ffd34d'), s, p))); }
+function badge(kind, pos) {
+  const g = new THREE.Group();
+  const d = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.08, 48), new THREE.MeshPhysicalMaterial({ color: kind === 'ok' ? 0x2fbf6a : 0xe8463a, roughness: 0.3, clearcoat: 1 }));
+  d.rotation.x = Math.PI / 2; g.add(d);
+  const w = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const seg = (a, b) => { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(...a), new THREE.Vector3(...b)]); g.add(new THREE.Mesh(new THREE.TubeGeometry(c, 4, 0.04, 10), w)); for (const p of [a, b]) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), w); s.position.set(...p); g.add(s); } };
+  if (kind === 'ok') { seg([-0.13, 0.0, 0.06], [-0.03, -0.1, 0.06]); seg([-0.03, -0.1, 0.06], [0.14, 0.1, 0.06]); }
+  else if (kind === 'no') { seg([-0.11, -0.11, 0.06], [0.11, 0.11, 0.06]); seg([-0.11, 0.11, 0.06], [0.11, -0.11, 0.06]); }
+  else { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.09, 0.02), w); bar.position.z = 0.05; g.add(bar); d.geometry = new THREE.CylinderGeometry(0.3, 0.3, 0.08, 8); d.rotation.y = Math.PI / 8; }
+  g.position.set(...pos); root.add(g); return g;
+}
+
+// ---------- the agents ----------
+const S = STATE;
+if (CHAR === 'kumi') { // shopping agent: a fuzzy shopping tote with groceries poking out
+  const orange = '#ff8a1f';
+  // groceries behind the front face
+  const leekW = new THREE.MeshPhysicalMaterial({ color: 0xeef5df, roughness: 0.5, sheen: 0.4 });
+  const leekG = new THREE.MeshPhysicalMaterial({ color: 0x3fae55, roughness: 0.45, sheen: 0.6 });
+  const leek = new THREE.Group();
+  const lw = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.7, 24), leekW); lw.position.y = 0.0; leek.add(lw);
+  for (const [rz, dx] of [[-0.35, -0.08], [0.1, 0.02], [0.45, 0.1]]) { const lf = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.5, 8, 16), leekG); lf.position.set(dx, 0.55, 0); lf.rotation.z = rz; lf.scale.z = 0.5; leek.add(lf); }
+  leek.position.set(-0.42, 1.8, -0.12); leek.scale.setScalar(0.85); leek.rotation.z = 0.22; char.add(leek);
+  const bread = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.75, 12, 24), new THREE.MeshPhysicalMaterial({ color: 0xd9974a, roughness: 0.55, clearcoat: 0.4 }));
+  bread.position.set(0.45, 1.88, -0.1); bread.rotation.z = -0.32; char.add(bread);
+  for (let i = 0; i < 3; i++) { const cut = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.018, 8, 24, Math.PI), new THREE.MeshStandardMaterial({ color: 0xf3d29a })); cut.position.set(0.45 - 0.2 * Math.sin(-0.32) * (i - 1) * 0.9 + 0.02, 2.15 + (i - 1) * 0.2 * Math.cos(0.32), 0.04); cut.rotation.set(0, 0, -0.32 + Math.PI / 2); }
+  const apple = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 24), new THREE.MeshPhysicalMaterial({ color: 0xe8343a, roughness: 0.3, clearcoat: 1 })); apple.position.set(0.02, 1.98, 0.05); char.add(apple);
+  // tote body: a soft box that flares a little at the top
+  body(sphereGeo(v => { const y = v.y; v.set(sgn(v.x, 0.55) * (1.0 + 0.1 * y), sgn(y, 0.55) * 0.88 + 1.0, sgn(v.z, 0.55) * 0.62); }), orange);
+  // two fuzzy handles, one in front and one behind
+  for (const [z, ry] of [[0.42, 0.0], [-0.42, 0.0]]) {
+    const h = fur(new THREE.TorusGeometry(0.42, 0.075, 24, 96, Math.PI), orange, { len: 0.05, density: 140, gravity: -0.1 });
+    h.position.set(0, 1.84, z); h.rotation.y = ry; char.add(h);
+  }
+  if (S === 'idle') { eyes('capsule', 0.3, 1.1); mouth('smile', 0.78); }
+  if (S === 'happy') { eyes('happy', 0.3, 1.08); mouth('open', 0.78, 0.13); sparkles(); }
+  if (S === 'sad') { eyes('capsule', 0.3, 1.08); brows('sad', 0.3, 1.36); mouth('sad', 0.78); tear(-0.42, 0.9); }
+}
+if (CHAR === 'bean') { // planner: a fuzzy speech bubble that turns plain words into rules
+  const blue = '#3f7bff';
+  body(sphereGeo(v => v.set(sgn(v.x, 0.72) * 1.15, sgn(v.y, 0.72) * 0.82 + 1.42, sgn(v.z, 0.72) * 0.68)), blue);
+  const tail = fur(sphereGeo(v => { const t = (1 - v.y) / 2; v.set(v.x * (0.05 + 0.95 * Math.pow(1 - t, 0.9)), v.y, v.z * (0.05 + 0.95 * Math.pow(1 - t, 0.9))); }, 64, 48), blue, { len: 0.08 });
+  tail.scale.set(0.32, 0.4, 0.3); tail.position.set(-0.6, 0.62, 0.05); tail.rotation.z = -0.55; char.add(tail);
+  glasses(0.33, 1.52);
+  if (S === 'idle') { eyes('dot', 0.33, 1.52); mouth('smile', 1.18, 0.1); }
+  if (S === 'thinking') {
+    eyes('dot', 0.33, 1.52, { look: [0.06, 0.07] }); mouth('o', 1.16);
+    [[0.06, [0.95, 2.4, 0.5]], [0.09, [1.12, 2.6, 0.5]], [0.13, [1.35, 2.82, 0.5]]].forEach(([r, p]) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 24), new THREE.MeshPhysicalMaterial({ color: 0xf2f4f8, roughness: 0.3, clearcoat: 1 })); m.position.set(...p); root.add(m); });
+  }
+  if (S === 'done') { eyes('happy', 0.33, 1.49); mouth('open', 1.18, 0.12); sparkles(); }
+}
+if (CHAR === 'kip') { // wallet guardian: a kiss-lock coin purse
+  const dim = S === 'revoked', H = 0.82;
+  body(sphereGeo(v => v.set(sgn(v.x, 0.6) * 1.2, sgn(v.y, 0.6) * H + 1.02, sgn(v.z, 0.6) * 0.8)), dim ? '#9da3a0' : '#2fcf6f');
+  const gold = dim ? new THREE.MeshStandardMaterial({ color: 0xc9cdca, metalness: 0.8, roughness: 0.4 }) : M.gold;
+  const top = 1.02 + H + 0.06, pts = [];
+  for (let i = 0; i <= 40; i++) { const t = Math.PI * i / 40; pts.push(new THREE.Vector3(Math.cos(t) * 1.12, top + Math.pow(Math.sin(t), 0.35) * 0.22 - 0.22, 0)); }
+  char.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.055, 16), gold));
+  for (const s of [-1, 1]) {
+    const k = new THREE.Group(); const st = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), gold); st.position.y = 0.08; k.add(st);
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.09, 32, 24), gold); b.position.y = 0.2; k.add(b);
+    k.position.set(s * 0.085, top, 0); if (S === 'approved') k.rotation.z = -s * 0.5; char.add(k);
+  }
+  if (S === 'idle') { eyes('capsule', 0.32, 1.12); mouth('smile', 0.8); }
+  if (S === 'approved') {
+    eyes('happy', 0.32, 1.1); mouth('open', 0.8, 0.12); sparkles();
+    const face = canvasTex(256, 256, (x) => { x.fillStyle = '#f6cf6a'; x.fillRect(0, 0, 256, 256); x.strokeStyle = '#c9952a'; x.lineWidth = 14; x.beginPath(); x.arc(128, 128, 96, 0, 7); x.stroke(); x.fillStyle = '#b07a12'; x.font = '800 150px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('$', 128, 138); });
+    const cap = new THREE.MeshStandardMaterial({ map: face, metalness: 0.2, roughness: 0.35 });
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.06, 64), [M.gold, cap, cap]); c.rotation.set(Math.PI / 2, 0, 0.2); c.position.set(0, 2.5, 0.1); char.add(c);
+  }
+  if (S === 'refused') { eyes('capsule', 0.32, 1.1); brows('angry', 0.32, 1.38); mouth('flat', 0.8); badge('stop', [1.2, 2.1, 0.4]); }
+  if (dim) {
+    eyes('sleep', 0.32, 1.1); mouth('o', 0.82);
+    const lm = new THREE.MeshStandardMaterial({ color: 0x6f7873, metalness: 0.8, roughness: 0.35 }), l = new THREE.Group();
+    l.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.12), lm)); const sh = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.035, 12, 32, Math.PI), lm); sh.position.y = 0.14; l.add(sh);
+    l.position.set(0, 1.78, 0.45); char.add(l);
+    [[0.34, [1.05, 2.15]], [0.27, [1.35, 2.45]], [0.2, [1.6, 2.7]]].forEach(([s, [x, y]]) => root.add(sprite(glyph('z', '#b8c2cc'), s, [x, y, 0.4])));
+  }
+}
+if (CHAR === 'stella') { // checker: verifies each purchase against the mandate
+  body(sphereGeo(v => {
+    const th = Math.atan2(v.y, v.x), k = Math.cos(5 * (th - Math.PI / 2));
+    const rr = 1 + 0.3 * Math.sign(k) * Math.pow(Math.abs(k), 0.6);
+    v.set(v.x * rr * 1.0, v.y * rr * 1.0 + 1.12, v.z * 0.62);
+  }, 240, 160), '#ff4fa6', { density: 110 });
+  if (S === 'idle') { eyes('capsule', 0.26, 1.2); mouth('smile', 0.9, 0.12); }
+  if (S === 'pass') { eyes('happy', 0.26, 1.18); mouth('open', 0.92, 0.12); badge('ok', [1.15, 2.3, 0.4]); sparkles(); }
+  if (S === 'fail') { eyes('capsule', 0.26, 1.18); brows('sad', 0.26, 1.42); mouth('sad', 0.92, 0.12); badge('no', [1.15, 2.3, 0.4]); }
+}
+
+renderer.render(scene, camera);
+window.__done = true;
+</script>
+</body></html>
