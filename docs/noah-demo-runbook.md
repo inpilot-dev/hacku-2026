@@ -48,7 +48,7 @@ A clean-ledger browser rehearsal on 3 October confirmed the refusal scene with t
 
 - Prices are observations from the capture timestamp, not live checkout prices.
 - Only Wellcome Click & Collect is included. Captured evidence confirms free pickup above HK$50. The UI blocks lower baskets because their pickup charge is unknown; a server-side catalog rule is still needed to enforce that limit against direct API callers.
-- The online shopping agent/draft API is not mounted in this checkout. Manual catalog selection is the working path; the agent button reports the unavailable service.
+- The online shopping agent/draft API is not mounted in this checkout. The agent button reports that state. An opt-in scripted fallback matches exact available catalog titles only; it does not use an AI model or guess substitutions. Review its selected items and use the wallet quote action. Manual catalog selection remains available.
 - Activity feed, independent audit verification, bounded Z3 results and measured concurrent-agent results remain disconnected. Show their “not connected” state rather than claiming a pass.
 - The payment rail is local simulation. Route rewards are evidence-based estimates and do not move money.
 - Checkout responses contain the wallet decision and receipt only; the signed authorization token and single-use payment credential stay server-side.

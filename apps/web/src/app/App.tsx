@@ -4,6 +4,7 @@ import type { AgentRun, AgentRunRequest, ApprovalRequest, AuditEvent, AuditExpor
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
+import { matchScriptedCatalogBasket } from './scriptedCatalogMatcher';
 
 const DEFAULT_TOKEN = 'dev-user-token';
 const WELLCOME_STORE_ID = 'wellcome';
@@ -587,12 +588,16 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [agentSubmitting, setAgentSubmitting] = useState(false);
   const [agentError, setAgentError] = useState('');
+  const [agentUnavailable, setAgentUnavailable] = useState(false);
+  const [scriptedMatchNotice, setScriptedMatchNotice] = useState('');
+  const [scriptedMatchFailed, setScriptedMatchFailed] = useState(false);
   const [agentQuoteUnavailable, setAgentQuoteUnavailable] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogCategory, setCatalogCategory] = useState('');
   const [quoteRetry, setQuoteRetry] = useState(0);
   const [quoteNow, setQuoteNow] = useState(Date.now());
   const storageKey = mandateId ? `mandate-agent-run-${mandateId}` : '';
+  const merchantId = products[0]?.merchant_id ?? '';
   const agentWorking = agentRun?.status === 'queued' || agentRun?.status === 'running';
   const basketCount = quote ? quote.items.reduce((sum, item) => sum + item.quantity, 0) : Object.values(quantities).reduce((sum, count) => sum + count, 0);
   const catalogCategories = useMemo(() => [...new Set(products.map((product) => product.category))].sort(), [products]);
@@ -648,7 +653,8 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
       } catch (error) {
         if (disposed) return;
         const status = error instanceof ApiError ? error.status : 0;
-        setAgentError([404, 405].includes(status) ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
+        if ([404, 405].includes(status)) setAgentUnavailable(true);
+        setAgentError([404, 405].includes(status) ? 'Agent-run service is not connected in this checkout. No AI shopping run was performed.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
         if (![401, 403, 404, 405].includes(status)) timer = window.setTimeout(() => void poll(), 4000);
       }
     }
@@ -662,7 +668,7 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
     const shoppingList = shoppingListText.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((name) => ({ name, quantity: 1 }));
     if (shoppingList.length === 0) { setAgentError('Add at least one item, one per line.'); return; }
     const request: AgentRunRequest = { mandate_id: mandateId, shopping_list: shoppingList, instruction: instruction.trim() || null, auto_purchase: false };
-    setAgentError(''); setAgentQuoteUnavailable(false); setAgentRun(null); setAgentRunId(''); onQuoteChange(null);
+    setAgentError(''); setAgentUnavailable(false); setScriptedMatchNotice(''); setScriptedMatchFailed(false); setAgentQuoteUnavailable(false); setAgentRun(null); setAgentRunId(''); onQuoteChange(null);
     onResetCheckout();
     if (storageKey) sessionStorage.removeItem(storageKey);
     setAgentSubmitting(true);
@@ -673,22 +679,54 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
       setAgentRun(started);
       setAgentRunId(started.id);
     } catch (error) {
-      setAgentError(error instanceof ApiError && [404, 405].includes(error.status)
-        ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.'
+      const status = error instanceof ApiError ? error.status : 0;
+      if ([404, 405].includes(status)) setAgentUnavailable(true);
+      setAgentError([404, 405].includes(status)
+        ? 'Agent-run service is not connected in this checkout. No AI shopping run was performed.'
         : error instanceof Error ? error.message : 'Could not start the shopping agent.');
     } finally { setAgentSubmitting(false); }
   }
 
+  function useScriptedCatalogMatcher() {
+    if (!active || catalogIsPlaceholder) return;
+    onQuoteChange(null);
+    onResetCheckout();
+    setScriptedMatchNotice('');
+    setScriptedMatchFailed(false);
+    const lines = shoppingListText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const match = matchScriptedCatalogBasket(lines, products, merchantId);
+    if (!match.ok) {
+      for (const product of products) {
+        const current = quantities[product.id] ?? 0;
+        if (current > 0) onChange(product.id, -current);
+      }
+      setScriptedMatchNotice(match.message);
+      setScriptedMatchFailed(true);
+      return;
+    }
+    const selected = new Map(match.items.map((item) => [item.product_id, item.quantity]));
+    for (const product of products) {
+      const target = selected.get(product.id) ?? 0;
+      const delta = target - (quantities[product.id] ?? 0);
+      if (delta !== 0) onChange(product.id, delta);
+    }
+    setScriptedMatchNotice(`Scripted exact-title match selected ${match.items.length} catalog item${match.items.length === 1 ? '' : 's'}. No AI was used. Review the basket, then request a quote from the wallet.`);
+    setScriptedMatchFailed(false);
+    setAgentError('');
+  }
+
   return <>
-    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">{storeLabel[0] ?? '—'}</span><span><strong>{storeLabel}</strong><small>{catalogIsPlaceholder ? 'Sample catalog' : 'Observed prices · Click & Collect'}</small></span><ChevronDown size={15} /></span></div>
+    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the connected agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">{storeLabel[0] ?? '—'}</span><span><strong>{storeLabel}</strong><small>{catalogIsPlaceholder ? 'Sample catalog' : 'Observed prices · Click & Collect'}</small></span><ChevronDown size={15} /></span></div>
     {!active && <div className="inline-alert">{mandateStatus && <AgentCharacter name="kip" state="revoked" label={mandateStatus === 'expired' ? 'Kip shows the allowance has expired' : 'Kip shows spending access has been revoked'} size={40} />}<span><strong>{mandateStatus === 'expired' ? 'This allowance has expired.' : mandateStatus === 'revoked' ? 'Spending access was revoked.' : 'Set up your allowance before shopping.'}</strong> The wallet needs an active allowance before it can create an agent run or quote.</span><button className="text-button" onClick={onConfirm}>{mandateStatus ? 'Review wallet status' : 'Set up now'} <ArrowUpRight size={14} /></button></div>}
     <form className="panel agent-request-panel" onSubmit={(event) => void startAgentRun(event)}>
       <div className="agent-request-heading"><AgentCharacter name="kumi" state={paymentResult ? 'happy' : agentRun?.status === 'failed' || agentRun?.status === 'refused' ? 'sad' : 'idle'} label="Kumi, shopping agent" /><div><div className="eyebrow">SHOPPING AGENT</div><h2>Build a basket from your list</h2></div></div>
       <label>Items <small>One item per line; each starts at quantity 1.</small><textarea value={shoppingListText} onChange={(event) => setShoppingListText(event.target.value)} rows={3} disabled={!active || agentSubmitting || agentWorking} /></label>
       <label>Extra instruction <small>Optional preference for the agent; confirmed spending rules still take priority.</small><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="e.g. Prefer lower-sugar options" disabled={!active || agentSubmitting || agentWorking} /></label>
-      <div className="agent-request-footer"><span><Shield size={14} /> Auto-purchase is off. Review the returned quote before checkout.</span><button className="button button-primary" type="submit" disabled={!active || agentSubmitting || agentWorking || Boolean(busy) || !shoppingListText.trim()}>{agentSubmitting || agentWorking ? <span className="spinner" /> : <Sparkles size={15} />}{agentSubmitting ? 'Starting agent…' : agentWorking ? 'Building basket…' : 'Ask agent to build basket'}</button></div>
+      <div className="agent-request-footer"><span><Shield size={14} /> Auto-purchase is off. Review the returned quote before checkout.</span><button className="button button-primary" type="submit" disabled={!active || agentSubmitting || agentWorking || agentUnavailable || Boolean(busy) || !shoppingListText.trim()}>{agentSubmitting || agentWorking ? <span className="spinner" /> : <Sparkles size={15} />}{agentSubmitting ? 'Starting agent…' : agentWorking ? 'Building basket…' : agentUnavailable ? 'Agent not connected' : 'Ask agent to build basket'}</button></div>
       {agentRun && <div className={`agent-run-status agent-run-${agentRun.status}`} role="status"><strong>{agentRun.status.replace(/_/g, ' ')}</strong><span>{agentRun.message}</span><small>{agentRun.provider} · {agentRun.execution_mode}{agentRun.model_id ? ` · ${agentRun.model_id}` : ''}</small></div>}
       {agentError && <div className="form-error" role="alert">{agentError}{agentQuoteUnavailable && <button type="button" className="text-button" onClick={() => { setAgentError(''); setQuoteRetry((value) => value + 1); }}>Retry loading quote</button>}</div>}
+      {agentUnavailable && !catalogIsPlaceholder && active && <div className="scripted-fallback"><span><strong>Local scripted fallback</strong><small>Matches exact product titles only. It does not use an AI model or guess at substitutions.</small></span><button type="button" className="button button-secondary" onClick={useScriptedCatalogMatcher} disabled={agentSubmitting || Boolean(busy)}>Select exact matches</button><button type="button" className="text-button" onClick={() => { setAgentUnavailable(false); setAgentError(''); }}>Retry agent</button></div>}
+      {scriptedMatchNotice && <div className={`agent-run-status ${scriptedMatchFailed ? 'agent-run-refused' : 'agent-run-quoted'}`} role={scriptedMatchFailed ? 'alert' : 'status'}>{scriptedMatchNotice}</div>}
     </form>
     <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">{catalogIsPlaceholder ? 'SAMPLE CATALOG' : 'OBSERVED STORE CATALOG'}</div><h2>{storeLabel}</h2></div><span className="catalog-count">{visibleProducts.length} of {products.length}</span></div><div className="catalog-filters"><label>Search products<input type="search" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search this catalog" /></label><label>Category<select value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)}><option value="">All categories</option>{catalogCategories.map((category) => <option key={category} value={category}>{category.replace(/_/g, ' ')}</option>)}</select></label></div><div className="product-list">{visibleProducts.length ? visibleProducts.map((product) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={products.indexOf(product)} disabled={!active || agentWorking || busy === 'quote' || busy === 'quote-restore' || busy === 'purchase'} />) : <div className="catalog-empty">No products match this search. Try a different name or category.</div>}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
       <aside className="panel basket-panel">
