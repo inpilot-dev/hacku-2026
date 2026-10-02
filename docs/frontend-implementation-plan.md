@@ -4,7 +4,7 @@
 **Owner:** Noah
 **Baseline inspected:** `main` at `0468327` on 2 October 2026
 **Goal:** an integrated first version on Saturday morning; submission freeze Sunday, 4 October, 13:00 Asia/Hong_Kong
-**Status:** implementation in progress. The React/Vite UI, typed wallet client, shared FastAPI entrypoint, health route and gated local checkout adapter are implemented. The UI supports contract-defined natural-language draft proposals, explicit structured review/confirmation, and agent runs with auto-purchase disabled, then loads the agent's quote through the wallet API. Checkout now keeps wallet refusal rule IDs and actual/limit amounts visible, blocks an expired quote in the UI, and offers a user-triggered fresh quote for the same basket. Abdullah’s draft/catalog/agent-run backend and Seungbin’s audit/verifier/Z3 services remain unintegrated in the current checkout, and the UI marks those limits explicitly.
+**Status:** implementation in progress. The React/Vite UI, typed wallet client, shared FastAPI entrypoint, health route and gated local checkout adapter are implemented. The UI supports contract-defined natural-language draft proposals, explicit structured review/confirmation, and agent runs with auto-purchase disabled, then loads the agent's quote through the wallet API. Checkout keeps wallet refusal rule IDs and actual/limit amounts visible, blocks an expired quote, and offers a user-triggered fresh quote. Team-provided Bean, Kumi, Kip and Stella artwork now reflects the actual draft, shopping, wallet and checker states. Abdullah’s draft/catalog/agent-run backend and Seungbin’s audit/verifier/Z3 services remain unintegrated in the current checkout, and the UI marks those limits explicitly.
 
 ## 1. Product and scope
 
