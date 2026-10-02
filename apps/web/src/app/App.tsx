@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
-import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, Receipt, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
@@ -32,6 +32,7 @@ const initialPolicy = {
 
 type View = 'overview' | 'shopping' | 'wallet' | 'activity';
 type Toast = { title: string; detail: string; tone: 'success' | 'error' | 'neutral' };
+type RecoveredPayment = { receipt: Receipt; replayed: true; recovered: true };
 
 function App() {
   const [view, setView] = useState<View>('overview');
@@ -43,7 +44,7 @@ function App() {
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [catalogIsPlaceholder, setCatalogIsPlaceholder] = useState(true);
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [paymentResult, setPaymentResult] = useState<PaymentCompleted | null>(null);
+  const [paymentResult, setPaymentResult] = useState<(PaymentCompleted | RecoveredPayment) | null>(null);
   const [purchaseRefusal, setPurchaseRefusal] = useState<{ message: string; violations: RuleViolation[] } | null>(null);
   const [health, setHealth] = useState<'checking' | 'online' | 'offline'>('checking');
   const refreshVersion = useRef(0);
@@ -194,7 +195,17 @@ function App() {
         try { setBudget(await api.budget(token, mandate.id)); } catch { /* Keep the authoritative refusal visible. */ }
       }
     } catch (error) {
-      announce({ title: 'Could not confirm checkout result', detail: `${error instanceof Error ? error.message : 'Request failed.'} Retry uses the same transaction.`, tone: 'error' });
+      try {
+        const receipt = await api.paymentByTransaction(token, transactionId);
+        setPaymentResult({ receipt, replayed: true, recovered: true });
+        setPurchaseRefusal(null);
+        sessionStorage.removeItem(keyName);
+        try { setBudget(await api.budget(token, mandate.id)); } catch { /* Keep the authoritative recovered receipt visible. */ }
+        announce({ title: 'Existing receipt recovered', detail: `${money(receipt.amount_minor)} simulated · recovered by transaction lookup; no real funds moved.`, tone: 'success' });
+      } catch (lookupError) {
+        const notFoundYet = lookupError instanceof ApiError && lookupError.status === 404;
+        announce({ title: 'Checkout result remains uncertain', detail: `${error instanceof Error ? error.message : 'Request failed.'} ${notFoundYet ? 'No receipt is visible yet; this does not prove the checkout failed.' : 'The wallet receipt lookup also failed.'} Retry keeps the same transaction ID.`, tone: 'error' });
+      }
     } finally { setBusy(''); }
   }
 
@@ -303,7 +314,7 @@ function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
 
-function Shopping({ token, mandateId, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, paymentResult, purchaseRefusal, onUnavailable, catalogIsPlaceholder }: { token: string; mandateId: string; products: Product[]; evidence: Evidence[]; quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null; onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void; onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void; onPurchase: () => void; paymentResult: PaymentCompleted | null; purchaseRefusal: { message: string; violations: RuleViolation[] } | null; onUnavailable: () => void; catalogIsPlaceholder: boolean }) {
+function Shopping({ token, mandateId, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, paymentResult, purchaseRefusal, onUnavailable, catalogIsPlaceholder }: { token: string; mandateId: string; products: Product[]; evidence: Evidence[]; quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null; onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void; onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void; onPurchase: () => void; paymentResult: (PaymentCompleted | RecoveredPayment) | null; purchaseRefusal: { message: string; violations: RuleViolation[] } | null; onUnavailable: () => void; catalogIsPlaceholder: boolean }) {
   const [shoppingListText, setShoppingListText] = useState('Apples\nMilk\nEggs');
   const [instruction, setInstruction] = useState('');
   const [agentRunId, setAgentRunId] = useState(() => mandateId ? sessionStorage.getItem(`mandate-agent-run-${mandateId}`) ?? '' : '');

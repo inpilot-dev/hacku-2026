@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, Quote, QuoteRequest, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -77,6 +77,7 @@ export const api = {
   }),
   agentRun: (token: string, id: string) => request<AgentRun>(`/agent-runs/${encodeURIComponent(id)}`, token),
   demoPurchase: (token: string, input: DemoPurchaseRequest) => request<DemoPurchaseResponse>('/demo/purchases', token, { method: 'POST', body: JSON.stringify(input) }),
+  paymentByTransaction: (token: string, transactionId: string) => request<Receipt>(`/payments/${encodeURIComponent(transactionId)}`, token),
   events: (token: string, after = 0, limit = 50) => request<EventsResponse>(`/events?after=${after}&limit=${limit}`, token),
   auditExport: (token: string) => request<AuditExport>('/audit/export', token),
   createCheckpoint: (token: string, input: CheckpointRequest) => request<Checkpoint>('/audit/checkpoints', token, { method: 'POST', headers: { 'Idempotency-Key': sessionKey(`checkpoint-${input.stream_id}`) }, body: JSON.stringify(input) }),
