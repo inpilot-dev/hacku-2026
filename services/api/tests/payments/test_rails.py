@@ -48,7 +48,7 @@ def test_audit_payloads_label_rail_as_simulated(h):
     h.buy(m["id"])
     with h.wallet.db.read() as conn:
         payloads = {r[0]: json.loads(r[1]) for r in conn.execute(
-            "SELECT type, payload_json FROM wallet_stub_audit_events")}
+            "SELECT type, payload_json FROM audit_events")}
     for t in ("mandate_confirmed", "authorization_approved", "payment_completed"):
         assert payloads[t]["rail"]["name"] == "tap_and_go_single_use_card"
         assert payloads[t]["rail"]["simulated"] is True
