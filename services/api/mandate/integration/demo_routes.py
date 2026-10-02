@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends
 
 from .demo_models import DemoPurchaseRequest, DemoPurchaseResponse
 from mandate.payments.auth import Actor, current_actor, require_role
-from mandate.payments.errors import forbidden
+from mandate.payments.errors import conflict, forbidden
 from mandate.payments.service import Wallet
 
 
@@ -34,12 +34,19 @@ def build_demo_router(wallet: Wallet) -> APIRouter:
         wallet.get_quote(actor, body.quote_id)
         agent = Actor(actor_id=mandate["delegatee_id"], role="agent", owner_id=actor.actor_id)
         digest = hashlib.sha256(body.transaction_id.encode("utf-8")).hexdigest()
-        auth_key = f"demo-auth-{digest}"
+        if body.approval_id:
+            approval = wallet.get_approval(actor, body.approval_id)
+            if approval["transaction_id"] != body.transaction_id or approval["status"] != "approved":
+                raise conflict("This approval does not authorize the saved transaction.")
+        auth_attempt = body.approval_id or "initial"
+        attempt_digest = hashlib.sha256(f"{body.transaction_id}:{auth_attempt}".encode("utf-8")).hexdigest()
+        auth_key = f"demo-auth-{attempt_digest}"
         payment_key = f"demo-pay-{digest}"
         _, authorization = wallet.authorize(agent, auth_key, {
             "transaction_id": body.transaction_id,
             "mandate_id": body.mandate_id,
             "quote_id": body.quote_id,
+            "payment_route_id": body.payment_route_id,
         })
         authorization = {key: value for key, value in authorization.items() if key != "authorization_token"}
         payment = None

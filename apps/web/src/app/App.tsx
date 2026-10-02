@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
-import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, Receipt, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, PaymentOptionsResponse, Policy, Product, Quote, Receipt, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
@@ -42,12 +42,13 @@ const initialPolicy = {
 type View = 'overview' | 'shopping' | 'wallet' | 'activity';
 type Toast = { title: string; detail: string; tone: 'success' | 'error' | 'neutral' };
 type RecoveredPayment = { receipt: Receipt; replayed: true; recovered: true };
-type PurchaseRefusal = { message: string; violations: RuleViolation[]; status: 'refused' | 'requires_review' };
+type PurchaseRefusal = { message: string; violations: RuleViolation[]; status: 'refused' | 'requires_review'; approval_request?: ApprovalRequest | null };
 
 function readStoredPurchaseRefusal(quoteId: string): PurchaseRefusal | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(`mandate-refusal-${quoteId}`) ?? 'null') as Partial<PurchaseRefusal> | null;
     if (!value || typeof value.message !== 'string' || !Array.isArray(value.violations) || !['refused', 'requires_review'].includes(value.status ?? '')) return null;
+    if (value.approval_request != null && (typeof value.approval_request !== 'object' || typeof value.approval_request.id !== 'string' || typeof value.approval_request.status !== 'string')) return null;
     return value as PurchaseRefusal;
   } catch { return null; }
 }
@@ -63,6 +64,9 @@ function App() {
   const [catalogIsPlaceholder, setCatalogIsPlaceholder] = useState(true);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [paymentResult, setPaymentResult] = useState<(PaymentCompleted | RecoveredPayment) | null>(null);
+  const [paymentOptions, setPaymentOptions] = useState<PaymentOptionsResponse | null>(null);
+  const [paymentOptionsState, setPaymentOptionsState] = useState<'idle' | 'loading' | 'ready' | 'unavailable' | 'error'>('idle');
+  const [selectedPaymentRouteId, setSelectedPaymentRouteId] = useState('');
   const [checkoutUncertain, setCheckoutUncertain] = useState(false);
   const [purchaseRefusal, setPurchaseRefusal] = useState<PurchaseRefusal | null>(null);
   const [health, setHealth] = useState<'checking' | 'online' | 'offline'>('checking');
@@ -87,6 +91,13 @@ function App() {
     setToast(next);
     window.setTimeout(() => setToast((current) => current === next ? null : current), 4500);
   }, []);
+
+  const restoreStoredRefusal = useCallback(async (quoteId: string) => {
+    const refusal = readStoredPurchaseRefusal(quoteId);
+    if (!refusal?.approval_request?.id) return refusal;
+    try { return { ...refusal, approval_request: await api.approval(token, refusal.approval_request.id) }; }
+    catch { return refusal; }
+  }, [token]);
 
   const loadCatalog = useCallback(async () => {
     const version = ++catalogRequestVersion.current;
@@ -127,12 +138,14 @@ function App() {
             announce({ title: 'Previous checkout restored', detail: 'The wallet found the saved receipt. No new payment was submitted.', tone: 'success' });
           } catch {
             if (cancelled) return;
-            const refusal = readStoredPurchaseRefusal(savedQuote.id);
+            const refusal = await restoreStoredRefusal(savedQuote.id);
+            if (cancelled) return;
             if (refusal) { setPurchaseRefusal(refusal); setCheckoutUncertain(false); }
             /* Without a saved refusal, a missing receipt is not proof of failure. */
           }
         } else {
-          const refusal = readStoredPurchaseRefusal(savedQuote.id);
+          const refusal = await restoreStoredRefusal(savedQuote.id);
+          if (cancelled) return;
           if (refusal) { setPurchaseRefusal(refusal); setCheckoutUncertain(false); }
           else setCheckoutUncertain(false);
         }
@@ -146,7 +159,7 @@ function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, [announce, mandateId, token]);
+  }, [announce, mandateId, restoreStoredRefusal, token]);
 
   useEffect(() => {
     if (!mandateId || !quoteRestoreReady) return;
@@ -161,6 +174,25 @@ function App() {
     if (purchaseRefusal) sessionStorage.setItem(storageKey, JSON.stringify(purchaseRefusal));
     else sessionStorage.removeItem(storageKey);
   }, [purchaseRefusal, quote]);
+
+  useEffect(() => {
+    if (!quote) {
+      setPaymentOptions(null); setPaymentOptionsState('idle'); setSelectedPaymentRouteId('');
+      return;
+    }
+    let cancelled = false;
+    setPaymentOptions(null); setPaymentOptionsState('loading'); setSelectedPaymentRouteId('');
+    void api.paymentOptions(token, quote.id).then((result) => {
+      if (cancelled) return;
+      setPaymentOptions(result);
+      setSelectedPaymentRouteId(result.recommended_route_id ?? result.options.find((option) => option.eligible)?.route_id ?? '');
+      setPaymentOptionsState('ready');
+    }).catch((error) => {
+      if (cancelled) return;
+      setPaymentOptionsState(error instanceof ApiError && [404, 405].includes(error.status) ? 'unavailable' : 'error');
+    });
+    return () => { cancelled = true; };
+  }, [quote?.id, token]);
 
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
@@ -258,17 +290,23 @@ function App() {
     setCheckoutUncertain(false);
   }
 
-  async function completeDemoPurchase() {
+  async function completeDemoPurchase(approvalId?: string) {
     if (!mandate || !quote || paymentResult) return;
     setBusy('purchase');
     const keyName = `mandate-tx-${quote.id}`;
     const transactionId = sessionStorage.getItem(keyName) ?? crypto.randomUUID();
     sessionStorage.setItem(keyName, transactionId);
     try {
-      const result = await api.demoPurchase(token, { mandate_id: mandate.id, quote_id: quote.id, transaction_id: transactionId });
+      const result = await api.demoPurchase(token, {
+        mandate_id: mandate.id,
+        quote_id: quote.id,
+        transaction_id: transactionId,
+        payment_route_id: selectedPaymentRouteId || null,
+        approval_id: approvalId ?? null,
+      });
       if (result.authorization.status !== 'approved') {
         setCheckoutUncertain(false);
-        setPurchaseRefusal({ message: result.authorization.message, violations: result.authorization.violations, status: result.authorization.status });
+        setPurchaseRefusal({ message: result.authorization.message, violations: result.authorization.violations, status: result.authorization.status, approval_request: result.authorization.approval_request });
         announce({ title: result.authorization.status === 'requires_review' ? 'Needs your review' : 'Purchase blocked by wallet', detail: result.authorization.message, tone: result.authorization.status === 'refused' ? 'error' : 'neutral' });
         try { setBudget(await api.budget(token, mandate.id)); } catch { /* Keep the authoritative refusal visible. */ }
         return;
@@ -290,6 +328,11 @@ function App() {
         try { setBudget(await api.budget(token, mandate.id)); } catch { /* Keep the authoritative refusal visible. */ }
       }
     } catch (error) {
+      if (error instanceof ApiError && [401, 403, 404, 422, 503].includes(error.status)) {
+        setCheckoutUncertain(false);
+        announce({ title: 'Wallet rejected the checkout request', detail: `${error.message} No payment was submitted. Correct the request or refresh the quote before trying again.`, tone: 'error' });
+        return;
+      }
       try {
         const receipt = await api.paymentByTransaction(token, transactionId);
         setPaymentResult({ receipt, replayed: true, recovered: true });
@@ -301,6 +344,36 @@ function App() {
         setCheckoutUncertain(true);
         const notFoundYet = lookupError instanceof ApiError && lookupError.status === 404;
         announce({ title: 'Checkout result remains uncertain', detail: `${error instanceof Error ? error.message : 'Request failed.'} ${notFoundYet ? 'No receipt is visible yet; this does not prove the checkout failed.' : 'The wallet receipt lookup also failed.'} Retry keeps the same transaction ID.`, tone: 'error' });
+      }
+    } finally { setBusy(''); }
+  }
+
+  async function decidePurchaseApproval(approvalId: string, approve: boolean) {
+    setBusy('approval');
+    try {
+      if (approve) {
+        const result = await api.approve(token, approvalId);
+        setPurchaseRefusal((current) => current ? { ...current, approval_request: result.approval } : current);
+        announce({ title: 'Purchase approved for one attempt', detail: 'The wallet will recheck the current rules and budget before it pays.', tone: 'neutral' });
+        await completeDemoPurchase(approvalId);
+      } else {
+        const result = await api.deny(token, approvalId);
+        setPurchaseRefusal({
+          message: 'You declined this purchase. No payment was made.',
+          violations: result.approval.reasons,
+          status: 'refused',
+          approval_request: result.approval,
+        });
+        setCheckoutUncertain(false);
+        announce({ title: 'Purchase declined', detail: 'The wallet recorded your decision; no payment was made.', tone: 'neutral' });
+      }
+    } catch (error) {
+      const latest = await api.approval(token, approvalId).catch(() => null);
+      if (latest && quote) {
+        setPurchaseRefusal((current) => current ? { ...current, approval_request: latest } : current);
+        announce({ title: approve && latest.status === 'approved' ? 'Approval saved' : approve ? 'Could not approve this purchase' : 'Could not decline this purchase', detail: approve && latest.status === 'approved' ? 'Continue the approved one-time purchase when ready; the wallet will recheck its limits.' : error instanceof Error ? error.message : 'Refresh the review request and try again.', tone: approve && latest.status === 'approved' ? 'neutral' : 'error' });
+      } else {
+        announce({ title: approve ? 'Could not approve this purchase' : 'Could not decline this purchase', detail: error instanceof Error ? error.message : 'Refresh the review request and try again.', tone: 'error' });
       }
     } finally { setBusy(''); }
   }
@@ -370,7 +443,22 @@ function App() {
       <div className="page-content">
         {catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><ShieldAlert size={16} /></span><span><strong>Unverified catalog:</strong> product prices lack complete source evidence and are not verified live offers. Payments are simulated and no money moves.</span><button onClick={() => setView('activity')}>What this means <ArrowUpRight size={14} /></button></div>}
         {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} onWallet={() => setView('wallet')} busy={busy} onRevoke={() => void revokeMandate()} />}
-        {view === 'shopping' && <Shopping token={token} mandateId={mandate?.id ?? ''} mandateStatus={mandate?.status ?? null} products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity} quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)} onConfirm={() => mandate ? setView('wallet') : setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onRefreshQuote={(oldQuote) => void refreshQuote(oldQuote)} onEditRefusedBasket={editRefusedBasket} onPurchase={() => void completeDemoPurchase()} onReconcile={(savedQuote) => void reconcileCheckout(savedQuote)} paymentResult={paymentResult} checkoutUncertain={checkoutUncertain} purchaseRefusal={purchaseRefusal} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
+        {view === 'shopping' && <Shopping
+          token={token} mandateId={mandate?.id ?? ''} mandateStatus={mandate?.status ?? null}
+          products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity}
+          quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)}
+          onConfirm={() => mandate ? setView('wallet') : setShowMandateReview(true)}
+          onBuildQuote={() => void buildQuote()} onRefreshQuote={(oldQuote) => void refreshQuote(oldQuote)}
+          onEditRefusedBasket={editRefusedBasket} onPurchase={() => void completeDemoPurchase()}
+          onReconcile={(savedQuote) => void reconcileCheckout(savedQuote)} paymentResult={paymentResult}
+          checkoutUncertain={checkoutUncertain} purchaseRefusal={purchaseRefusal}
+          paymentOptions={paymentOptions} paymentOptionsState={paymentOptionsState}
+          selectedPaymentRouteId={selectedPaymentRouteId} onSelectPaymentRoute={setSelectedPaymentRouteId}
+          onApproveReview={(id) => void decidePurchaseApproval(id, true)} onResumeApproval={(id) => void completeDemoPurchase(id)}
+          onDenyReview={(id) => void decidePurchaseApproval(id, false)}
+          onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })}
+          catalogIsPlaceholder={catalogIsPlaceholder}
+        />}
         {view === 'wallet' && <WalletView mandate={mandate} budget={budget} currentBudget={currentBudget} spentRatio={spentRatio} busy={busy} onRevoke={() => void revokeMandate()} onRefresh={() => void refresh()} />}
         {view === 'activity' && <SafetyView key={token} token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
@@ -438,7 +526,18 @@ function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
 
-function Shopping({ token, mandateId, mandateStatus, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, paymentResult, checkoutUncertain, purchaseRefusal, onUnavailable, catalogIsPlaceholder }: { token: string; mandateId: string; mandateStatus: Mandate['status'] | null; products: Product[]; evidence: Evidence[]; quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null; onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void; onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void; onPurchase: () => void; onReconcile: (quote: Quote) => void; paymentResult: (PaymentCompleted | RecoveredPayment) | null; checkoutUncertain: boolean; purchaseRefusal: PurchaseRefusal | null; onUnavailable: () => void; catalogIsPlaceholder: boolean }) {
+function Shopping({ token, mandateId, mandateStatus, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, paymentResult, checkoutUncertain, purchaseRefusal, paymentOptions, paymentOptionsState, selectedPaymentRouteId, onSelectPaymentRoute, onApproveReview, onResumeApproval, onDenyReview, onUnavailable, catalogIsPlaceholder }: {
+  token: string; mandateId: string; mandateStatus: Mandate['status'] | null; products: Product[]; evidence: Evidence[];
+  quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null;
+  onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void;
+  onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void;
+  onPurchase: () => void; onReconcile: (quote: Quote) => void; paymentResult: (PaymentCompleted | RecoveredPayment) | null;
+  checkoutUncertain: boolean; purchaseRefusal: PurchaseRefusal | null;
+  paymentOptions: PaymentOptionsResponse | null; paymentOptionsState: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
+  selectedPaymentRouteId: string; onSelectPaymentRoute: (routeId: string) => void;
+  onApproveReview: (approvalId: string) => void; onResumeApproval: (approvalId: string) => void; onDenyReview: (approvalId: string) => void;
+  onUnavailable: () => void; catalogIsPlaceholder: boolean;
+}) {
   const [shoppingListText, setShoppingListText] = useState('Apples\nMilk\nEggs');
   const [instruction, setInstruction] = useState('');
   const [agentRunId, setAgentRunId] = useState(() => mandateId ? sessionStorage.getItem(`mandate-agent-run-${mandateId}`) ?? '' : '');
@@ -534,7 +633,45 @@ function Shopping({ token, mandateId, mandateStatus, products, evidence, quantit
       {agentError && <div className="form-error" role="alert">{agentError}{agentQuoteUnavailable && <button type="button" className="text-button" onClick={() => { setAgentError(''); setQuoteRetry((value) => value + 1); }}>Retry loading quote</button>}</div>}
     </form>
     <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">SCRIPTED CATALOG FALLBACK</div><h2>Choose items manually</h2></div><span className="catalog-count">{products.length} items</span></div><div className="product-list">{products.map((product, index) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={index} disabled={agentWorking || busy === 'quote' || busy === 'quote-restore' || busy === 'purchase'} />)}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
-      <aside className="panel basket-panel"><div className="panel-heading"><div><div className="eyebrow">YOUR BASKET</div><h2>Order summary</h2></div><span className="basket-badge"><ShoppingBasket size={14} />{basketCount}</span></div>{quote ? <>{checkoutUncertain && !paymentResult && <div className="checkout-uncertain" role="status"><AgentCharacter name="kip" state="idle" label="Kip is waiting for the wallet to confirm this transaction" /><strong>Checkout result is uncertain</strong><p>Check whether this transaction already produced a receipt before retrying.</p><button type="button" className="text-button" onClick={() => onReconcile(quote)} disabled={busy === 'reconcile'}>{busy === 'reconcile' ? 'Checking receipt…' : 'Check saved transaction'}</button></div>}{purchaseRefusal && <div className="purchase-refusal" role="alert"><AgentCharacter name="kip" state="refused" label="Kip blocked this purchase under the wallet rules" /><strong>{purchaseRefusal.status === 'requires_review' ? 'This purchase needs your review' : 'Wallet refused this purchase'}</strong><p>{purchaseRefusal.message}</p><ul>{purchaseRefusal.violations.map((violation, index) => <li key={`${violation.rule_id}-${index}`}><b>{violation.code.replace(/_/g, ' ')}</b> · {violation.message}<small>Rule {violation.rule_id}{violation.actual_minor != null ? ` · Actual ${money(violation.actual_minor)}` : ''}{violation.limit_minor != null ? ` · Limit ${money(violation.limit_minor)}` : ''}</small></li>)}</ul><button type="button" className="text-button" onClick={() => onEditRefusedBasket(quote)}>Adjust items and request a new quote</button></div>}{paymentResult && <div className="purchase-receipt"><AgentCharacter name="kip" state="approved" label="Kip approved the wallet-authorized sandbox purchase" size={40} /><span className="receipt-check"><BadgeCheck size={18} /></span><span><strong>Sandbox receipt saved</strong><small>{paymentResult.receipt.id} · {shortDate(paymentResult.receipt.paid_at)}</small></span><b>{money(paymentResult.receipt.amount_minor)}</b></div>}<div className={`quote-status${quoteExpired ? ' quote-expired' : ''}`}><BadgeCheck size={17} /><span><strong>{quoteExpired ? 'Quote expired' : 'Wallet quote ready'}</strong><small>{quoteExpired ? 'This quote can no longer be used to authorize a purchase.' : `Expires ${new Date(quote.expires_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}`}</small></span></div><div className="quote-lines">{quote.items.map((item) => <div className="quote-evidence-line" key={item.product_id}><span>{item.title} <small>×{item.quantity}</small><EvidenceRefs ids={item.evidence_ids} evidence={evidence} /></span><strong>{money(item.line_total_minor)}</strong></div>)}{quote.charges.length ? quote.charges.map((charge, index) => <div className="quote-evidence-line" key={`${charge.kind}-${index}`}><span>{charge.label}<EvidenceRefs ids={charge.evidence_ids} evidence={evidence} /></span><strong>{money(charge.amount_minor)}</strong></div>) : <div><span>Delivery</span><strong>{money(0)}</strong></div>}</div><div className="basket-total"><span>Total from wallet</span><strong>{money(quote.total_minor)}</strong></div>{quoteExpired && <button className="button button-secondary full-button" onClick={() => onRefreshQuote(quote)} disabled={busy === 'quote' || busy === 'purchase' || Boolean(paymentResult)}>{busy === 'quote' ? <span className="spinner" /> : <RefreshCw size={16} />}{busy === 'quote' ? 'Repricing basket…' : 'Request a fresh quote'}</button>}<button className="button button-primary full-button" onClick={onPurchase} disabled={!active || quoteExpired || busy === 'purchase' || busy === 'reconcile' || busy === 'quote-restore' || Boolean(paymentResult) || Boolean(purchaseRefusal)}>{busy === 'purchase' ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy === 'purchase' ? 'Checking wallet…' : paymentResult ? 'Purchase complete' : purchaseRefusal ? 'Blocked by wallet' : !active ? mandateStatus === 'expired' ? 'Allowance expired' : mandateStatus === 'revoked' ? 'Access revoked' : 'Set up spending rules' : quoteExpired ? 'Quote expired' : checkoutUncertain ? 'Retry same transaction' : 'Complete sandbox purchase'}</button><p className="checkout-note">Wallet policy still decides · local demo payment · no real funds move.</p></> : <><div className="basket-empty"><div className="basket-art"><ShoppingBasket size={25} /></div><strong>Your basket is waiting</strong><p>Add items to see a quote from the wallet, including delivery.</p></div><div className="basket-estimate"><span>Estimated total</span><strong>{money(products.reduce((sum, product) => sum + product.unit_price_minor * (quantities[product.id] ?? 0), 0))}</strong></div><button className="button button-primary full-button" onClick={onBuildQuote} disabled={!active || busy === 'quote' || busy === 'quote-restore' || !Object.values(quantities).some((n) => n > 0)}>{busy === 'quote' || busy === 'quote-restore' ? <span className="spinner" /> : <Shield size={16} />}{busy === 'quote-restore' ? 'Restoring saved order…' : busy === 'quote' ? 'Getting wallet quote…' : 'Check against family rules'}</button><p className="checkout-note">{catalogIsPlaceholder ? 'Unverified prices · not live offer data' : 'Wallet checks the final basket total.'}</p></>}</aside></div>
+      <aside className="panel basket-panel">
+        <div className="panel-heading">
+          <div><div className="eyebrow">YOUR BASKET</div><h2>Order summary</h2></div>
+          <span className="basket-badge"><ShoppingBasket size={14} />{basketCount}</span>
+        </div>
+        {quote ? <>
+          {checkoutUncertain && !paymentResult && <div className="checkout-uncertain" role="status">
+            <AgentCharacter name="kip" state="idle" label="Kip is waiting for the wallet to confirm this transaction" />
+            <strong>Checkout result is uncertain</strong><p>Check whether this transaction already produced a receipt before retrying.</p>
+            <button type="button" className="text-button" onClick={() => onReconcile(quote)} disabled={busy === 'reconcile'}>{busy === 'reconcile' ? 'Checking receipt…' : 'Check saved transaction'}</button>
+          </div>}
+          {purchaseRefusal && <div className="purchase-refusal" role={purchaseRefusal.status === 'requires_review' ? 'status' : 'alert'}>
+            <AgentCharacter name="kip" state="refused" label="Kip blocked this purchase under the wallet rules" />
+            <strong>{purchaseRefusal.status === 'requires_review' ? 'This purchase needs your review' : 'Wallet refused this purchase'}</strong>
+            <p>{purchaseRefusal.message}</p>
+            <ul>{purchaseRefusal.violations.map((violation, index) => <li key={`${violation.rule_id}-${index}`}><b>{violation.code.replace(/_/g, ' ')}</b> · {violation.message}<small>Rule {violation.rule_id}{violation.actual_minor != null ? ` · Actual ${money(violation.actual_minor)}` : ''}{violation.limit_minor != null ? ` · Limit ${money(violation.limit_minor)}` : ''}</small></li>)}</ul>
+            {purchaseRefusal.approval_request && <ApprovalActions request={purchaseRefusal.approval_request} busy={busy !== ''} now={quoteNow} onApprove={onApproveReview} onDeny={onDenyReview} onResume={onResumeApproval} />}
+            <button type="button" className="text-button" onClick={() => onEditRefusedBasket(quote)}>Adjust items and request a new quote</button>
+          </div>}
+          {paymentResult && <div className="purchase-receipt">
+            <AgentCharacter name="kip" state="approved" label="Kip approved the wallet-authorized sandbox purchase" size={40} />
+            <span className="receipt-check"><BadgeCheck size={18} /></span>
+            <span><strong>Sandbox receipt saved</strong><small>{paymentResult.receipt.id} · {shortDate(paymentResult.receipt.paid_at)}{paymentResult.receipt.payment_route ? ` · ${paymentResult.receipt.payment_route.label}` : ''}</small></span>
+            <b>{money(paymentResult.receipt.amount_minor)}</b>
+          </div>}
+          <div className={`quote-status${quoteExpired ? ' quote-expired' : ''}`}><BadgeCheck size={17} /><span><strong>{quoteExpired ? 'Quote expired' : 'Wallet quote ready'}</strong><small>{quoteExpired ? 'This quote can no longer be used to authorize a purchase.' : `Expires ${new Date(quote.expires_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}`}</small></span></div>
+          <div className="quote-lines">{quote.items.map((item) => <div className="quote-evidence-line" key={item.product_id}><span>{item.title} <small>×{item.quantity}</small><EvidenceRefs ids={item.evidence_ids} evidence={evidence} /></span><strong>{money(item.line_total_minor)}</strong></div>)}{quote.charges.length ? quote.charges.map((charge, index) => <div className="quote-evidence-line" key={`${charge.kind}-${index}`}><span>{charge.label}<EvidenceRefs ids={charge.evidence_ids} evidence={evidence} /></span><strong>{money(charge.amount_minor)}</strong></div>) : <div><span>Delivery</span><strong>{money(0)}</strong></div>}</div>
+          <PaymentRoutePicker options={paymentOptions} state={paymentOptionsState} selectedRouteId={selectedPaymentRouteId} onSelect={onSelectPaymentRoute} disabled={busy !== '' || Boolean(paymentResult) || ['pending', 'approved'].includes(purchaseRefusal?.approval_request?.status ?? '')} />
+          <div className="basket-total"><span>Total from wallet</span><strong>{money(quote.total_minor)}</strong></div>
+          {quoteExpired && <button className="button button-secondary full-button" onClick={() => onRefreshQuote(quote)} disabled={busy === 'quote' || busy === 'purchase' || Boolean(paymentResult)}>{busy === 'quote' ? <span className="spinner" /> : <RefreshCw size={16} />}{busy === 'quote' ? 'Repricing basket…' : 'Request a fresh quote'}</button>}
+          <button className="button button-primary full-button" onClick={onPurchase} disabled={!active || quoteExpired || busy === 'purchase' || busy === 'reconcile' || busy === 'quote-restore' || paymentOptionsState === 'loading' || (paymentOptionsState === 'ready' && !paymentOptions?.options.some((option) => option.eligible)) || Boolean(paymentResult) || Boolean(purchaseRefusal)}>{busy === 'purchase' ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy === 'purchase' ? 'Checking wallet…' : paymentResult ? 'Purchase complete' : purchaseRefusal ? 'Blocked by wallet' : !active ? mandateStatus === 'expired' ? 'Allowance expired' : mandateStatus === 'revoked' ? 'Access revoked' : 'Set up spending rules' : quoteExpired ? 'Quote expired' : checkoutUncertain ? 'Retry same transaction' : 'Complete sandbox purchase'}</button>
+          <p className="checkout-note">Wallet policy still decides · local demo payment · no real funds move.</p>
+        </> : <>
+          <div className="basket-empty"><div className="basket-art"><ShoppingBasket size={25} /></div><strong>Your basket is waiting</strong><p>Add items to see a quote from the wallet, including delivery.</p></div>
+          <div className="basket-estimate"><span>Estimated total</span><strong>{money(products.reduce((sum, product) => sum + product.unit_price_minor * (quantities[product.id] ?? 0), 0))}</strong></div>
+          <button className="button button-primary full-button" onClick={onBuildQuote} disabled={!active || busy === 'quote' || busy === 'quote-restore' || !Object.values(quantities).some((n) => n > 0)}>{busy === 'quote' || busy === 'quote-restore' ? <span className="spinner" /> : <Shield size={16} />}{busy === 'quote-restore' ? 'Restoring saved order…' : busy === 'quote' ? 'Getting wallet quote…' : 'Check against family rules'}</button>
+          <p className="checkout-note">{catalogIsPlaceholder ? 'Unverified prices · not live offer data' : 'Wallet checks the final basket total.'}</p>
+        </>}
+      </aside></div>
     <div className="bottom-note"><span><Shield size={15} /> Shopping suggestions cannot authorize spending. The wallet is the final authority.</span><button className="text-button" onClick={onUnavailable}>How checkout works <ArrowUpRight size={14} /></button></div>
   </>;
 }
@@ -557,8 +694,61 @@ function EvidenceRefs({ ids, evidence }: { ids: string[]; evidence: Evidence[] }
   })}</span>;
 }
 
+function PaymentRoutePicker({ options, state, selectedRouteId, onSelect, disabled }: {
+  options: PaymentOptionsResponse | null; state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
+  selectedRouteId: string; onSelect: (routeId: string) => void; disabled: boolean;
+}) {
+  if (state === 'idle') return null;
+  if (state === 'loading') return <div className="payment-route-note" role="status">Checking available payment routes…</div>;
+  if (!options || state !== 'ready') return <div className="payment-route-note">{state === 'unavailable' ? 'Route comparison is not connected; the wallet will choose its available route.' : 'Could not load route comparison; the wallet will still validate its route at checkout.'}</div>;
+  const eligible = options.options.filter((option) => option.eligible);
+  const selected = eligible.find((option) => option.route_id === selectedRouteId);
+  return <section className="payment-route-picker" aria-label="Payment route selection">
+    <label htmlFor="payment-route">Payment route <small>Wallet-ranked by total cost after eligible, evidenced rewards.</small></label>
+    <select id="payment-route" value={selected?.route_id ?? ''} onChange={(event) => onSelect(event.target.value)} disabled={disabled || eligible.length === 0}>
+      {eligible.length === 0 && <option value="">No eligible payment route</option>}
+      {options.options.map((option) => <option key={option.route_id} value={option.route_id} disabled={!option.eligible}>
+        {option.label} · net {money(option.net_minor)}{option.route_id === options.recommended_route_id ? ' · recommended' : ''}{!option.eligible ? ' · unavailable' : ''}
+      </option>)}
+    </select>
+    {selected && <div className="payment-route-detail"><span>Fee {money(selected.fee_minor)} · reward {money(selected.reward_minor)}{selected.route_id === options.recommended_route_id ? ' · wallet recommendation' : ''}</span>
+      {selected.caveats.length > 0 && <small>{selected.caveats.join(' ')}</small>}
+      <PaymentRouteEvidence ids={selected.evidence_ids} evidence={options.evidence} />
+    </div>}
+    <small className="payment-route-rule">{options.rule} · Observed {shortDate(options.evaluated_at)}</small>
+  </section>;
+}
+
+function PaymentRouteEvidence({ ids, evidence }: { ids: string[]; evidence: PaymentOptionsResponse['evidence'] }) {
+  const sources = ids.map((id) => evidence.find((item) => item.id === id)).filter((item): item is PaymentOptionsResponse['evidence'][number] => Boolean(item));
+  if (!sources.length) return <small className="evidence-unverified">No linked fee or reward source</small>;
+  return <span className="evidence-refs">{sources.map((item) => {
+    let source: URL | null = null;
+    try { source = new URL(item.url); } catch { /* Show malformed provider citations as unverified text. */ }
+    const verified = Boolean(source && ['http:', 'https:'].includes(source.protocol) && !source.username && !source.password && !source.hostname.endsWith('.invalid') && Number.isFinite(Date.parse(item.observed_at)) && item.quote.trim());
+    return verified && source
+      ? <a key={item.id} href={item.url} target="_blank" rel="noopener noreferrer" title={item.quote}>{item.title} · {source.hostname} · {shortDate(item.observed_at)}</a>
+      : <small key={item.id} className="evidence-unverified">{item.title} · source not verified</small>;
+  })}</span>;
+}
+
+function ApprovalActions({ request, busy, now, onApprove, onDeny, onResume }: {
+  request: ApprovalRequest; busy: boolean; now: number; onApprove: (id: string) => void; onDeny: (id: string) => void; onResume: (id: string) => void;
+}) {
+  const expired = request.status === 'pending' && Date.parse(request.expires_at) <= now;
+  return <div className="approval-actions">
+    <strong>{request.status === 'pending' && expired ? 'Review expired' : `Review ${request.status.replace(/_/g, ' ')}`}</strong>
+    <small>{expired ? 'The wallet will not accept a late decision.' : request.status === 'pending' ? `Respond by ${new Date(request.expires_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}. Approval applies once; the wallet checks every hard limit again.` : request.status === 'approved' ? 'This one-time approval is saved. Continue to let the wallet recheck current limits and attempt the payment.' : `This request is ${request.status}. No additional approval action is available.`}</small>
+    {request.status === 'pending' && !expired && <div className="approval-buttons">
+      <button type="button" className="button button-secondary" onClick={() => onDeny(request.id)} disabled={busy}>Decline</button>
+      <button type="button" className="button button-primary" onClick={() => onApprove(request.id)} disabled={busy}>{busy ? 'Saving decision…' : 'Approve once'}</button>
+    </div>}
+    {request.status === 'approved' && <div className="approval-buttons"><button type="button" className="button button-primary" onClick={() => onResume(request.id)} disabled={busy}>{busy ? 'Checking wallet…' : 'Continue approved purchase'}</button></div>}
+  </div>;
+}
+
 function WalletView({ mandate, budget, currentBudget, spentRatio, busy, onRevoke, onRefresh }: { mandate: Mandate | null; budget: BudgetResponse | null; currentBudget?: BudgetResponse['applicable_budgets'][number]; spentRatio: number; busy: string; onRevoke: () => void; onRefresh: () => void }) {
-  return <><div className="page-heading"><div><div className="eyebrow">FAMILY WALLET</div><h1>Your rules, at a glance.</h1><p>Every amount reflects the latest state returned by the wallet service.</p></div><button className="button button-secondary" onClick={onRefresh}><RefreshCw size={16} /> Refresh wallet</button></div><section className="wallet-hero panel"><div><div className="eyebrow">AVAILABLE THIS WEEK</div><strong>{currentBudget ? money(currentBudget.available_minor) : '—'}</strong><span>{currentBudget ? `of ${money(currentBudget.limit_minor)} weekly allowance` : 'Confirm a mandate to activate your wallet'}</span><div className="progress-track"><span style={{ width: `${spentRatio}%` }} /></div><div className="wallet-breakdown"><span><i className="legend-dot paid-dot" />Paid <strong>{money(currentBudget?.paid_minor ?? 0)}</strong></span><span><i className="legend-dot reserved-dot" />Reserved <strong>{money(currentBudget?.reserved_minor ?? 0)}</strong></span><span><i className="legend-dot available-dot" />Available <strong>{money(currentBudget?.available_minor ?? 0)}</strong></span></div></div><div className="wallet-decoration"><WalletCards size={54} strokeWidth={1.1} /><span>FAMILY<br />ALLOWANCE</span><i>••••  2026</i></div></section><div className="wallet-detail-grid"><section className="panel"><div className="panel-heading"><div><div className="eyebrow">CURRENT PERMISSIONS</div><h2>Who can spend</h2></div><span className={`status-tag ${mandate?.status === 'active' ? 'status-green' : 'status-muted'}`}><i />{mandate?.status ?? 'Not set up'}</span></div>{mandate ? <div className="wallet-rule-list"><Rule icon={<WalletCards size={17} />} label="Per order limit" value={money(mandate.policy.per_order_limit_minor)} detail="Includes delivery fees" /><Rule icon={<Activity size={17} />} label="Weekly limit" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Calendar week · Hong Kong time" /><Rule icon={<Ban size={17} />} label="Blocked" value={mandate.policy.blocked_categories.join(', ')} detail="Always refused" /><Rule icon={<Clock3 size={17} />} label="Expires" value={shortDate(mandate.policy.expires_at)} detail="No automatic renewal" /></div> : <div className="empty-small">No active spending mandate has been confirmed yet.</div>}{mandate?.status === 'active' && <button className="button button-danger-outline" onClick={onRevoke} disabled={busy === 'revoke'}><Ban size={16} />{busy === 'revoke' ? 'Revoking access…' : 'Revoke spending access'}</button>}</section><section className="panel budget-panel"><div className="eyebrow">BUDGET PERIODS</div><h2>Spending by week</h2>{budget?.applicable_budgets.map((period) => <div className="budget-period" key={period.period_id}><div className="budget-period-head"><span><strong>{shortDate(period.starts_at)}</strong><small>Ends {shortDate(period.ends_at)}</small></span><strong>{money(period.available_minor)} <small>left</small></strong></div><div className="progress-track"><span style={{ width: `${Math.min(100, Math.round((period.paid_minor + period.reserved_minor) / period.limit_minor * 100))}%` }} /></div><div className="budget-period-meta"><span>{money(period.paid_minor + period.reserved_minor)} used</span><span>{money(period.limit_minor)} total</span></div></div>) ?? <div className="empty-small">Budget periods will appear after confirmation.</div>}</section></div></>;
+  return <><div className="page-heading"><div><div className="eyebrow">FAMILY WALLET</div><h1>Your rules, at a glance.</h1><p>Every amount reflects the latest state returned by the wallet service.</p></div><button className="button button-secondary" onClick={onRefresh}><RefreshCw size={16} /> Refresh wallet</button></div><section className="wallet-hero panel"><div><div className="eyebrow">AVAILABLE THIS WEEK</div><strong>{currentBudget ? money(currentBudget.available_minor) : '—'}</strong><span>{currentBudget ? `of ${money(currentBudget.limit_minor)} weekly allowance` : 'Confirm a mandate to activate your wallet'}</span><div className="progress-track"><span style={{ width: `${spentRatio}%` }} /></div><div className="wallet-breakdown"><span><i className="legend-dot paid-dot" />Paid <strong>{money(currentBudget?.paid_minor ?? 0)}</strong></span><span><i className="legend-dot reserved-dot" />Reserved <strong>{money(currentBudget?.reserved_minor ?? 0)}</strong></span><span><i className="legend-dot available-dot" />Available <strong>{money(currentBudget?.available_minor ?? 0)}</strong></span></div></div><div className="wallet-decoration"><WalletCards size={54} strokeWidth={1.1} /><span>FAMILY<br />ALLOWANCE</span><i>••••  2026</i></div></section><div className="wallet-detail-grid"><section className="panel"><div className="panel-heading"><div><div className="eyebrow">CURRENT PERMISSIONS</div><h2>Who can spend</h2></div><span className={`status-tag ${mandate?.status === 'active' ? 'status-green' : 'status-muted'}`}><i />{mandate?.status ?? 'Not set up'}</span></div>{mandate ? <div className="wallet-rule-list"><Rule icon={<WalletCards size={17} />} label="Per order limit" value={money(mandate.policy.per_order_limit_minor)} detail="Includes delivery fees" /><Rule icon={<Activity size={17} />} label="Weekly limit" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Calendar week · Hong Kong time" /><Rule icon={<ShoppingBasket size={17} />} label="Allowed stores" value={mandate.policy.allowed_merchant_ids.join(", ")} detail="Other stores are refused" />{mandate.policy.approval_above_minor !== null && <Rule icon={<CircleHelp size={17} />} label="Needs approval above" value={money(mandate.policy.approval_above_minor)} detail="Wallet pauses for your decision" />}{mandate.policy.velocity_limit && <Rule icon={<Clock3 size={17} />} label="Purchase frequency" value={`${mandate.policy.velocity_limit.max_purchases} per ${mandate.policy.velocity_limit.window_minutes} minutes`} detail="Reserved and paid orders count" />}<Rule icon={<Ban size={17} />} label="Blocked" value={mandate.policy.blocked_categories.join(', ')} detail="Always refused" /><Rule icon={<Clock3 size={17} />} label="Expires" value={shortDate(mandate.policy.expires_at)} detail="No automatic renewal" /></div> : <div className="empty-small">No active spending mandate has been confirmed yet.</div>}{mandate?.status === 'active' && <button className="button button-danger-outline" onClick={onRevoke} disabled={busy === 'revoke'}><Ban size={16} />{busy === 'revoke' ? 'Revoking access…' : 'Revoke spending access'}</button>}</section><section className="panel budget-panel"><div className="eyebrow">BUDGET PERIODS</div><h2>Spending by week</h2>{budget?.applicable_budgets.map((period) => <div className="budget-period" key={period.period_id}><div className="budget-period-head"><span><strong>{shortDate(period.starts_at)}</strong><small>Ends {shortDate(period.ends_at)}</small></span><strong>{money(period.available_minor)} <small>left</small></strong></div><div className="progress-track"><span style={{ width: `${Math.min(100, Math.round((period.paid_minor + period.reserved_minor) / period.limit_minor * 100))}%` }} /></div><div className="budget-period-meta"><span>{money(period.paid_minor + period.reserved_minor)} used</span><span>{money(period.limit_minor)} total</span></div></div>) ?? <div className="empty-small">Budget periods will appear after confirmation.</div>}</section></div></>;
 }
 
 function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: string; mandate: Mandate | null; health: 'checking' | 'online' | 'offline'; catalogIsPlaceholder: boolean }) {
@@ -682,6 +872,10 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
   const [weeklyCap, setWeeklyCap] = useState(String(initial.period_limits[0] ? initial.period_limits[0].limit_minor / 100 : 800));
   const [expires, setExpires] = useState(initial.expires_at.slice(0, 10));
   const [blockAlcohol, setBlockAlcohol] = useState(initial.blocked_categories.includes('alcohol'));
+  const [approvalAbove, setApprovalAbove] = useState(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
+  const [velocityEnabled, setVelocityEnabled] = useState(Boolean(initial.velocity_limit));
+  const [maxPurchases, setMaxPurchases] = useState(String(initial.velocity_limit?.max_purchases ?? 3));
+  const [windowMinutes, setWindowMinutes] = useState(String(initial.velocity_limit?.window_minutes ?? 60));
   const [basePolicy, setBasePolicy] = useState(initial);
   const [draftText, setDraftText] = useState('Buy groceries each week. Spend no more than HK$300 per order and HK$800 per week. Only from Demo Grocery Store A. No alcohol. Permission expires 31 October 2026.');
   const [draftResponse, setDraftResponse] = useState<DraftResponse | null>(null);
@@ -697,6 +891,10 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
     setWeeklyCap(String(initial.period_limits[0] ? initial.period_limits[0].limit_minor / 100 : 800));
     setExpires(initial.expires_at.slice(0, 10));
     setBlockAlcohol(initial.blocked_categories.includes('alcohol'));
+    setApprovalAbove(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
+    setVelocityEnabled(Boolean(initial.velocity_limit));
+    setMaxPurchases(String(initial.velocity_limit?.max_purchases ?? 3));
+    setWindowMinutes(String(initial.velocity_limit?.window_minutes ?? 60));
   }
 
   async function interpretRequest() {
@@ -715,6 +913,10 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
         setWeeklyCap(String(proposed.period_limits[0] ? proposed.period_limits[0].limit_minor / 100 : 0));
         setExpires(proposed.expires_at.slice(0, 10));
         setBlockAlcohol(proposed.blocked_categories.includes('alcohol'));
+        setApprovalAbove(proposed.approval_above_minor === null ? '' : String(proposed.approval_above_minor / 100));
+        setVelocityEnabled(Boolean(proposed.velocity_limit));
+        setMaxPurchases(String(proposed.velocity_limit?.max_purchases ?? 3));
+        setWindowMinutes(String(proposed.velocity_limit?.window_minutes ?? 60));
       }
     } catch (draftFailure) {
       resetToSeededPolicy();
@@ -736,10 +938,15 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
     const perOrder = Math.round(Number(orderCap) * 100);
     const weekly = Math.round(Number(weeklyCap) * 100);
     if (!Number.isFinite(perOrder) || perOrder < 1 || !Number.isFinite(weekly) || weekly < 1) { setError('Enter valid positive HKD spending limits.'); return; }
+    const approvalMinor = approvalAbove.trim() === '' ? null : Math.round(Number(approvalAbove) * 100);
+    if (approvalMinor !== null && (!Number.isFinite(approvalMinor) || approvalMinor < 1)) { setError('Approval threshold must be a positive amount or left blank.'); return; }
+    const velocityMax = Math.round(Number(maxPurchases));
+    const velocityWindow = Math.round(Number(windowMinutes));
+    if (velocityEnabled && (!Number.isFinite(velocityMax) || velocityMax < 1 || velocityMax > 1000 || !Number.isFinite(velocityWindow) || velocityWindow < 1 || velocityWindow > 10080)) { setError('Velocity limit must be 1–1,000 purchases over 1–10,080 minutes.'); return; }
     if (!expires || new Date(`${expires}T23:59:59+08:00`) <= new Date()) { setError('Choose an expiry date in the future.'); return; }
     const blockedCategories: Policy['blocked_categories'] = basePolicy.blocked_categories.filter((category) => category !== 'alcohol');
     if (blockAlcohol) blockedCategories.push('alcohol');
-    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories };
+    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null };
     setError('');
     await onConfirm(next, draftId);
   }
@@ -754,7 +961,10 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
       <div className="limit-fields"><label>Max per order <span className="money-input"><i>HK$</i><input aria-label="Maximum per order in HKD" type="number" min="1" step="1" value={orderCap} onChange={(event) => setOrderCap(event.target.value)} /></span></label><label>Weekly limit <span className="money-input"><i>HK$</i><input aria-label="Weekly spending limit in HKD" type="number" min="1" step="1" value={weeklyCap} onChange={(event) => setWeeklyCap(event.target.value)} /></span></label></div>
       <label>Allowed store<input value={basePolicy.allowed_merchant_ids.map((id) => id === 'demo_store_a' ? 'Demo Grocery Store A' : id).join(', ') || 'No store specified'} readOnly /></label><label>Permission expires<input aria-label="Permission expiry date" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></label>
       <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
-      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {basePolicy.approval_above_minor === null ? 'none' : money(basePolicy.approval_above_minor)}</span></div>
+      <label>Require approval above (optional)<span className="money-input"><i>HK$</i><input aria-label="Require approval for purchases above this amount in HKD" type="number" min="0.01" step="0.01" value={approvalAbove} onChange={(event) => setApprovalAbove(event.target.value)} placeholder="No threshold" /></span></label>
+      <label className="check-option"><input type="checkbox" checked={velocityEnabled} onChange={(event) => setVelocityEnabled(event.target.checked)} /><span><strong>Limit purchase frequency</strong><small>Count reserved or paid purchases made under this mandate and its descendants.</small></span></label>
+      {velocityEnabled && <div className="limit-fields"><label>Purchases in window<input aria-label="Maximum purchases in velocity window" type="number" min="1" max="1000" step="1" value={maxPurchases} onChange={(event) => setMaxPurchases(event.target.value)} /></label><label>Window in minutes<input aria-label="Velocity window in minutes" type="number" min="1" max="10080" step="1" value={windowMinutes} onChange={(event) => setWindowMinutes(event.target.value)} /></label></div>}
+      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span></div>
       {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for Demo Grocery Store A. This proposal needs a compatible policy before it can be activated.</span></div>}
       <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Confirming activates the exact structured rules shown here.</span></div>
       {error && <div className="form-error" role="alert">{error}</div>}

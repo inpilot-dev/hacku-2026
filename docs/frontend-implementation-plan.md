@@ -340,3 +340,11 @@ This rule is for active work sessions. There is no background polling job or una
 - Evidence and safety views show measured/verified results with their limits.
 - Main and backup demonstrations can restart from known seed state.
 - Changes are committed and pushed with team-facing handoff notes and the shared contract kept consistent.
+
+## 14. Integration checkpoint — 3 October 2026
+
+The wallet now exposes payment-route comparisons, one-time approval requests, refunds and velocity limits. The web client is being wired to those wallet capabilities. Current local changes add a route picker backed by the wallet's quote-specific options, owner approve/decline actions, and an explicit continuation action for an approval that succeeded before a client/network failure. The demo purchase adapter resumes only the matching transaction after checking that its approval is approved; the wallet still reevaluates policy and budget before payment.
+
+The mandate review now exposes the approval threshold and purchase-frequency limit, and the wallet view reads those values from the confirmed policy. The demo request contract carries an optional route ID and approval ID. The browser still receives no signed authorization token or payment credential.
+
+The web production build currently succeeds. Remaining integration work is to mount the shared API composition, reconcile the agent and audit/verifier modules when teammates land them, validate the complete demo flow against a reset backend, and finish the handoff/demo materials. Payment routes and their cited rewards remain advisory until the server performs final route eligibility checks. Checkout uncertainty must preserve the transaction ID and reconcile an existing receipt; a `409` conflict is not treated as proof that no payment occurred.

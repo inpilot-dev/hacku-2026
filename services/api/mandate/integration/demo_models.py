@@ -14,6 +14,8 @@ class DemoPurchaseRequest(BaseModel):
     mandate_id: str
     quote_id: str
     transaction_id: str = Field(min_length=1, max_length=128)
+    payment_route_id: str | None = None
+    approval_id: str | None = None
 
 
 class DemoAuthorizationApproved(BaseModel):

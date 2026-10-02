@@ -5143,9 +5143,31 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128
+          },
+          "payment_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional route chosen from GET /quotes/{quote_id}/payment-options. If omitted, the wallet selects its current recommendation."
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Required only to resume the same transaction after its owner approved this pending review request."
           }
         },
-        "description": "Local demonstration adapter only. The server derives the assigned agent from the user-owned mandate; no agent credential is sent to the browser."
+        "description": "Local demonstration adapter only. The server derives the assigned agent from the user-owned mandate; no agent credential or signed authorization is sent to the browser."
       },
       "DemoPurchaseResponse": {
         "type": "object",
