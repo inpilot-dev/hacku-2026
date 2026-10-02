@@ -197,7 +197,7 @@ function App() {
       <header className="topbar"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumbs">Family account <span>/</span> <strong>{nav.find((item) => item.id === view)?.label}</strong></div><div className="top-actions"><span className={`connection-pill ${health}`}><span className="connection-dot" />{health === 'online' ? 'Wallet connected' : health === 'offline' ? 'Wallet offline' : 'Connecting'}</span><button className="icon-button" aria-label="Refresh data" onClick={() => void refresh()}><RefreshCw size={17} /></button><button className="top-avatar" aria-label="Account settings" onClick={() => setShowSettings(true)}>MK</button></div></header>
       <div className="page-content">
         {catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><ShieldAlert size={16} /></span><span><strong>Prototype data:</strong> product prices are placeholders, not live store offers. Payments are simulated and no money moves.</span><button onClick={() => setView('activity')}>What this means <ArrowUpRight size={14} /></button></div>}
-        {view === 'overview' && <Overview mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} busy={busy} onRevoke={() => void revokeMandate()} />}
+        {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} busy={busy} onRevoke={() => void revokeMandate()} />}
         {view === 'shopping' && <Shopping products={products} quantities={quantity} onChange={changeQuantity} quote={quote} busy={busy} active={Boolean(active)} onConfirm={() => setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onPurchase={() => void completeDemoPurchase()} paymentResult={paymentResult} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
         {view === 'wallet' && <WalletView mandate={mandate} budget={budget} currentBudget={currentBudget} spentRatio={spentRatio} busy={busy} onRevoke={() => void revokeMandate()} onRefresh={() => void refresh()} />}
         {view === 'activity' && <SafetyView token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
@@ -209,7 +209,34 @@ function App() {
   </div>;
 }
 
-function Overview({ mandate, active, spentRatio, currentBudget, onShop, onSetup, busy, onRevoke }: { mandate: Mandate | null; active: boolean; spentRatio: number; currentBudget?: BudgetResponse['applicable_budgets'][number]; onShop: () => void; onSetup: () => void; busy: string; onRevoke: () => void }) {
+function Overview({ token, mandate, active, spentRatio, currentBudget, onShop, onSetup, busy, onRevoke }: { token: string; mandate: Mandate | null; active: boolean; spentRatio: number; currentBudget?: BudgetResponse['applicable_budgets'][number]; onShop: () => void; onSetup: () => void; busy: string; onRevoke: () => void }) {
+  const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([]);
+  const [activityState, setActivityState] = useState<'loading' | 'connected' | 'unavailable' | 'error'>('loading');
+  const [activityRefresh, setActivityRefresh] = useState(0);
+
+  useEffect(() => {
+    let disposed = false;
+    let cursor = 0;
+    let timer = 0;
+    async function poll() {
+      try {
+        const page = await api.events(token, cursor, 50);
+        if (disposed) return;
+        cursor = page.next_after;
+        setRecentEvents((current) => [...current, ...page.events].filter((event, index, all) => all.findIndex((item) => item.sequence === event.sequence && item.stream_id === event.stream_id) === index).slice(-50));
+        setActivityState('connected');
+      } catch (error) {
+        if (disposed) return;
+        setActivityState(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'error');
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) return;
+      }
+      if (!disposed) timer = window.setTimeout(() => void poll(), 4000);
+    }
+    setActivityState('loading');
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [token, activityRefresh]);
+
   return <>
     <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> YOUR FAMILY WALLET</div><h1>Everyday spending,<br className="mobile-break" /> with a little more peace of mind.</h1><p>Give someone you trust room to shop, with clear limits you stay in control of.</p></div><button className="button button-primary" onClick={active ? onShop : onSetup} disabled={busy === 'mandate'}>{busy === 'mandate' ? <span className="spinner" /> : active ? <ShoppingBasket size={17} /> : <Shield size={17} />}{active ? 'Start a grocery order' : 'Set up family spending'}</button></div>
     <section className="summary-grid">
@@ -221,7 +248,7 @@ function Overview({ mandate, active, spentRatio, currentBudget, onShop, onSetup,
       <div className="panel mandate-panel"><div className="panel-heading"><div><div className="eyebrow">SPENDING RULES</div><h2>Family grocery allowance</h2></div><span className={`status-tag ${active ? 'status-green' : 'status-muted'}`}><i />{active ? 'Active' : 'Needs setup'}</span></div>
         {active && mandate ? <><div className="rule-grid"><Rule icon={<WalletCards size={17} />} label="Per order" value={money(mandate.policy.per_order_limit_minor)} detail="Maximum basket total" /><Rule icon={<Activity size={17} />} label="Weekly budget" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Resets every Monday" /><Rule icon={<Ban size={17} />} label="Not allowed" value={mandate.policy.blocked_categories.join(', ')} detail="Blocked at checkout" /><Rule icon={<Clock3 size={17} />} label="Ends on" value={shortDate(mandate.policy.expires_at)} detail="Permission expiry" /></div><div className="panel-footer"><div className="people-line"><span className="person-avatar caregiver">MK</span><span className="connector-line" /><span className="person-avatar delegate">A</span><span>You <span className="muted">authorize the assigned shopping agent</span></span></div><button className="text-button danger-text" onClick={onRevoke} disabled={busy === 'revoke'}>{busy === 'revoke' ? 'Revoking…' : 'Revoke access'}</button></div></> : <div className="empty-state"><div className="empty-illustration"><Shield size={25} /></div><div><strong>No spending rules yet</strong><p>Set a weekly cap, choose a shop and decide what’s off limits. You can change or revoke access any time.</p><button className="text-button" onClick={onSetup} disabled={busy === 'mandate'}>{busy === 'mandate' ? 'Setting up…' : 'Create your first allowance'} <ArrowUpRight size={14} /></button></div></div>}
       </div>
-      <div className="panel activity-panel"><div className="panel-heading"><div><div className="eyebrow">RECENT ACTIVITY</div><h2>Activity feed</h2></div><button className="icon-button subtle" aria-label="More activity"><MoreHorizontal size={19} /></button></div><div className="activity-empty"><span className="activity-empty-icon"><Sparkles size={19} /></span><strong>Activity feed is not connected yet</strong><p>Once the event API is ready, approvals, purchases and blocked requests will appear here.</p><button className="text-button" onClick={onShop}>Explore grocery shopping <ArrowUpRight size={14} /></button></div><div className="activity-security"><span className="secure-shield"><Shield size={16} /></span><span><strong>Your rules are checked at checkout</strong><small>The wallet, not the shopping assistant, decides whether a purchase can proceed.</small></span></div></div>
+      <div className="panel activity-panel"><div className="panel-heading"><div><div className="eyebrow">RECENT ACTIVITY</div><h2>Activity feed</h2></div><div className="feed-actions">{activityState !== 'loading' && <button className="text-button" onClick={() => { setActivityState('loading'); setActivityRefresh((value) => value + 1); }}>Refresh</button>}<span className={`status-tag ${activityState === 'connected' ? 'status-green' : 'status-muted'}`}><i />{activityState === 'connected' ? 'Live feed' : activityState === 'loading' ? 'Connecting' : activityState === 'unavailable' ? 'Not connected' : 'Unavailable'}</span></div></div>{recentEvents.length ? <div className="event-list">{[...recentEvents].reverse().slice(0, 5).map((event) => <div className="event-row" key={`${event.stream_id}-${event.sequence}`}><span className={`event-dot event-${event.type}`} /><span className="event-copy"><strong>{event.type.replace(/_/g, ' ')}</strong><small>Sequence {event.sequence} · {event.mandate_id ?? 'account'}{event.transaction_id ? ` · ${event.transaction_id}` : ''}</small></span><time>{new Date(event.occurred_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}</time></div>)}</div> : <div className="activity-empty"><span className="activity-empty-icon"><Sparkles size={19} /></span><strong>{activityState === 'unavailable' ? 'Activity feed not connected yet' : activityState === 'error' ? 'Could not load activity' : activityState === 'connected' ? 'No wallet activity yet' : 'Loading wallet activity…'}</strong><p>{activityState === 'unavailable' ? 'The event API is not available in this checkout.' : activityState === 'error' ? 'Check your user access or refresh to try again. No empty ledger is assumed.' : activityState === 'connected' ? 'Confirmed rules, quotes and wallet decisions will appear here.' : 'Fetching the latest events from your wallet.'}</p>{activityState === 'connected' && recentEvents.length === 0 && <button className="text-button" onClick={onShop}>Explore grocery shopping <ArrowUpRight size={14} /></button>}</div>}<div className="activity-security"><span className="secure-shield"><Shield size={16} /></span><span><strong>Your rules are checked at checkout</strong><small>The wallet, not the shopping assistant, decides whether a purchase can proceed.</small></span></div></div>
     </section>
     <div className="bottom-note"><span><Shield size={15} /> Your money stays in your own account.</span><span>Mandate is a prototype · <button onClick={() => {}}>How it works</button></span></div>
   </>;
