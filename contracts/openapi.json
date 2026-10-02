@@ -1424,7 +1424,7 @@
           "wallet"
         ],
         "summary": "Cancel own unpaid reservation",
-        "description": "Only owning agent or authorized user; repeated cancellation releases zero more funds. Cancelling a paid reservation is 409; refund is outside v0.",
+        "description": "Only owning agent or authorized user; repeated cancellation releases zero more funds. Cancelling a paid reservation is 409; use POST /payments/{transaction_id}/refund (proposed v0.2).",
         "security": [
           {
             "bearerAuth": []
@@ -2259,6 +2259,589 @@
           }
         }
       }
+    },
+    "/quotes/{quote_id}/payment-options": {
+      "get": {
+        "operationId": "getPaymentOptions",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Rank payment routes for a quote",
+        "description": "Fee, reward value and net cost per route under a stated rule, with each figure's source and the time it was read. Rewards count only when observed. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "quote_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentOptionsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approvals": {
+      "get": {
+        "operationId": "listApprovals",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "List approval requests",
+        "description": "Users see requests on their mandates; agents see their own. Expires overdue requests first. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "denied",
+                "expired",
+                "used"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approvals/{approval_id}": {
+      "get": {
+        "operationId": "getApproval",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Read one approval request",
+        "description": " Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approvals/{approval_id}/approve": {
+      "post": {
+        "operationId": "approvePurchase",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Approve a purchase waiting for review",
+        "description": "Owner only. Grants a one-time waiver of the listed review reasons; the agent then calls POST /authorizations again with the same transaction_id and a new Idempotency-Key. Hard rules (budgets, caps, merchants, expiry, revocation) are re-checked then. 409 unless pending and the mandate chain is active. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/approvals/{approval_id}/deny": {
+      "post": {
+        "operationId": "denyPurchase",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Decline a purchase waiting for review",
+        "description": "Owner only. The stored decision becomes a refusal with APPROVAL_DENIED. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecisionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/{transaction_id}/refund": {
+      "post": {
+        "operationId": "refundPayment",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Refund a paid purchase",
+        "description": "Owner only; full refund once. Refunds on the rail, returns the amount to every affected budget period and reverses the reward the payment earned, also moving the route's monthly reward tier back. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundRequest"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2297,8 +2880,12 @@
           "TRANSACTION_CONFLICT",
           "APPROVAL_REQUIRED",
           "POLICY_NOT_NARROWER",
-          "PARENT_MANDATE_INVALID"
-        ]
+          "PARENT_MANDATE_INVALID",
+          "VELOCITY_LIMIT_EXCEEDED",
+          "APPROVAL_DENIED",
+          "APPROVAL_EXPIRED"
+        ],
+        "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
       },
       "Evidence": {
         "type": "object",
@@ -2528,12 +3115,23 @@
               {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Optional threshold; exceeding it returns APPROVAL_REQUIRED. MVP does not grant new approval automatically."
+                "description": "Optional threshold; exceeding it returns requires_review with an approval_request the owner can approve or deny before it expires."
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "velocity_limit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VelocityLimit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional; omitted means no velocity limit. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -3214,6 +3812,17 @@
           "quote_id": {
             "type": "string",
             "description": "Opaque server-generated identifier."
+          },
+          "payment_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional route from GET /quotes/{quote_id}/payment-options; defaults to the recommended route. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -3491,6 +4100,28 @@
           "token_id": {
             "type": "string",
             "description": "Opaque server-generated identifier."
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable scope of this one payment. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "payment_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -3569,6 +4200,28 @@
             "items": {
               "$ref": "#/components/schemas/BudgetPeriod"
             }
+          },
+          "payment_route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentRouteSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "payment_credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCredential"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -3644,6 +4297,17 @@
             "items": {
               "$ref": "#/components/schemas/BudgetPeriod"
             }
+          },
+          "approval_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when status is requires_review, or when a review ended in a refusal. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -3755,6 +4419,17 @@
             "type": "string",
             "format": "date-time",
             "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "payment_route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentRouteSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Route, fee and reward actually earned. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "required": [
@@ -4568,9 +5243,689 @@
             "items": {
               "$ref": "#/components/schemas/BudgetPeriod"
             }
+          },
+          "payment_route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentRouteSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "payment_credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCredential"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
         "description": "Approved decision with internal authorization token omitted."
+      },
+      "VelocityLimit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "max_purchases": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "window_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10080
+          }
+        },
+        "required": [
+          "max_purchases",
+          "window_minutes"
+        ],
+        "description": "At most max_purchases reserved or paid purchases by this mandate and its descendants inside any window_minutes. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "PaymentRouteSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rail": {
+            "type": "string"
+          },
+          "fee_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reward_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "net_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recommended_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "caveats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "route_id",
+          "label",
+          "network",
+          "rail",
+          "fee_minor",
+          "reward_minor",
+          "net_minor"
+        ],
+        "description": "The payment route used, with its fee, reward and net cost in HKD cents. On an authorization it also carries the rank, the recommended route and the ranking rule. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "PaymentCredential": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "credential_id": {
+            "type": "string"
+          },
+          "rail": {
+            "type": "string"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "single_use": {
+            "type": "boolean"
+          },
+          "holds_funds_at_rail": {
+            "type": "boolean"
+          },
+          "purpose": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_id",
+          "rail",
+          "network",
+          "last4",
+          "merchant_id",
+          "amount_minor",
+          "currency",
+          "expires_at",
+          "single_use",
+          "holds_funds_at_rail",
+          "purpose"
+        ],
+        "description": "Single-use payment credential (simulated) locked to one merchant, a maximum amount, currency and expiry; it works for one capture only. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "PaymentOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "route_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rail": {
+            "type": "string"
+          },
+          "holds_funds_at_rail": {
+            "type": "boolean"
+          },
+          "settlement": {
+            "type": "string"
+          },
+          "eligible": {
+            "type": "boolean"
+          },
+          "ineligible_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gross_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fee_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reward_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "net_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reward_counted": {
+            "type": "boolean"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "caveats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "route_id",
+          "label",
+          "provider",
+          "network",
+          "rail",
+          "holds_funds_at_rail",
+          "settlement",
+          "eligible",
+          "ineligible_reason",
+          "gross_minor",
+          "fee_minor",
+          "reward_minor",
+          "net_minor",
+          "reward_counted",
+          "rank",
+          "evidence_ids",
+          "caveats"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "RouteEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "quote": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url",
+          "observed_at",
+          "quote"
+        ],
+        "description": "Where a fee or reward figure came from and when it was read. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "PaymentOptionsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "total_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rule": {
+            "type": "string"
+          },
+          "recommended_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentOption"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RouteEvidence"
+            }
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "quote_id",
+          "currency",
+          "total_minor",
+          "rule",
+          "recommended_route_id",
+          "options",
+          "evidence",
+          "evaluated_at"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "ApprovalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "basket_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleViolation"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "denied",
+              "expired",
+              "used"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 timestamp with an explicit UTC offset."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "mandate_id",
+          "quote_id",
+          "merchant_id",
+          "basket_hash",
+          "amount_minor",
+          "currency",
+          "reasons",
+          "status",
+          "created_at",
+          "expires_at",
+          "decided_at",
+          "decided_by",
+          "note"
+        ],
+        "description": "A purchase waiting for the mandate owner. Pending requests lapse at expires_at. An approval is a one-time grant for this transaction, quote and mandate version; hard rules still apply. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "ApprovalList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRequest"
+            }
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "approvals",
+          "server_time"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "ApprovalDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "ApprovalDecisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "$ref": "#/components/schemas/ApprovalRequest"
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "approval",
+          "event_sequence"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "RefundRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "Refund": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "reward_reversed_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "payment_route_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "refunded"
+            ]
+          },
+          "refunded_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "amount_minor",
+          "currency",
+          "reward_reversed_minor",
+          "payment_route_id",
+          "reason",
+          "status",
+          "refunded_at"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "RefundResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "refund": {
+            "$ref": "#/components/schemas/Refund"
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetPeriod"
+            }
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "refund",
+          "budgets",
+          "event_sequence"
+        ],
+        "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
       }
     }
   }

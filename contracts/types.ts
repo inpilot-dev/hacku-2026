@@ -3,7 +3,7 @@
 
 export type Currency = "HKD";
 
-export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID";
+export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID" | "VELOCITY_LIMIT_EXCEEDED" | "APPROVAL_DENIED" | "APPROVAL_EXPIRED";
 
 export type Evidence = {
   "id": string;
@@ -49,6 +49,7 @@ export type Policy = {
   "blocked_categories": Array<Category>;
   "expires_at": string;
   "approval_above_minor": number | null;
+  "velocity_limit"?: VelocityLimit | null;
 };
 
 export type DraftRequest = {
@@ -180,6 +181,7 @@ export type AuthorizationRequest = {
   "transaction_id": string;
   "mandate_id": string;
   "quote_id": string;
+  "payment_route_id"?: string | null;
 };
 
 export type RuleViolation = {
@@ -239,6 +241,8 @@ export type AuthorizationClaims = {
   "issued_at": string;
   "expires_at": string;
   "token_id": string;
+  "purpose"?: string | null;
+  "payment_route_id"?: string | null;
 };
 
 export type AuthorizationApproved = {
@@ -255,6 +259,8 @@ export type AuthorizationApproved = {
   "authorization_token": string;
   "claims": AuthorizationClaims;
   "budgets": Array<BudgetPeriod>;
+  "payment_route"?: PaymentRouteSummary | null;
+  "payment_credential"?: PaymentCredential | null;
 };
 
 export type AuthorizationRefused = {
@@ -269,6 +275,7 @@ export type AuthorizationRefused = {
   "status": "refused" | "requires_review";
   "violations": Array<RuleViolation>;
   "budgets": Array<BudgetPeriod>;
+  "approval_request"?: ApprovalRequest | null;
 };
 
 export type AuthorizationDecision = AuthorizationApproved | AuthorizationRefused;
@@ -292,6 +299,7 @@ export type Receipt = {
   "payment_mode": "sandbox";
   "status": "paid";
   "paid_at": string;
+  "payment_route"?: PaymentRouteSummary | null;
 };
 
 export type PaymentCompleted = {
@@ -456,4 +464,132 @@ export type DemoAuthorizationApproved = {
   "reservation": Reservation;
   "claims": AuthorizationClaims;
   "budgets": Array<BudgetPeriod>;
+  "payment_route"?: PaymentRouteSummary | null;
+  "payment_credential"?: PaymentCredential | null;
+};
+
+export type VelocityLimit = {
+  "max_purchases": number;
+  "window_minutes": number;
+};
+
+export type PaymentRouteSummary = {
+  "route_id": string;
+  "label": string;
+  "network": string | null;
+  "rail": string;
+  "fee_minor": number;
+  "reward_minor": number;
+  "net_minor": number;
+  "rank"?: number | null;
+  "recommended_route_id"?: string | null;
+  "rule"?: string | null;
+  "caveats"?: Array<string>;
+};
+
+export type PaymentCredential = {
+  "credential_id": string;
+  "rail": string;
+  "network": string | null;
+  "last4": string | null;
+  "merchant_id": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "expires_at": string;
+  "single_use": boolean;
+  "holds_funds_at_rail": boolean;
+  "purpose": string;
+};
+
+export type PaymentOption = {
+  "route_id": string;
+  "label": string;
+  "provider": string;
+  "network": string | null;
+  "rail": string;
+  "holds_funds_at_rail": boolean;
+  "settlement": string;
+  "eligible": boolean;
+  "ineligible_reason": string | null;
+  "gross_minor": number;
+  "fee_minor": number;
+  "reward_minor": number;
+  "net_minor": number;
+  "reward_counted": boolean;
+  "rank": number | null;
+  "evidence_ids": Array<string>;
+  "caveats": Array<string>;
+};
+
+export type RouteEvidence = {
+  "id": string;
+  "title": string;
+  "url": string;
+  "observed_at": string;
+  "quote": string;
+};
+
+export type PaymentOptionsResponse = {
+  "quote_id": string;
+  "currency": Currency;
+  "total_minor": number;
+  "rule": string;
+  "recommended_route_id": string | null;
+  "options": Array<PaymentOption>;
+  "evidence": Array<RouteEvidence>;
+  "evaluated_at": string;
+};
+
+export type ApprovalRequest = {
+  "id": string;
+  "transaction_id": string;
+  "mandate_id": string;
+  "quote_id": string;
+  "merchant_id": string;
+  "basket_hash": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "reasons": Array<RuleViolation>;
+  "status": "pending" | "approved" | "denied" | "expired" | "used";
+  "created_at": string;
+  "expires_at": string;
+  "decided_at": string | null;
+  "decided_by": string | null;
+  "note": string | null;
+};
+
+export type ApprovalList = {
+  "approvals": Array<ApprovalRequest>;
+  "server_time": string;
+};
+
+export type ApprovalDecisionRequest = {
+  "note"?: string | null;
+};
+
+export type ApprovalDecisionResponse = {
+  "approval": ApprovalRequest;
+  "event_sequence": number;
+};
+
+export type RefundRequest = {
+  "reason"?: string | null;
+};
+
+export type Refund = {
+  "id": string;
+  "transaction_id": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "reward_reversed_minor": number;
+  "payment_route_id": string | null;
+  "reason": string | null;
+  "status": "refunded";
+  "refunded_at": string;
+};
+
+export type RefundResponse = {
+  "refund": Refund;
+  "budgets": Array<BudgetPeriod>;
+  "event_sequence": number;
 };
