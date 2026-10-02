@@ -1,0 +1,214 @@
+{
+  "_note": "Browser-observed Wellcome snapshot captured 2026-10-03T00:41:13+08:00 by services/agent/catalog_capture.browse (Jev navigation, schema.org product data).",
+  "_report": [
+    "rice: 3 product(s) from https://www.wellcome.com.hk/en/category/100020/1.html; skipped 'Rice': no single HKD product offer",
+    "broccoli: Jev stopped with status 'blocked' at https://www.wellcome.com.hk/en",
+    "milk: 3 product(s) from https://www.wellcome.com.hk/en/category/100002/1.html; skipped 'Fresh Milk': no single HKD product offer; 'UHT, Milk & Milk Powder': no single HKD product offer"
+  ],
+  "merchants": {
+    "wellcome": {
+      "revision": "browse-wellcome-20261003T004113",
+      "data_mode": "observed_snapshot",
+      "evidence_ids": [
+        "ev_wellcome_identity_20261003T004113"
+      ]
+    }
+  },
+  "products": [
+    {
+      "id": "wellcome_def39e637367",
+      "merchant_id": "wellcome",
+      "title": "Golden Elephant Premium Jasmine Rice 8KG",
+      "description": "Golden Elephant Premium Jasmine Rice 8KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 8990,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_def39e637367_20261003T004113",
+        "ev_wellcome_term_rice_20261003T004113"
+      ]
+    },
+    {
+      "id": "wellcome_979c6dd4fce1",
+      "merchant_id": "wellcome",
+      "title": "Golden Phoenix Hom Mali Rice 10KG",
+      "description": "Golden Phoenix Hom Mali Rice 10KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 17800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_979c6dd4fce1_20261003T004113",
+        "ev_wellcome_term_rice_20261003T004113"
+      ]
+    },
+    {
+      "id": "wellcome_c9f8eaa99aff",
+      "merchant_id": "wellcome",
+      "title": "Golden Phoenix Thailand Hom Mali Rice 5KG",
+      "description": "Golden Phoenix Thailand Hom Mali Rice 5KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_c9f8eaa99aff_20261003T004113",
+        "ev_wellcome_term_rice_20261003T004113"
+      ]
+    },
+    {
+      "id": "wellcome_aa1afe7d8dfd",
+      "merchant_id": "wellcome",
+      "title": "Hokkaido Specially Select 3.6 Milk 200ML (Random Packaging)",
+      "description": "Hokkaido Specially Select 3.6 Milk 200ML (Random Packaging)",
+      "category": "dairy",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_aa1afe7d8dfd_20261003T004113",
+        "ev_wellcome_term_milk_20261003T004113"
+      ]
+    },
+    {
+      "id": "wellcome_3c274e191b19",
+      "merchant_id": "wellcome",
+      "title": "Meadows UHT Full Cream Milk 1LT",
+      "description": "Meadows UHT Full Cream Milk 1LT",
+      "category": "dairy",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2550,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_3c274e191b19_20261003T004113",
+        "ev_wellcome_term_milk_20261003T004113"
+      ]
+    },
+    {
+      "id": "wellcome_57968a1fd919",
+      "merchant_id": "wellcome",
+      "title": "Meiji Premium Quality Milk 946ML",
+      "description": "Meiji Premium Quality Milk 946ML",
+      "category": "dairy",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_wellcome_57968a1fd919_20261003T004113",
+        "ev_wellcome_term_milk_20261003T004113"
+      ]
+    }
+  ],
+  "delivery_contexts": [
+    {
+      "id": "ctx_wellcome_click_collect",
+      "merchant_id": "wellcome",
+      "fee_rules": [
+        {
+          "label": "Click & Collect pickup (free on orders over HK$50)",
+          "min_subtotal_minor": 5001,
+          "max_subtotal_minor": null,
+          "amount_minor": 0,
+          "evidence_ids": [
+            "ev_ctx_wellcome_click_collect_20261003T004113"
+          ]
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_wellcome_identity_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en",
+      "observed_at": "2026-10-03T00:41:29+08:00",
+      "kind": "merchant_identity",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/home.html.gz",
+      "conditions": "Wellcome online shop home page as rendered in a Steel browser session, guest (not logged in)."
+    },
+    {
+      "id": "ev_wellcome_term_rice_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/category/100020/1.html",
+      "observed_at": "2026-10-03T00:41:35+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/listing-rice.html.gz",
+      "conditions": "Operator mapping for search term 'rice' -> pantry; not stated by the store. Jev reached this listing for the term."
+    },
+    {
+      "id": "ev_wellcome_def39e637367_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Golden%20Elephant%20Premium%20Jasmine%20Rice%208KG/i/101345302.html",
+      "observed_at": "2026-10-03T00:41:46+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-def39e637367.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100020/1.html for search term 'rice'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_wellcome_979c6dd4fce1_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Golden%20Phoenix%20Hom%20Mali%20Rice%2010KG/i/101324109.html",
+      "observed_at": "2026-10-03T00:41:52+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-979c6dd4fce1.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100020/1.html for search term 'rice'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_wellcome_c9f8eaa99aff_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Golden%20Phoenix%20Thailand%20Hom%20Mali%20Rice%205KG/i/101327889.html",
+      "observed_at": "2026-10-03T00:41:57+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-c9f8eaa99aff.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100020/1.html for search term 'rice'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_wellcome_term_milk_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/category/100002/1.html",
+      "observed_at": "2026-10-03T00:42:48+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/listing-milk.html.gz",
+      "conditions": "Operator mapping for search term 'milk' -> dairy; not stated by the store. Jev reached this listing for the term."
+    },
+    {
+      "id": "ev_wellcome_aa1afe7d8dfd_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Hokkaido%20Specially%20Select%203.6%20Milk%20200ML%20(Random%20Packaging)/i/101335431.html",
+      "observed_at": "2026-10-03T00:43:03+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-aa1afe7d8dfd.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100002/1.html for search term 'milk'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_wellcome_3c274e191b19_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Meadows%20UHT%20Full%20Cream%20Milk%201LT/i/101366351.html",
+      "observed_at": "2026-10-03T00:43:10+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-3c274e191b19.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100002/1.html for search term 'milk'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_wellcome_57968a1fd919_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Meiji%20Premium%20Quality%20Milk%20946ML/i/101328184.html",
+      "observed_at": "2026-10-03T00:43:17+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-57968a1fd919.html.gz",
+      "conditions": "Price from the product page's schema.org Product data, also shown in its visible text. Steel browser session, guest (not logged in), no delivery address selected. Reached by Jev from https://www.wellcome.com.hk/en/category/100002/1.html for search term 'milk'. Availability is not published in the product data; the product page showed a price."
+    },
+    {
+      "id": "ev_ctx_wellcome_click_collect_20261003T004113",
+      "source_url": "https://www.wellcome.com.hk/en/p/Golden%20Elephant%20Premium%20Jasmine%20Rice%208KG/i/101345302.html",
+      "observed_at": "2026-10-03T00:41:46+08:00",
+      "kind": "delivery_fee",
+      "capture_path": "data/catalog/evidence/browse-wellcome-20261003T004113/product-def39e637367.html.gz",
+      "conditions": "Shown on the page as: 'Enjoy our free Click & collect service on orders over HK$50.' The charge for pickup orders of HK$50 or less was not observed."
+    }
+  ]
+}

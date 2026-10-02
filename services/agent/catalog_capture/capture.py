@@ -41,12 +41,13 @@ def fetch(url: str) -> str:
 class Run:
     """One capture run: fetched pages are kept in memory until every check passes."""
 
-    def __init__(self, repo_root: Path, out_dir: Path, fetcher=fetch, now=None, delay_s: float = REQUEST_DELAY_S):
+    def __init__(self, repo_root: Path, out_dir: Path, fetcher=fetch, now=None, delay_s: float = REQUEST_DELAY_S,
+                 prefix: str = "wellcome"):
         self.now = now or datetime.now(HKT).replace(microsecond=0)
         self.stamp = self.now.strftime("%Y%m%dT%H%M%S")
         self.repo_root = repo_root.resolve()
         self.out_dir = out_dir.resolve()
-        self.evidence_dir = self.out_dir / "evidence" / f"wellcome-{self.stamp}"
+        self.evidence_dir = self.out_dir / "evidence" / f"{prefix}-{self.stamp}"
         self.fetcher = fetcher
         self.delay_s = delay_s
         self.pages: dict[str, tuple[str, str]] = {}  # name -> (url, html)
@@ -55,7 +56,10 @@ class Run:
     def get(self, name: str, url: str) -> str:
         if self.pages:
             time.sleep(self.delay_s)
-        page = self.fetcher(url)
+        return self.keep(name, url, self.fetcher(url))
+
+    def keep(self, name: str, url: str, page: str) -> str:
+        """Record a fetched or browser-rendered page as evidence, observed now."""
         self.pages[name] = (url, page)
         self.observed[name] = datetime.now(HKT).replace(microsecond=0).isoformat()
         return page
@@ -186,11 +190,11 @@ class Run:
             raise CaptureError("Click & Collect fee text not found on any checked product page.")
         return fee_name
 
-    def write(self, catalog: dict) -> Path:
+    def write(self, catalog: dict, filename: str = "wellcome.json") -> Path:
         self.evidence_dir.mkdir(parents=True, exist_ok=False)
         for name, (_url, page) in self.pages.items():
             with gzip.open(self.evidence_dir / f"{name}.html.gz", "wt", encoding="utf-8") as fh:
                 fh.write(page)
-        target = self.out_dir / "wellcome.json"
+        target = self.out_dir / filename
         target.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         return target

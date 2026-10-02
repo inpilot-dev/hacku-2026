@@ -34,6 +34,36 @@ The MCP wallet server's `get_catalog` tool needs an API that mounts this route. 
 Merchant ID is `wellcome`, and the delivery context is `ctx_wellcome_click_collect`. `GET /catalog` does not
 expose delivery contexts, so a client must know this ID.
 
+## Browser capture with Jev (store-independent)
+
+`catalog_capture.browse` does not depend on any store's page layout. Jev ([browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast),
+pinned in `requirements.txt`) drives a self-hosted Steel browser from the store's home page to a listing for
+each shopping term. Generic code then opens same-site links whose text matches the term. A product is kept
+only if its page publishes one HKD price in schema.org Product data (JSON-LD), and that price also appears in
+the visible text.
+
+```bash
+just steel                                               # Steel browser; watch at http://localhost:3000/ui
+just browse wellcome rice=pantry broccoli=produce milk=dairy
+```
+
+- **Needs** `TYPESAFE_API_KEY` and `OPENROUTER_KEY` in the repository `.env`. Output goes to
+  `data/catalog/browse-<store>.json`, plus rendered product pages under `data/catalog/evidence/browse-<store>-<stamp>/`.
+- **A store is configuration only** (`browse.STORES`): its start URL and the exact wording of any fee it
+  publishes. A fee rule is added only when that wording appears on a captured page. Otherwise the store gets
+  no delivery context, so its products can be listed but not quoted.
+- **The category comes from the operator** per term (`rice=pantry`) and is recorded as such. Titles that look
+  alcoholic ("Shaoxing Rice Wine" matches "rice") are marked `conflicting`.
+- **Limits:**
+  - A store whose product pages publish no JSON-LD price cannot use this path.
+  - Jev cannot submit a search box, so a term works only if a clearly labelled category leads to it.
+  - Roughly 10 s per product page.
+
+First run, 2026-10-03, Wellcome:
+- rice: 3 products, via Rice, Oil & Noodles.
+- milk: 3 products, via Beverages.
+- broccoli: Jev returned `blocked` on the home page and did not find Fruits & Vegetables.
+
 ## Known gaps (not filled with guesses)
 
 - **Home delivery is not offered.** Wellcome publishes "free delivery to your door on orders over HK$500",
@@ -47,7 +77,9 @@ expose delivery contexts, so a client must know this ID.
   captured. Prices are single-unit prices.
 - **Page 1 only:** 20 products per category.
 - **Other stores:**
-  - HKTVmall redirects browser search and category pages to its login page.
+  - HKTVmall redirected browser search and category pages to its login page. Later its pages stopped
+    finishing loading, in Steel and over plain HTTP alike (the response stalls partway). Whether it loads
+    normally in an ordinary browser has not been checked.
   - ParknShop returns HTTP 403 (Access Denied) to both scripts and a normal browser session.
   - Neither is captured, and no access control is bypassed.
 

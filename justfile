@@ -12,7 +12,7 @@ help:
 # Install Python (.venv) and npm dependencies
 install:
     uv venv .venv -q --allow-existing
-    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/mcp-wallet/requirements.txt "mcp>=1.10,<2"
+    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/mcp-wallet/requirements.txt -r services/agent/requirements.txt "mcp>=1.10,<2"
     cd apps/web && npm ci
 
 # Run backend (:8000) and frontend (Vite dev server) together; Ctrl-C stops both
@@ -46,6 +46,15 @@ test:
 # Capture a fresh observed Wellcome catalog into data/catalog (makes ~8 HTTP requests)
 capture:
     cd services/agent && {{venv_python}} -m catalog_capture
+
+# Start a self-hosted Steel browser for Jev (viewer: http://localhost:3000/ui)
+steel:
+    docker rm -f steel >/dev/null 2>&1 || true
+    docker run -d --name steel -p 127.0.0.1:3000:3000 -p 127.0.0.1:9223:9223 -e DOMAIN=localhost:3000 -e CDP_DOMAIN=localhost:9223 ghcr.io/steel-dev/steel-browser:latest
+
+# Browser capture with Jev: just browse wellcome rice=pantry broccoli=produce
+browse store +items:
+    cd services/agent && {{venv_python}} -m catalog_capture.browse --store {{store}} {{prepend("--item ", items)}}
 
 # Run only the backend, pricing quotes from the observed Wellcome catalog
 backend-observed:

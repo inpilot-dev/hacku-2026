@@ -13,6 +13,8 @@ import json
 import re
 from dataclasses import dataclass
 
+from .product_data import looks_alcoholic  # noqa: F401  (re-exported for the static capture)
+
 BASE_URL = "https://www.wellcome.com.hk"
 
 # Curated mapping of Wellcome top-level categories to contract categories.
@@ -25,10 +27,6 @@ CATEGORIES = {
     "100001": "alcohol",                 # Alcohol
 }
 
-# A listing outside the alcohol category whose title looks alcoholic is marked
-# "conflicting", so a mandate that blocks alcohol sends it to review instead of
-# trusting the category mapping.
-ALCOHOL_WORDS = re.compile(r"\b(beer|wine|sake|whisk(?:e)?y|vodka|gin|rum|brandy|cider|soju|liqueur|champagne|lager)\b|啤酒|葡萄酒|清酒", re.I)
 SOLD_OUT = re.compile(r"sold.?out|out.?of.?stock|售罄|缺貨", re.I)
 
 FREE_PICKUP_TEXT = "Enjoy our free Click & collect service on orders over HK$50."
@@ -112,5 +110,3 @@ def json_ld_price_minor(page: str) -> int | None:
     return None
 
 
-def looks_alcoholic(title: str) -> bool:
-    return bool(ALCOHOL_WORDS.search(title))
