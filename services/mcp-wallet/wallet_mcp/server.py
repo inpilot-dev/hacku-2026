@@ -27,9 +27,13 @@ DEFAULT_API_URL = "http://localhost:8000/api/v1"
 
 INSTRUCTIONS = """\
 Spend from a family-wallet mandate on behalf of its owner. Amounts are integer HKD cents (29700 = HK$297.00).
-Flow: get_budget -> create_quote -> authorize_purchase -> pay. Only quotes from create_quote count; never
-invent prices. A refused or requires_review authorization is final for that transaction: tell the user which
-rule applied instead of retrying around it. You cannot confirm, widen or revoke a mandate; the owner does that.
+Flow: get_budget -> create_quote -> get_payment_options -> authorize_purchase -> pay. Only quotes from
+create_quote count; never invent prices, fees or rewards. get_payment_options ranks the ways to pay by net cost
+after rewards and states the rule; authorize_purchase uses the top route unless you name another eligible one.
+A refused authorization is final for that transaction: tell the user which rule applied instead of retrying
+around it. requires_review means the owner was sent an approval request with a deadline; tell the user, and
+call authorize_purchase again later with the same transaction_id to pick up their answer. You cannot approve,
+refund, confirm, widen or revoke anything; the owner does that.
 """
 
 READ = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
@@ -102,10 +106,25 @@ class WalletAPI:
             "delivery_context_id": delivery_context_id,
         })
 
-    def authorize(self, mandate_id: str, quote_id: str, transaction_id: str) -> dict:
+    def payment_options(self, quote_id: str) -> dict:
+        return self._call("GET", f"/quotes/{quote_id}/payment-options")
+
+    def approval(self, approval_id: str) -> dict:
+        return self._call("GET", f"/approvals/{approval_id}")
+
+    def authorize(self, mandate_id: str, quote_id: str, transaction_id: str,
+                  payment_route_id: str | None = None) -> dict:
+        request = {"transaction_id": transaction_id, "mandate_id": mandate_id, "quote_id": quote_id}
+        if payment_route_id:
+            request["payment_route_id"] = payment_route_id
         # The key is derived from the transaction so a retried call replays the stored decision.
-        body = self._call("POST", "/authorizations", idempotency_key=f"mcp-authorize-{transaction_id}",
-                          json={"transaction_id": transaction_id, "mandate_id": mandate_id, "quote_id": quote_id})
+        body = self._call("POST", "/authorizations", idempotency_key=f"mcp-authorize-{transaction_id}", json=request)
+        pending = body.get("approval_request") if body.get("status") == "requires_review" else None
+        if pending and self.approval(pending["id"])["status"] != "pending":
+            # The owner answered (or the request lapsed). A key derived from the approval picks up the answer,
+            # and stays the same across retries and restarts.
+            body = self._call("POST", "/authorizations",
+                              idempotency_key=f"mcp-authorize-{transaction_id}-{pending['id']}", json=request)
         token = body.pop("authorization_token", None)
         if token:
             self._tokens[transaction_id] = {"quote_id": quote_id, "token": token}
@@ -160,15 +179,32 @@ def build_server(api: WalletAPI) -> FastMCP:
         """Read an existing quote."""
         return api.quote(quote_id)
 
-    @mcp.tool(annotations=WRITE)
-    def authorize_purchase(mandate_id: str, quote_id: str, transaction_id: str | None = None) -> dict:
-        """Check a quote against the mandate and, if allowed, reserve the money.
+    @mcp.tool(annotations=READ)
+    def get_payment_options(quote_id: str) -> dict:
+        """Rank the ways to pay for a quote: fee, reward value and net cost per route, with sources.
 
-        status is approved (money reserved; call pay next), refused (violations say which rule) or
-        requires_review (the owner must act). Omit transaction_id for a new purchase; pass the same one to
-        retry safely.
+        Rewards only count when the wallet holds an observed, timestamped source for them; caveats say
+        what was not counted. recommended_route_id is the lowest net cost under the stated rule.
         """
-        return api.authorize(mandate_id, quote_id, transaction_id or str(uuid.uuid4()))
+        return api.payment_options(quote_id)
+
+    @mcp.tool(annotations=WRITE)
+    def authorize_purchase(mandate_id: str, quote_id: str, transaction_id: str | None = None,
+                           payment_route_id: str | None = None) -> dict:
+        """Check a quote against the mandate and, if allowed, reserve the money on a single-use credential.
+
+        status is approved (money reserved on a credential locked to this merchant, amount and expiry; call
+        pay next), refused (violations say which rule) or requires_review (an approval request went to the
+        owner; approval_request.expires_at is the deadline). Omit transaction_id for a new purchase; pass the
+        same one to retry safely or to pick up the owner's answer. payment_route_id defaults to the
+        recommended route.
+        """
+        return api.authorize(mandate_id, quote_id, transaction_id or str(uuid.uuid4()), payment_route_id)
+
+    @mcp.tool(annotations=READ)
+    def get_approval(approval_id: str) -> dict:
+        """Check whether the owner approved, denied or let lapse an approval request."""
+        return api.approval(approval_id)
 
     @mcp.tool(annotations=WRITE)
     def pay(transaction_id: str) -> dict:

@@ -2,7 +2,7 @@
 
 Gives any MCP-capable agent (Claude Desktop, Claude Code, ChatGPT connectors, Abdullah's agent) a wallet it
 cannot misuse. It is a thin client over the wallet HTTP API in `contracts/openapi.json`: every policy check,
-reservation and debit still happens in `services/api/mandate/payments`. No contract changes.
+reservation and debit still happens in `services/api/mandate/payments`.
 
 | Tool | Calls | Notes |
 |---|---|---|
@@ -10,12 +10,14 @@ reservation and debit still happens in `services/api/mandate/payments`. No contr
 | `get_mandate` | `GET /mandates/{id}` | Read-only |
 | `get_budget` | `GET /wallet/{id}` | Read-only |
 | `create_quote` / `get_quote` | `POST /quotes`, `GET /quotes/{id}` | Prices come from the trusted adapter |
-| `authorize_purchase` | `POST /authorizations` | `refused` and `requires_review` are results, not errors |
+| `get_payment_options` | `GET /quotes/{id}/payment-options` | Routes ranked by net cost after observed rewards |
+| `authorize_purchase` | `POST /authorizations` | `refused` and `requires_review` are results, not errors; call again with the same `transaction_id` to pick up the owner's answer |
+| `get_approval` | `GET /approvals/{id}` | Whether the owner approved, denied or let it lapse |
 | `pay` | `POST /payments` | Takes only `transaction_id`; replays return the same receipt |
 | `get_receipt` | `GET /payments/{txn}` | Read-only |
 | `cancel_reservation` | `POST /reservations/{id}/cancel` | Releases reserved money |
 
-**Not exposed:** confirming, drafting and revoking mandates. Those are user-only, so the agent cannot grant or
+**Not exposed:** confirming, drafting and revoking mandates, approving purchases and refunds. Those are user-only, so the agent cannot grant or
 widen its own authority. The server runs with an agent token, so the API would refuse them anyway (HTTP 403).
 
 **The signed authorization token never reaches the model.** The server holds it in memory by transaction ID

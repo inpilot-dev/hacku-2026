@@ -242,6 +242,45 @@ Map FastAPI validation errors to this agreed envelope rather than leaking a seco
 
 Prioritize the first single-mandate purchase and refusal for tomorrow morning's v0. The formal and independent audit views can follow after that flow works. Keep all demo reset/time-control functions separate from agent-accessible routes; they are not part of this public contract.
 
+## 11. Proposed v0.2 wallet additions (Timmy)
+
+Status: **proposed, needs the group's OK**. Every change is additive: new optional request fields, new optional
+response fields, new reason codes and new endpoints. A v0.1 client keeps working if it ignores unknown fields
+and treats an unknown reason code like any other refusal. TypeScript types are regenerated.
+
+**Single-use payment credential.** An approved authorization now also returns `payment_credential`: a
+simulated card number (or FPS reference) locked to one merchant, the authorized amount, HKD and the
+reservation's expiry, bound to the token's `token_id`. It captures once; a second presentment, another merchant
+or a larger amount is declined by the rail itself. Claims gain `purpose` and `payment_route_id`.
+
+**Payment route picker.** `GET /quotes/{quote_id}/payment-options` (user or agent) ranks the routes in
+`services/api/mandate/payments/fixtures/payment_routes.json`: Tap & Go Single Use Card, a credit card through a
+scoped network token, and FPS eDDA. Rule: net cost = basket total + fee − reward value; lowest wins; ties go to a
+route that holds funds at the rail, then route id. A reward counts only when its rate and cash value were
+observed; every figure carries a source URL and the time it was read. `POST /authorizations` takes an optional
+`payment_route_id` (default: the recommended route). Approved decisions and receipts carry `payment_route`
+with the fee and reward. Budgets still count the basket total.
+
+**Expiring approval.** A `requires_review` decision now carries `approval_request` (pending, with
+`expires_at` = the sooner of 15 minutes, the quote's expiry and the mandate's expiry). The owner calls
+`POST /approvals/{id}/approve` or `/deny` (user only, `Idempotency-Key`); `GET /approvals` and
+`GET /approvals/{id}` list and read them. After an approval the agent calls `POST /authorizations` again with the
+**same `transaction_id` and a new `Idempotency-Key`**: the review reasons the owner saw are waived once, and every
+hard rule is checked again. A denial or a request that lapses turns the stored decision into a refusal with
+`APPROVAL_DENIED` or `APPROVAL_EXPIRED`. An approval does not survive a new mandate version. Agents can never
+approve.
+
+**Refund.** `POST /payments/{transaction_id}/refund` (user only, `Idempotency-Key`, full refund once) refunds on
+the rail, takes the amount out of `paid_minor` in every affected budget period and reverses the reward the
+payment earned, which also moves the route's monthly reward tier back. Audit event `payment_refunded`.
+
+**Velocity limit.** `Policy.velocity_limit` (optional `{max_purchases, window_minutes}`) refuses with
+`VELOCITY_LIMIT_EXCEEDED` once that many reserved or paid purchases by the mandate and its descendants fall
+inside the window. Cancelled and expired reservations do not count.
+
+New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`.
+`mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`.
+
 ## Local demo checkout adapter (Noah)
 
 `POST /demo/purchases` is a local-only adapter to complete the UI's scripted sandbox path while Abdullah's shopping worker is not integrated. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`. The request uses the authenticated user’s mandate and quote plus a caller-stable transaction ID. The server checks the user owns the mandate and quote, derives the delegatee from that mandate, and calls the normal wallet authorization and payment methods. The browser never receives an agent credential or signed authorization token. A replay uses deterministic server idempotency keys derived from the transaction ID.

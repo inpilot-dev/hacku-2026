@@ -7,9 +7,9 @@ blocked role gets 403 before its request body is even validated.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 
 from . import models
@@ -81,6 +81,36 @@ def build_router(wallet: Wallet) -> APIRouter:
         status, out = wallet.cancel_reservation(actor, key, reservation_id,
                                                 body.model_dump(mode="json", exclude_unset=True))
         return _out(models.CancelResponse, status, out)
+
+    @router.get("/quotes/{quote_id}/payment-options", response_model=models.PaymentOptionsResponse)
+    def payment_options(actor: UserOrAgent, quote_id: str):
+        return _out(models.PaymentOptionsResponse, 200, wallet.payment_options(actor, quote_id))
+
+    @router.post("/payments/{transaction_id}/refund", response_model=models.RefundResponse)
+    def refund(actor: UserOnly, key: IdempotencyKey, transaction_id: str, body: models.RefundRequest):
+        status, out = wallet.refund(actor, key, transaction_id, body.model_dump(mode="json", exclude_unset=True))
+        return _out(models.RefundResponse, status, out)
+
+    @router.get("/approvals", response_model=models.ApprovalList)
+    def list_approvals(actor: UserOrAgent,
+                       status: Literal["pending", "approved", "denied", "expired", "used"] | None = Query(None)):
+        return _out(models.ApprovalList, 200, wallet.list_approvals(actor, status))
+
+    @router.get("/approvals/{approval_id}", response_model=models.ApprovalRequest)
+    def get_approval(actor: UserOrAgent, approval_id: str):
+        return _out(models.ApprovalRequest, 200, wallet.get_approval(actor, approval_id))
+
+    @router.post("/approvals/{approval_id}/approve", response_model=models.ApprovalDecisionResponse)
+    def approve(actor: UserOnly, key: IdempotencyKey, approval_id: str, body: models.ApprovalDecisionRequest):
+        status, out = wallet.decide_approval(actor, key, approval_id, True,
+                                             body.model_dump(mode="json", exclude_unset=True))
+        return _out(models.ApprovalDecisionResponse, status, out)
+
+    @router.post("/approvals/{approval_id}/deny", response_model=models.ApprovalDecisionResponse)
+    def deny(actor: UserOnly, key: IdempotencyKey, approval_id: str, body: models.ApprovalDecisionRequest):
+        status, out = wallet.decide_approval(actor, key, approval_id, False,
+                                             body.model_dump(mode="json", exclude_unset=True))
+        return _out(models.ApprovalDecisionResponse, status, out)
 
     @router.get("/wallet/{mandate_id}", response_model=models.BudgetResponse)
     def get_budget(actor: UserOrAgent, mandate_id: str):

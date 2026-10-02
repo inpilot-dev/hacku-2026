@@ -5,7 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from mandate.payments.models import AuthorizationRefused, AuthorizationClaims, BudgetPeriod, PaymentDecision, Reservation
+from mandate.payments.models import (AuthorizationRefused, AuthorizationClaims, BudgetPeriod, PaymentCredential,
+                                     PaymentDecision, PaymentRouteSummary, Reservation)
 
 
 class DemoPurchaseRequest(BaseModel):
@@ -30,6 +31,8 @@ class DemoAuthorizationApproved(BaseModel):
     reservation: Reservation
     claims: AuthorizationClaims
     budgets: list[BudgetPeriod]
+    payment_route: PaymentRouteSummary | None = None
+    payment_credential: PaymentCredential | None = None
 
 
 class DemoPurchaseResponse(BaseModel):

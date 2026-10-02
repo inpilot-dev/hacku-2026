@@ -18,6 +18,8 @@ ReasonCode = Literal[
     "MANDATE_VERSION_CHANGED", "QUOTE_EXPIRED", "QUOTE_CHANGED", "RESERVATION_EXPIRED",
     "RESERVATION_CANCELLED", "AUTHORIZATION_INVALID", "AUTHORIZATION_EXPIRED",
     "TRANSACTION_CONFLICT", "APPROVAL_REQUIRED", "POLICY_NOT_NARROWER", "PARENT_MANDATE_INVALID",
+    # v0.2 additions
+    "VELOCITY_LIMIT_EXCEEDED", "APPROVAL_DENIED", "APPROVAL_EXPIRED",
 ]
 Category = Literal[
     "produce", "dairy", "eggs", "meat", "seafood", "bakery", "pantry",
@@ -42,6 +44,11 @@ class PeriodLimit(Strict):
     timezone: Literal["Asia/Hong_Kong"]
 
 
+class VelocityLimit(Strict):
+    max_purchases: Annotated[StrictInt, Field(ge=1, le=1000)]
+    window_minutes: Annotated[StrictInt, Field(ge=1, le=10080)]
+
+
 class Policy(Strict):
     currency: Currency
     per_order_limit_minor: PosInt
@@ -50,6 +57,7 @@ class Policy(Strict):
     blocked_categories: list[Category]
     expires_at: StrictStr
     approval_above_minor: NonNegInt | None
+    velocity_limit: VelocityLimit | None = None
 
 
 class ConfirmRequest(Strict):
@@ -81,12 +89,21 @@ class AuthorizationRequest(Strict):
     transaction_id: Annotated[StrictStr, Field(min_length=1, max_length=128)]
     mandate_id: StrictStr
     quote_id: StrictStr
+    payment_route_id: StrictStr | None = None
 
 
 class PaymentRequest(Strict):
     transaction_id: StrictStr
     quote_id: StrictStr
     authorization_token: StrictStr
+
+
+class ApprovalDecisionRequest(Strict):
+    note: Annotated[StrictStr, Field(max_length=500)] | None = None
+
+
+class RefundRequest(Strict):
+    reason: Annotated[StrictStr, Field(max_length=500)] | None = None
 
 
 # --- responses --------------------------------------------------------------
@@ -201,6 +218,75 @@ class AuthorizationClaims(Strict):
     issued_at: str
     expires_at: str
     token_id: str
+    purpose: str | None = None
+    payment_route_id: str | None = None
+
+
+class PaymentRouteSummary(Strict):
+    route_id: str
+    label: str
+    network: str | None
+    rail: str
+    fee_minor: NonNegInt
+    reward_minor: NonNegInt
+    net_minor: NonNegInt
+    rank: PosInt | None = None
+    recommended_route_id: str | None = None
+    rule: str | None = None
+    caveats: list[str] = []
+
+
+class PaymentCredential(Strict):
+    credential_id: str
+    rail: str
+    network: str | None
+    last4: str | None
+    merchant_id: str
+    amount_minor: NonNegInt
+    currency: Currency
+    expires_at: str
+    single_use: StrictBool
+    holds_funds_at_rail: StrictBool
+    purpose: str
+
+
+class PaymentOption(Strict):
+    route_id: str
+    label: str
+    provider: str
+    network: str | None
+    rail: str
+    holds_funds_at_rail: StrictBool
+    settlement: str
+    eligible: StrictBool
+    ineligible_reason: str | None
+    gross_minor: NonNegInt
+    fee_minor: NonNegInt
+    reward_minor: NonNegInt
+    net_minor: NonNegInt
+    reward_counted: StrictBool
+    rank: PosInt | None
+    evidence_ids: list[str]
+    caveats: list[str]
+
+
+class RouteEvidence(Strict):
+    id: str
+    title: str
+    url: str
+    observed_at: str
+    quote: str
+
+
+class PaymentOptionsResponse(Strict):
+    quote_id: str
+    currency: Currency
+    total_minor: NonNegInt
+    rule: str
+    recommended_route_id: str | None
+    options: list[PaymentOption]
+    evidence: list[RouteEvidence]
+    evaluated_at: str
 
 
 class _DecisionBase(Strict):
@@ -220,12 +306,43 @@ class AuthorizationApproved(_DecisionBase):
     authorization_token: str
     claims: AuthorizationClaims
     budgets: list[BudgetPeriod]
+    payment_route: PaymentRouteSummary | None = None
+    payment_credential: PaymentCredential | None = None
+
+
+class ApprovalRequest(Strict):
+    id: str
+    transaction_id: str
+    mandate_id: str
+    quote_id: str
+    merchant_id: str
+    basket_hash: Hash
+    amount_minor: NonNegInt
+    currency: Currency
+    reasons: list[RuleViolation]
+    status: Literal["pending", "approved", "denied", "expired", "used"]
+    created_at: str
+    expires_at: str
+    decided_at: str | None
+    decided_by: str | None
+    note: str | None
+
+
+class ApprovalList(Strict):
+    approvals: list[ApprovalRequest]
+    server_time: str
+
+
+class ApprovalDecisionResponse(Strict):
+    approval: ApprovalRequest
+    event_sequence: PosInt
 
 
 class AuthorizationRefused(_DecisionBase):
     status: Literal["refused", "requires_review"]
     violations: list[RuleViolation] = Field(min_length=1)
     budgets: list[BudgetPeriod]
+    approval_request: ApprovalRequest | None = None
 
 
 AuthorizationDecision = Union[AuthorizationApproved, AuthorizationRefused]
@@ -244,6 +361,7 @@ class Receipt(Strict):
     payment_mode: Literal["sandbox"]
     status: Literal["paid"]
     paid_at: str
+    payment_route: PaymentRouteSummary | None = None
 
 
 class PaymentCompleted(Strict):
@@ -269,4 +387,22 @@ PaymentDecision = Union[PaymentCompleted, PaymentRefused]
 class CancelResponse(Strict):
     reservation: Reservation
     released_minor: NonNegInt
+    event_sequence: PosInt
+
+
+class Refund(Strict):
+    id: str
+    transaction_id: str
+    amount_minor: NonNegInt
+    currency: Currency
+    reward_reversed_minor: NonNegInt
+    payment_route_id: str | None
+    reason: str | None
+    status: Literal["refunded"]
+    refunded_at: str
+
+
+class RefundResponse(Strict):
+    refund: Refund
+    budgets: list[BudgetPeriod]
     event_sequence: PosInt

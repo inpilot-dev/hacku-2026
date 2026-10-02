@@ -107,3 +107,32 @@ def test_pay_without_authorization_and_http_errors(setup):
     (pay_err, pay_msg), (budget_err, budget_msg) = run(server, script)
     assert pay_err and "authorize_purchase" in pay_msg
     assert budget_err and "HTTP 404" in budget_msg
+
+
+def test_payment_options_and_owner_approval_round_trip(tmp_path):
+    drafts = InMemoryDrafts()
+    drafts.register("draft_demo", owner_id="user_demo", delegatee_id="agent_student",
+                    expires_at="2026-10-31T23:59:59+08:00")
+    app, _ = create_app(tmp_path, clock=FixedClock(datetime(2026, 10, 7, 10, 0, tzinfo=HKT)), draft_lookup=drafts)
+    user = TestClient(app, base_url="http://testserver/api/v1/", headers={"Authorization": "Bearer dev-user-token"})
+    mandate_id = user.post("mandates/confirm", headers={"Idempotency-Key": str(uuid.uuid4())},
+                           json={"draft_id": "draft_demo", "policy": {**POLICY, "approval_above_minor": 20000}}).json()["id"]
+    agent = TestClient(app, base_url="http://testserver/api/v1/", headers={"Authorization": "Bearer dev-agent-token"})
+    server = build_server(WalletAPI(agent))
+
+    async def script(session, call):
+        names = {t.name for t in (await session.list_tools()).tools}
+        assert not {n for n in names if "approve" in n or "refund" in n}
+        _, quote = await call("create_quote", items=[{"product_id": "p_a_rice", "quantity": 3}], **RICE)
+        _, opts = await call("get_payment_options", quote_id=quote["id"])
+        assert opts["recommended_route_id"] == opts["options"][0]["route_id"]
+        _, first = await call("authorize_purchase", mandate_id=mandate_id, quote_id=quote["id"], transaction_id="t1")
+        assert first["status"] == "requires_review"
+        approval_id = first["approval_request"]["id"]
+        assert user.post(f"approvals/{approval_id}/approve", headers={"Idempotency-Key": "a1"}, json={}).status_code == 200
+        _, second = await call("authorize_purchase", mandate_id=mandate_id, quote_id=quote["id"], transaction_id="t1")
+        assert second["status"] == "approved", second
+        _, paid = await call("pay", transaction_id="t1")
+        return paid
+
+    assert run(server, script)["status"] == "completed"
