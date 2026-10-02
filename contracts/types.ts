@@ -467,7 +467,6 @@ export type DemoAuthorizationApproved = {
   "claims": AuthorizationClaims;
   "budgets": Array<BudgetPeriod>;
   "payment_route"?: PaymentRouteSummary | null;
-  "payment_credential"?: PaymentCredential | null;
 };
 
 export type VelocityLimit = {

@@ -5167,7 +5167,7 @@
             "description": "Required only to resume the same transaction after its owner approved this pending review request."
           }
         },
-        "description": "Local demonstration adapter only. The server derives the assigned agent from the user-owned mandate; no agent credential or signed authorization is sent to the browser."
+        "description": "Local demonstration adapter only. The server derives the assigned agent from the user-owned mandate; no agent credential, signed authorization token, or single-use payment credential is sent to the browser."
       },
       "DemoPurchaseResponse": {
         "type": "object",
@@ -5276,20 +5276,9 @@
               }
             ],
             "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
-          },
-          "payment_credential": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PaymentCredential"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
           }
         },
-        "description": "Approved decision with internal authorization token omitted."
+        "description": "Approved decision with internal authorization token and payment credential omitted."
       },
       "VelocityLimit": {
         "type": "object",

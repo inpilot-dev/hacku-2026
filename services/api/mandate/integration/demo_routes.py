@@ -48,7 +48,12 @@ def build_demo_router(wallet: Wallet) -> APIRouter:
             "quote_id": body.quote_id,
             "payment_route_id": body.payment_route_id,
         })
-        authorization = {key: value for key, value in authorization.items() if key != "authorization_token"}
+        # The browser needs the decision and receipt, never bearer capabilities
+        # or single-use rail credentials. Keep both secrets process-local.
+        authorization = {
+            key: value for key, value in authorization.items()
+            if key not in {"authorization_token", "payment_credential"}
+        }
         payment = None
         if authorization["status"] == "approved":
             # Rehydrate only the short-lived token from the persisted claims;

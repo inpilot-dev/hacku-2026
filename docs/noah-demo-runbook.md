@@ -32,6 +32,7 @@ The captured Wellcome catalog is the default. Its current snapshot is timestampe
 - The online shopping agent/draft API is not mounted in this checkout. Manual catalog selection is the working path; the agent button reports the unavailable service.
 - Activity feed, independent audit verification, bounded Z3 results and measured concurrent-agent results remain disconnected. Show their “not connected” state rather than claiming a pass.
 - The payment rail is local simulation. Route rewards are evidence-based estimates and do not move money.
+- Checkout responses contain the wallet decision and receipt only; the signed authorization token and single-use payment credential stay server-side.
 
 ## Backup run
 
