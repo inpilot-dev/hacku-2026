@@ -8,16 +8,25 @@ import { money, shortDate } from '../lib/format';
 const DEFAULT_TOKEN = 'dev-user-token';
 function clearIdempotency(operation: string) { sessionStorage.removeItem(`mandate-idempotency-${operation}`); }
 const DRAFT_ID = 'draft_demo';
+function hasVerifiedEvidenceReference(item: Evidence) {
+  let source: URL;
+  try { source = new URL(item.source_url); } catch { return false; }
+  const conditions = item.conditions.trim();
+  return ['http:', 'https:'].includes(source.protocol)
+    && !source.username && !source.password
+    && !source.hostname.endsWith('.invalid')
+    && Boolean(item.capture_path?.trim())
+    && Number.isFinite(Date.parse(item.observed_at))
+    && Boolean(conditions)
+    && !/(placeholder|not an observation|sample source|unverified)/i.test(conditions);
+}
+
 function hasSourceBackedCatalog(catalog: CatalogResponse) {
   const evidence = new Map(catalog.evidence.map((item) => [item.id, item]));
   const availableProducts = catalog.products.filter((product) => product.available);
   return availableProducts.length > 0 && availableProducts.every((product) => product.evidence_ids.some((id) => {
     const item = evidence.get(id);
-    if (!item || item.kind !== 'product_price' || !item.capture_path || !Number.isFinite(Date.parse(item.observed_at))) return false;
-    try {
-      const source = new URL(item.source_url);
-      return ['http:', 'https:'].includes(source.protocol) && !source.hostname.endsWith('.invalid');
-    } catch { return false; }
+    return Boolean(item && item.kind === 'product_price' && hasVerifiedEvidenceReference(item));
   }));
 }
 const initialPolicy = {
@@ -539,13 +548,11 @@ function EvidenceRefs({ ids, evidence }: { ids: string[]; evidence: Evidence[] }
   const references = ids.map((id) => evidence.find((item) => item.id === id)).filter((item): item is Evidence => Boolean(item));
   if (references.length === 0) return <small className="evidence-missing">No linked price source</small>;
   return <span className="evidence-refs">{references.map((item) => {
-    let source: URL | null = null;
-    try { source = new URL(item.source_url); } catch { /* A malformed source is displayed as unverified text below. */ }
-    const placeholder = !source || !['http:', 'https:'].includes(source.protocol) || source.hostname.endsWith('.invalid') || !item.capture_path || !Number.isFinite(Date.parse(item.observed_at));
+    let hostname = 'Unknown source';
+    try { hostname = new URL(item.source_url).hostname; } catch { /* A malformed source is displayed as unverified text below. */ }
     const observed = Number.isFinite(Date.parse(item.observed_at)) ? new Date(item.observed_at).toLocaleDateString('en-HK', { month: 'short', day: 'numeric' }) : 'date missing';
-    const hostname = source?.hostname ?? 'Unknown source';
-    return placeholder
-      ? <small className="evidence-unverified" key={item.id}>Sample source · not verified</small>
+    return !hasVerifiedEvidenceReference(item)
+      ? <small className="evidence-unverified" key={item.id}>Source · not verified</small>
       : <a key={item.id} href={item.source_url} target="_blank" rel="noopener noreferrer" title={item.conditions}>{item.kind.replace(/_/g, ' ')} · {hostname} · {observed}</a>;
   })}</span>;
 }
