@@ -26,6 +26,8 @@ The captured Wellcome catalog is the default. Its current snapshot is timestampe
 7. **Demonstrate a policy refusal.** Adjust the basket: remove the rice and add one captured alcohol product priced below HK$300, such as Blue Girl Imported Premium Beer 4x500ML in the current catalog (SKU `wellcome_101326603`, HK$51). Request a fresh quote, then attempt checkout. The wallet should return the alcohol-rule refusal and no second receipt. The exact price may change after recapture; choose an available alcohol item whose total remains within the current per-order cap.
 8. **Close with revocation.** Return to the overview/wallet, revoke the mandate, and show its persisted revoked status. Do not imply this reverses the completed earlier sandbox receipt.
 
+If you start a fresh order after a receipt, the active order panel clears the prior checkout result. The saved receipt remains in the wallet history; it is not presented as the outcome of the new basket.
+
 ## Evidence boundaries to say aloud
 
 - Prices are observations from the capture timestamp, not live checkout prices.
