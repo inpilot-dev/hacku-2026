@@ -111,24 +111,98 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     PRIMARY KEY (actor_id, operation, key)
 );
 
--- Simulated card rail (mandate/payments/rails.py). One virtual card per
--- mandate; one hold per reservation. Not a real issuer: no money moves.
-CREATE TABLE IF NOT EXISTS simulated_cards (
-    id          TEXT PRIMARY KEY,
-    mandate_id  TEXT NOT NULL UNIQUE REFERENCES mandates(id),
+-- Simulated rails (mandate/payments/rails.py). Not a real issuer or bank: no
+-- money moves. One rail account per (rail, mandate); one single-use
+-- credential per reservation, locked to merchant, amount, expiry and token.
+CREATE TABLE IF NOT EXISTS rail_accounts (
+    rail        TEXT NOT NULL,
+    mandate_id  TEXT NOT NULL REFERENCES mandates(id),
+    ref         TEXT NOT NULL UNIQUE,
     limit_minor INTEGER NOT NULL CHECK (limit_minor >= 1),
     currency    TEXT NOT NULL,
     expires_at  TEXT NOT NULL,
     status      TEXT NOT NULL CHECK (status IN ('active', 'closed')),
     issued_at   TEXT NOT NULL,
-    closed_at   TEXT
+    closed_at   TEXT,
+    PRIMARY KEY (rail, mandate_id)
 );
 
-CREATE TABLE IF NOT EXISTS simulated_card_ops (
+CREATE TABLE IF NOT EXISTS rail_payments (
     reservation_id TEXT PRIMARY KEY REFERENCES reservations(id),
-    card_id        TEXT NOT NULL REFERENCES simulated_cards(id),
-    hold_id        TEXT NOT NULL UNIQUE,
+    rail           TEXT NOT NULL,
+    account_ref    TEXT NOT NULL REFERENCES rail_accounts(ref),
+    credential_id  TEXT NOT NULL UNIQUE,
+    last4          TEXT,
+    merchant_id    TEXT NOT NULL,
     amount_minor   INTEGER NOT NULL CHECK (amount_minor >= 0),
-    status         TEXT NOT NULL CHECK (status IN ('held', 'captured', 'voided')),
+    currency       TEXT NOT NULL,
+    purpose        TEXT NOT NULL,
+    token_id       TEXT NOT NULL UNIQUE,
+    expires_at     TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('held', 'captured', 'voided', 'refunded')),
+    captured_minor INTEGER NOT NULL DEFAULT 0 CHECK (captured_minor <= amount_minor),
+    refunded_minor INTEGER NOT NULL DEFAULT 0 CHECK (refunded_minor <= captured_minor),
+    created_at     TEXT NOT NULL,
     updated_at     TEXT NOT NULL
 );
+
+-- Which payment route a reservation uses, with the ranking it was chosen from.
+CREATE TABLE IF NOT EXISTS reservation_routes (
+    reservation_id TEXT PRIMARY KEY REFERENCES reservations(id),
+    route_id       TEXT NOT NULL,
+    rail           TEXT NOT NULL,
+    choice_json    TEXT NOT NULL
+);
+
+-- Spend and reward per route, for tiered caps ("4% on the first HK$10,000 a
+-- month") and for unwinding a reward when its payment is refunded.
+CREATE TABLE IF NOT EXISTS reward_ledger (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id       TEXT NOT NULL,
+    route_id       TEXT NOT NULL,
+    transaction_id TEXT NOT NULL,
+    kind           TEXT NOT NULL CHECK (kind IN ('earn', 'reverse')),
+    spend_minor    INTEGER NOT NULL,
+    reward_minor   INTEGER NOT NULL,
+    period_start   TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    UNIQUE (transaction_id, kind)
+);
+CREATE INDEX IF NOT EXISTS reward_ledger_period ON reward_ledger(owner_id, route_id, period_start);
+
+CREATE TABLE IF NOT EXISTS refunds (
+    id                    TEXT PRIMARY KEY,
+    transaction_id        TEXT NOT NULL UNIQUE REFERENCES payments(transaction_id),
+    amount_minor          INTEGER NOT NULL CHECK (amount_minor >= 0),
+    reward_reversed_minor INTEGER NOT NULL CHECK (reward_reversed_minor >= 0),
+    route_id              TEXT,
+    rail_ref              TEXT,
+    reason                TEXT,
+    refunded_by           TEXT NOT NULL,
+    refunded_at           TEXT NOT NULL,
+    response_json         TEXT NOT NULL
+);
+
+-- A person's answer to a purchase that needs review. Pending requests lapse
+-- at expires_at; an approval is a one-time grant for that exact transaction,
+-- quote and mandate version.
+CREATE TABLE IF NOT EXISTS approval_requests (
+    id              TEXT PRIMARY KEY,
+    transaction_id  TEXT NOT NULL UNIQUE REFERENCES auth_decisions(transaction_id),
+    owner_id        TEXT NOT NULL,
+    agent_id        TEXT NOT NULL,
+    mandate_id      TEXT NOT NULL REFERENCES mandates(id),
+    mandate_version INTEGER NOT NULL,
+    quote_id        TEXT NOT NULL REFERENCES quotes(id),
+    merchant_id     TEXT NOT NULL,
+    basket_hash     TEXT NOT NULL,
+    amount_minor    INTEGER NOT NULL,
+    reasons_json    TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied', 'expired', 'used')),
+    created_at      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    decided_at      TEXT,
+    decided_by      TEXT,
+    note            TEXT
+);
+CREATE INDEX IF NOT EXISTS approval_requests_open ON approval_requests(status, expires_at);

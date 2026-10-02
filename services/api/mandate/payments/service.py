@@ -26,7 +26,8 @@ from .catalog import Catalog, CatalogError
 from .clock import SystemClock, iso, parse, period_bounds
 from .drafts import DraftLookup, InMemoryDrafts
 from .errors import ApiError, conflict, invalid, not_found
-from .rails import PaymentRail, RailDeclined, TapAndGoSingleUseCardSimulator, rail_info
+from .rails import PaymentRail, RailDeclined, default_rails, rail_info
+from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
 
 PAYLOAD_VERSION = 1
@@ -45,18 +46,25 @@ class Wallet:
         *,
         clock=None,
         draft_lookup: DraftLookup | None = None,
-        rail: PaymentRail | None = None,
+        rails: dict[str, PaymentRail] | None = None,
+        routes: RouteBook | None = None,
         authorization_ttl_s: int = 120,
         quote_ttl_s: int = 600,
+        approval_ttl_s: int = 900,
     ):
         self.db = db
         self.signer = signer
         self.catalog = catalog
         self.clock = clock or SystemClock()
         self.draft_lookup = draft_lookup or InMemoryDrafts()
-        self.rail = rail or TapAndGoSingleUseCardSimulator()
+        self.rails = rails or default_rails()
+        self.routes = routes or RouteBook.load()
+        missing = [name for name in self.routes.rail_names if name not in self.rails]
+        if missing:
+            raise ValueError(f"Payment routes use rails with no adapter: {missing}")
         self.authorization_ttl = timedelta(seconds=authorization_ttl_s)
         self.quote_ttl = timedelta(seconds=quote_ttl_s)
+        self.approval_ttl = timedelta(seconds=approval_ttl_s)
 
     # ------------------------------------------------------------------ helpers
 
@@ -102,6 +110,15 @@ class Wallet:
             return fn(*args)
         except RailDeclined as exc:
             raise ApiError(500, "INTERNAL_ERROR", f"Payment rail declined an approved step: {exc}") from None
+
+    def _route_row(self, conn, reservation_id: str) -> sqlite3.Row:
+        row = conn.execute("SELECT * FROM reservation_routes WHERE reservation_id = ?", (reservation_id,)).fetchone()
+        if row is None:
+            raise ApiError(500, "INTERNAL_ERROR", f"Reservation {reservation_id} has no payment route.")
+        return row
+
+    def _rail_for(self, conn, reservation_id: str) -> PaymentRail:
+        return self.rails[self._route_row(conn, reservation_id)["rail"]]
 
     # mandates
 
@@ -224,7 +241,7 @@ class Wallet:
                 "UPDATE budget_periods SET reserved_minor = reserved_minor - ?, version = version + 1 WHERE id = ?",
                 (r["amount_minor"], pid),
             )
-        self._rail(self.rail.void, conn, r, now)
+        self._rail(self._rail_for(conn, r["id"]).void, conn, r, now)
         r["status"] = status
 
     def _expire_overdue(self, conn, now: datetime) -> None:
@@ -239,6 +256,85 @@ class Wallet:
             self._event(conn, r["owner_id"], "reservation_expired", {
                 "reservation_id": r["id"], "released_minor": r["amount_minor"], "expired_at": r["expires_at"],
             }, actor="system_wallet", now=now, mandate_id=r["mandate_id"], transaction_id=r["transaction_id"])
+        for row in conn.execute("SELECT * FROM approval_requests WHERE status = 'pending' AND expires_at <= ?",
+                                (iso(now),)).fetchall():
+            conn.execute("UPDATE approval_requests SET status = 'expired' WHERE id = ? AND status = 'pending'",
+                         (row["id"],))
+            self._close_review(conn, row["id"], "APPROVAL_EXPIRED",
+                               f"Nobody answered the approval request before {row['expires_at']}, so the purchase "
+                               f"was not made.", "approval_expired", "system_wallet", now)
+
+    # approvals
+
+    @staticmethod
+    def _approval_out(row) -> dict:
+        a = dict(row)
+        return {
+            "id": a["id"], "transaction_id": a["transaction_id"], "mandate_id": a["mandate_id"],
+            "quote_id": a["quote_id"], "merchant_id": a["merchant_id"], "basket_hash": a["basket_hash"],
+            "amount_minor": a["amount_minor"], "currency": "HKD", "reasons": json.loads(a["reasons_json"]),
+            "status": a["status"], "created_at": a["created_at"], "expires_at": a["expires_at"],
+            "decided_at": a["decided_at"], "decided_by": a["decided_by"], "note": a["note"],
+        }
+
+    def _close_review(self, conn, approval_id: str, code: str, message: str, event_type: str,
+                      actor: Actor | str, now: datetime) -> int:
+        """Turn a stored requires_review decision into a final refusal, so a retry replays it."""
+        a = conn.execute("SELECT * FROM approval_requests WHERE id = ?", (approval_id,)).fetchone()
+        leaf = self._load_mandate(conn, a["mandate_id"])
+        prior = json.loads(conn.execute("SELECT response_json FROM auth_decisions WHERE transaction_id = ?",
+                                        (a["transaction_id"],)).fetchone()[0])
+        decision_id = _id("dec")
+        v = [rules.violation(code, leaf, "approval", message, a["amount_minor"])]
+        approval = self._approval_out(a)
+        seq = self._event(conn, a["owner_id"], event_type, {
+            "approval_id": a["id"], "decision_id": decision_id, "quote_id": a["quote_id"],
+            "amount_minor": a["amount_minor"], "status": a["status"], "note": a["note"],
+        }, actor=actor, now=now, mandate_id=a["mandate_id"], transaction_id=a["transaction_id"])
+        body = {**prior, "status": "refused", "decision_id": decision_id, "message": message, "violations": v,
+                "evaluated_at": iso(now), "event_sequence": seq, "approval_request": approval}
+        conn.execute("UPDATE auth_decisions SET decision_id = ?, status = 'refused', response_json = ? "
+                     "WHERE transaction_id = ?", (decision_id, json.dumps(body), a["transaction_id"]))
+        return seq
+
+    # routes and rewards
+
+    @staticmethod
+    def _month_start(now: datetime) -> str:
+        return iso(period_bounds("calendar_month", now)[0])
+
+    def _spent_by_route(self, conn, owner_id: str, now: datetime) -> dict[str, int]:
+        """Spend counted towards each route's monthly reward tiers; refunds count back down."""
+        return {row[0]: row[1] for row in conn.execute(
+            "SELECT route_id, SUM(spend_minor) FROM reward_ledger WHERE owner_id = ? AND period_start = ? "
+            "GROUP BY route_id", (owner_id, self._month_start(now)))}
+
+    @staticmethod
+    def _route_summary(option: dict, recommended: str | None = None, with_rule: bool = True) -> dict:
+        out = {k: option[k] for k in ("route_id", "label", "network", "rail", "fee_minor", "reward_minor",
+                                      "net_minor")}
+        if with_rule:
+            out.update(rank=option["rank"], recommended_route_id=recommended, rule=ROUTE_RULE,
+                       caveats=option["caveats"])
+        return out
+
+    # velocity
+
+    @staticmethod
+    def _recent_purchases(conn, chain: list[dict], now: datetime) -> dict[str, int]:
+        """Reserved or paid purchases in each velocity-limited mandate's subtree inside its window."""
+        counts = {}
+        for m in chain:
+            velocity = m["policy"].get("velocity_limit")
+            if not velocity:
+                continue
+            since = iso(now - timedelta(minutes=velocity["window_minutes"]))
+            counts[m["id"]] = conn.execute(
+                "WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT c.id FROM mandates c JOIN tree t "
+                "ON c.parent_mandate_id = t.id) "
+                "SELECT COUNT(*) FROM reservations WHERE mandate_id IN (SELECT id FROM tree) "
+                "AND status IN ('reserved', 'paid') AND created_at > ?", (m["id"], since)).fetchone()[0]
+        return counts
 
     # quotes
 
@@ -263,6 +359,8 @@ class Wallet:
             "issued_at": r["issued_at"],
             "expires_at": r["expires_at"],
             "token_id": r["token_id"],
+            "purpose": r["purpose"],
+            "payment_route_id": r["payment_route_id"],
         }
 
     # ---------------------------------------------------------------- mandates
@@ -313,10 +411,11 @@ class Wallet:
                 (m["id"], m["owner_id"], m["delegatee_id"], m["parent_mandate_id"], m["draft_id"], m["version"],
                  m["status"], json.dumps(pol), m["expires_at"], m["created_at"], None),
             )
-            card_ref = self._rail(self.rail.issue, conn, m, now)
+            # Every rail opens an account bounded by the mandate: per-order limit and expiry.
+            accounts = [rail_info(rail, self._rail(rail.issue, conn, m, now)) for rail in self.rails.values()]
             self._event(conn, actor.actor_id, "mandate_confirmed", {
                 "draft_id": req["draft_id"], "delegatee_id": m["delegatee_id"], "parent_mandate_id": parent_id,
-                "version": 1, "policy": pol, "rail": rail_info(self.rail, card_ref),
+                "version": 1, "policy": pol, "rails": accounts,
             }, actor=actor, now=now, mandate_id=m["id"])
             return 201, self._mandate_out(m, now)
 
@@ -348,7 +447,8 @@ class Wallet:
                 (iso(now), *ids),
             )
             for revoked_id in ids:
-                self._rail(self.rail.close, conn, revoked_id, now)
+                for rail in self.rails.values():
+                    self._rail(rail.close, conn, revoked_id, now)
             cancelled = []
             for row in conn.execute(
                 f"SELECT * FROM reservations WHERE mandate_id IN ({placeholders}) AND status = 'reserved' "
@@ -422,12 +522,21 @@ class Wallet:
         def op(conn, now):
             prior = conn.execute("SELECT * FROM auth_decisions WHERE transaction_id = ?",
                                  (req["transaction_id"],)).fetchone()
+            approval = None
             if prior is not None:
                 if (prior["actor_id"], prior["mandate_id"], prior["quote_id"]) != (
                         actor.actor_id, req["mandate_id"], req["quote_id"]):
                     raise conflict("This transaction_id was already used for a different purchase.",
                                    reason_code="TRANSACTION_CONFLICT")
-                return 200, json.loads(prior["response_json"])
+                approval = conn.execute("SELECT * FROM approval_requests WHERE transaction_id = ?",
+                                        (req["transaction_id"],)).fetchone()
+                # Only a person's approval reopens a decision; everything else replays it.
+                if not (prior["status"] == "requires_review" and approval is not None
+                        and approval["status"] == "approved"):
+                    body = json.loads(prior["response_json"])
+                    if approval is not None and body["status"] != "approved":
+                        body["approval_request"] = self._approval_out(approval)
+                    return 200, body
 
             leaf = self._load_mandate(conn, req["mandate_id"])
             if leaf is None or leaf["delegatee_id"] != actor.actor_id:
@@ -437,9 +546,15 @@ class Wallet:
                 raise not_found("Quote")
             quote = json.loads(qrow["body_json"])
 
+            # An approval waives exactly the review reasons the person saw, for the mandate version they saw.
+            waived = frozenset()
+            if approval is not None and approval["mandate_version"] == leaf["version"]:
+                waived = frozenset(v["code"] for v in json.loads(approval["reasons_json"]))
+
             chain = self._chain(conn, leaf)
             budgets = self._ensure_periods(conn, chain, now)
-            ev = rules.evaluate(chain, quote, budgets, now)
+            ev = rules.evaluate(chain, quote, budgets, now,
+                                recent_purchases=self._recent_purchases(conn, chain, now), waived=waived)
             decision_id = _id("dec")
             base = {
                 "decision_id": decision_id,
@@ -451,14 +566,31 @@ class Wallet:
             }
             snapshot = [{"mandate_id": m["id"], "version": m["version"], "policy": m["policy"]} for m in chain]
             reservation_id = None
+            if approval is not None and ev.status == "requires_review":
+                # The mandate changed after the person approved; their answer no longer covers this purchase.
+                ev.hard.append(rules.violation("MANDATE_VERSION_CHANGED", leaf, "version",
+                                               "The mandate changed after this purchase was approved; "
+                                               "start a new purchase."))
 
             if ev.status == "approved":
+                amount = quote["total_minor"]
+                options = self.routes.rank(amount, self._spent_by_route(conn, leaf["owner_id"], now))
+                eligible = [o for o in options if o["eligible"]]
+                recommended = eligible[0]["route_id"] if eligible else None
+                wanted = req.get("payment_route_id") or recommended
+                chosen = next((o for o in options if o["route_id"] == wanted), None)
+                if chosen is None:
+                    raise invalid(f"Unknown payment route {wanted!r}.")
+                if not chosen["eligible"]:
+                    raise invalid(f"Payment route {wanted} cannot take this purchase: {chosen['ineligible_reason']}")
+                rail = self.rails[chosen["rail"]]
+                route = self._route_summary(chosen, recommended)
+
                 expires = min(
                     [now + self.authorization_ttl, parse(quote["expires_at"])]
                     + [parse(m["expires_at"]) for m in chain]
                     + [parse(b["ends_at"]) for b in budgets]
                 )
-                amount = quote["total_minor"]
                 r = {
                     "id": _id("res"),
                     "transaction_id": req["transaction_id"],
@@ -473,6 +605,9 @@ class Wallet:
                     "issued_at": iso(now),
                     "expires_at": iso(expires),
                     "created_at": iso(now),
+                    "purpose": f"Basket {quote['basket_hash'][:12]} at {quote['merchant_id']} "
+                               f"under mandate {leaf['id']} v{leaf['version']}",
+                    "payment_route_id": chosen["route_id"],
                 }
                 conn.execute(
                     "INSERT INTO reservations (id, transaction_id, mandate_id, mandate_version, quote_id, basket_hash, "
@@ -482,6 +617,8 @@ class Wallet:
                                          "basket_hash", "merchant_id", "amount_minor", "status", "token_id",
                                          "issued_at", "expires_at", "created_at")),
                 )
+                conn.execute("INSERT INTO reservation_routes VALUES (?,?,?,?)",
+                             (r["id"], chosen["route_id"], rail.name, json.dumps({"route": route, "options": options})))
                 for b in budgets:
                     conn.execute("INSERT INTO reservation_periods VALUES (?,?)", (r["id"], b["id"]))
                     # The guarded UPDATE re-asserts the budget rule; the table CHECK backs it up.
@@ -493,45 +630,94 @@ class Wallet:
                     if cur.rowcount != 1:
                         raise ApiError(500, "INTERNAL_ERROR", "Budget changed during authorization.")
                 reservation_id = r["id"]
-                hold_ref = self._rail(self.rail.hold, conn, r, now)
+                credential = self._rail(rail.hold, conn, r, now)
+                if approval is not None:
+                    conn.execute("UPDATE approval_requests SET status = 'used' WHERE id = ? AND status = 'approved'",
+                                 (approval["id"],))
                 claims = self._claims(r, quote["merchant_id"])
                 seq = self._event(conn, leaf["owner_id"], "authorization_approved", {
                     "decision_id": decision_id, "reservation_id": r["id"], "quote_id": quote["id"],
                     "basket_hash": quote["basket_hash"], "merchant_id": quote["merchant_id"],
                     "amount_minor": amount, "expires_at": r["expires_at"], "token_id": r["token_id"],
-                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot, "rail": rail_info(self.rail, hold_ref),
+                    "rule_ids": ev.rule_ids, "policy_snapshot": snapshot,
+                    "approval_id": approval["id"] if approval is not None else None,
+                    "payment_route": route, "payment_options": options,
+                    "credential": {k: credential[k] for k in ("credential_id", "last4", "merchant_id",
+                                                              "amount_minor", "expires_at", "single_use")},
+                    "rail": rail_info(rail, credential["credential_id"]),
                 }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
                 body = {
                     **base,
                     "status": "approved",
-                    "message": f"Approved {rules.money(amount)} at {quote['merchant_id']}; funds reserved until {r['expires_at']}.",
+                    "message": f"Approved {rules.money(amount)} at {quote['merchant_id']} by {chosen['label']}; "
+                               f"funds reserved until {r['expires_at']}.",
                     "event_sequence": seq,
                     "reservation": self._reservation_out(conn, r),
                     "claims": claims,
                     "budgets": self._budgets_by_ids(conn, [b["id"] for b in budgets]),
+                    "payment_route": route,
+                    "payment_credential": credential,
                 }
             else:
                 violations = ev.hard + ev.review
+                approval_out = None
+                if ev.status == "requires_review":
+                    # Escalate to the mandate's owner. Unanswered, the request lapses into a refusal.
+                    a_expires = min([now + self.approval_ttl, parse(quote["expires_at"])]
+                                    + [parse(m["expires_at"]) for m in chain])
+                    a = {
+                        "id": _id("apr"), "transaction_id": req["transaction_id"], "owner_id": leaf["owner_id"],
+                        "agent_id": actor.actor_id, "mandate_id": leaf["id"], "mandate_version": leaf["version"],
+                        "quote_id": quote["id"], "merchant_id": quote["merchant_id"],
+                        "basket_hash": quote["basket_hash"], "amount_minor": quote["total_minor"],
+                        "reasons_json": json.dumps(ev.review), "status": "pending", "created_at": iso(now),
+                        "expires_at": iso(a_expires), "decided_at": None, "decided_by": None, "note": None,
+                    }
+                    approval_out = self._approval_out(a)
+                elif approval is not None:
+                    approval_out = self._approval_out(approval)
                 seq = self._event(conn, leaf["owner_id"], "authorization_refused", {
                     "decision_id": decision_id, "status": ev.status, "quote_id": quote["id"],
                     "basket_hash": quote["basket_hash"], "merchant_id": quote["merchant_id"],
                     "amount_minor": quote["total_minor"], "violations": violations,
                     "rule_ids": ev.rule_ids, "policy_snapshot": snapshot,
+                    "approval_request": approval_out,
                 }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
                 body = {
                     **base,
                     "status": ev.status,
                     "message": violations[0]["message"] if ev.status == "refused"
-                    else "A person needs to review this purchase before it can go ahead.",
+                    else f"Waiting for {leaf['owner_id']} to approve this purchase before "
+                         f"{approval_out['expires_at']}.",
                     "event_sequence": seq,
                     "violations": violations,
                     "budgets": [self._budget_out(b) for b in budgets],
+                    "approval_request": approval_out,
                 }
-            conn.execute(
-                "INSERT INTO auth_decisions VALUES (?,?,?,?,?,?,?,?,?)",
-                (req["transaction_id"], decision_id, actor.actor_id, leaf["id"], quote["id"], body["status"],
-                 reservation_id, json.dumps(body), iso(now)),
-            )
+            if prior is None:
+                conn.execute(
+                    "INSERT INTO auth_decisions VALUES (?,?,?,?,?,?,?,?,?)",
+                    (req["transaction_id"], decision_id, actor.actor_id, leaf["id"], quote["id"], body["status"],
+                     reservation_id, json.dumps(body), iso(now)),
+                )
+            else:
+                conn.execute(
+                    "UPDATE auth_decisions SET decision_id = ?, status = ?, reservation_id = ?, response_json = ? "
+                    "WHERE transaction_id = ?",
+                    (decision_id, body["status"], reservation_id, json.dumps(body), req["transaction_id"]),
+                )
+            if body["status"] == "requires_review":
+                conn.execute(
+                    "INSERT INTO approval_requests (id, transaction_id, owner_id, agent_id, mandate_id, mandate_version, "
+                    "quote_id, merchant_id, basket_hash, amount_minor, reasons_json, status, created_at, expires_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    tuple(a[k] for k in ("id", "transaction_id", "owner_id", "agent_id", "mandate_id",
+                                         "mandate_version", "quote_id", "merchant_id", "basket_hash", "amount_minor",
+                                         "reasons_json", "status", "created_at", "expires_at")),
+                )
+            elif approval is not None and body["status"] == "refused":
+                conn.execute("UPDATE approval_requests SET status = 'used' WHERE id = ? AND status = 'approved'",
+                             (approval["id"],))
             return 200, body
 
         status, body, _ = self._idempotent(actor, "authorizePurchase", key, req, op)
@@ -636,7 +822,22 @@ class Wallet:
                     "version = version + 1 WHERE id = ?",
                     (r["amount_minor"], r["amount_minor"], pid),
                 )
-            capture_ref = self._rail(self.rail.capture, conn, r, now)
+            route_row = self._route_row(conn, r["id"])
+            rail = self.rails[route_row["rail"]]
+            capture_ref = self._rail(rail.capture, conn, r, now)
+            # Price the reward at capture: an earlier payment this month may have used up a tier.
+            route = self.routes.get(route_row["route_id"])
+            if route is not None:
+                option = self.routes.option(route, r["amount_minor"],
+                                            self._spent_by_route(conn, leaf["owner_id"], now).get(route["id"], 0))
+            else:  # the route was removed from the route book after authorization
+                option = {**json.loads(route_row["choice_json"])["route"], "reward_minor": 0}
+                option["net_minor"] = r["amount_minor"] + option["fee_minor"]
+            conn.execute(
+                "INSERT INTO reward_ledger (owner_id, route_id, transaction_id, kind, spend_minor, reward_minor, "
+                "period_start, created_at) VALUES (?,?,?,'earn',?,?,?,?)",
+                (leaf["owner_id"], route_row["route_id"], r["transaction_id"], r["amount_minor"],
+                 option["reward_minor"], self._month_start(now), iso(now)))
             decision_id = _id("dec")
             receipt = {
                 "id": _id("rcpt"),
@@ -648,13 +849,14 @@ class Wallet:
                 "basket_hash": r["basket_hash"],
                 "amount_minor": r["amount_minor"],
                 "currency": "HKD",
-                "payment_mode": self.rail.mode,
+                "payment_mode": rail.mode,
                 "status": "paid",
                 "paid_at": iso(now),
+                "payment_route": self._route_summary(option, with_rule=False),
             }
             seq = self._event(conn, leaf["owner_id"], "payment_completed", {
                 "decision_id": decision_id, "receipt": receipt, "mandate_version": leaf["version"],
-                "rail": rail_info(self.rail, capture_ref),
+                "rail": rail_info(rail, capture_ref),
             }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
             conn.execute("INSERT INTO payments VALUES (?,?,?,?,?,?,?)",
                          (receipt["id"], r["transaction_id"], r["id"], decision_id, seq, json.dumps(receipt),
@@ -713,3 +915,147 @@ class Wallet:
             budgets = self._ensure_periods(conn, self._chain(conn, leaf), now)
             return {"mandate_id": mandate_id, "applicable_budgets": [self._budget_out(b) for b in budgets],
                     "server_time": iso(now)}
+
+    # ---------------------------------------------------------- payment routes
+
+    def payment_options(self, actor: Actor, quote_id: str) -> dict:
+        """Every route for a quote, with fees, rewards, net cost and rank under the stated rule."""
+        with self.db.read() as conn:
+            q = self._load_quote(conn, quote_id, actor)
+            if q is None:
+                raise not_found("Quote")
+            now = self._now()
+            options = self.routes.rank(q["total_minor"], self._spent_by_route(conn, actor.family_id, now))
+        evidence_ids = list(dict.fromkeys(i for o in options for i in o["evidence_ids"]))
+        eligible = [o for o in options if o["eligible"]]
+        return {
+            "quote_id": quote_id,
+            "currency": "HKD",
+            "total_minor": q["total_minor"],
+            "rule": ROUTE_RULE,
+            "recommended_route_id": eligible[0]["route_id"] if eligible else None,
+            "options": options,
+            "evidence": self.routes.evidence(evidence_ids),
+            "evaluated_at": iso(now),
+        }
+
+    # --------------------------------------------------------------- approvals
+
+    def _visible_approval(self, actor: Actor, row) -> bool:
+        if actor.role == "user":
+            return row["owner_id"] == actor.actor_id
+        return actor.role == "agent" and row["agent_id"] == actor.actor_id
+
+    def list_approvals(self, actor: Actor, status: str | None = None) -> dict:
+        with self.db.write_tx() as conn:
+            now = self._now()
+            self._expire_overdue(conn, now)
+            column = "owner_id" if actor.role == "user" else "agent_id"
+            sql = f"SELECT * FROM approval_requests WHERE {column} = ?"
+            args: list = [actor.actor_id]
+            if status:
+                sql += " AND status = ?"
+                args.append(status)
+            rows = conn.execute(sql + " ORDER BY created_at DESC, rowid DESC", args).fetchall()
+        return {"approvals": [self._approval_out(r) for r in rows], "server_time": iso(now)}
+
+    def get_approval(self, actor: Actor, approval_id: str) -> dict:
+        with self.db.write_tx() as conn:
+            self._expire_overdue(conn, self._now())
+            row = conn.execute("SELECT * FROM approval_requests WHERE id = ?", (approval_id,)).fetchone()
+        if row is None or not self._visible_approval(actor, row):
+            raise not_found("Approval request")
+        return self._approval_out(row)
+
+    def decide_approval(self, actor: Actor, key: str, approval_id: str, approve: bool, req: dict) -> tuple[int, dict]:
+        """The mandate's owner answers a pending request. Agents can never reach this."""
+        def op(conn, now):
+            row = conn.execute("SELECT * FROM approval_requests WHERE id = ?", (approval_id,)).fetchone()
+            if row is None or row["owner_id"] != actor.actor_id:
+                raise not_found("Approval request")
+            if row["status"] != "pending":
+                raise conflict(f"This approval request is already {row['status']}.", approval_status=row["status"])
+            if approve:
+                leaf = self._load_mandate(conn, row["mandate_id"])
+                for m in self._chain(conn, leaf):
+                    if rules.mandate_state_violation(m, now):
+                        raise conflict("The mandate is no longer active, so this purchase cannot be approved.")
+            status = "approved" if approve else "denied"
+            conn.execute("UPDATE approval_requests SET status = ?, decided_at = ?, decided_by = ?, note = ? "
+                         "WHERE id = ? AND status = 'pending'",
+                         (status, iso(now), actor.actor_id, req.get("note"), approval_id))
+            if approve:
+                seq = self._event(conn, actor.actor_id, "approval_granted", {
+                    "approval_id": approval_id, "quote_id": row["quote_id"], "basket_hash": row["basket_hash"],
+                    "amount_minor": row["amount_minor"], "waived_codes": [v["code"] for v in
+                                                                         json.loads(row["reasons_json"])],
+                    "note": req.get("note"),
+                }, actor=actor, now=now, mandate_id=row["mandate_id"], transaction_id=row["transaction_id"])
+            else:
+                seq = self._close_review(conn, approval_id, "APPROVAL_DENIED",
+                                         f"{actor.actor_id} declined this purchase.", "approval_denied", actor, now)
+            updated = conn.execute("SELECT * FROM approval_requests WHERE id = ?", (approval_id,)).fetchone()
+            return 200, {"approval": self._approval_out(updated), "event_sequence": seq}
+
+        operation = "approvePurchase" if approve else "denyPurchase"
+        status, body, _ = self._idempotent(actor, operation, key, {"approval_id": approval_id, **req}, op)
+        return status, body
+
+    # ----------------------------------------------------------------- refunds
+
+    def refund(self, actor: Actor, key: str, transaction_id: str, req: dict) -> tuple[int, dict]:
+        """Full refund of a paid purchase: money back on the rail, budget back, and the reward taken back."""
+        def op(conn, now):
+            row = conn.execute(
+                "SELECT p.*, m.owner_id FROM payments p JOIN reservations r ON r.id = p.reservation_id "
+                "JOIN mandates m ON m.id = r.mandate_id WHERE p.transaction_id = ?", (transaction_id,)).fetchone()
+            if row is None or row["owner_id"] != actor.actor_id:
+                raise not_found("Payment")
+            if conn.execute("SELECT 1 FROM refunds WHERE transaction_id = ?", (transaction_id,)).fetchone():
+                raise conflict("This payment was already refunded.")
+            r = dict(conn.execute("SELECT * FROM reservations WHERE id = ?", (row["reservation_id"],)).fetchone())
+            amount = r["amount_minor"]
+            route_row = self._route_row(conn, r["id"])
+            rail = self.rails[route_row["rail"]]
+            rail_ref = self._rail(rail.refund, conn, r, amount, now)
+
+            period_ids = self._period_ids(conn, r["id"])
+            for pid in period_ids:
+                conn.execute("UPDATE budget_periods SET paid_minor = paid_minor - ?, version = version + 1 "
+                             "WHERE id = ?", (amount, pid))
+
+            earned = conn.execute("SELECT * FROM reward_ledger WHERE transaction_id = ? AND kind = 'earn'",
+                                  (transaction_id,)).fetchone()
+            reversed_minor = 0
+            if earned is not None:
+                reversed_minor = earned["reward_minor"]
+                # Same period as the earn entry, so the monthly tier position moves back too.
+                conn.execute(
+                    "INSERT INTO reward_ledger (owner_id, route_id, transaction_id, kind, spend_minor, reward_minor, "
+                    "period_start, created_at) VALUES (?,?,?,'reverse',?,?,?,?)",
+                    (earned["owner_id"], earned["route_id"], transaction_id, -earned["spend_minor"],
+                     -reversed_minor, earned["period_start"], iso(now)))
+
+            refund = {
+                "id": _id("rf"),
+                "transaction_id": transaction_id,
+                "amount_minor": amount,
+                "currency": "HKD",
+                "reward_reversed_minor": reversed_minor,
+                "payment_route_id": route_row["route_id"],
+                "reason": req.get("reason"),
+                "status": "refunded",
+                "refunded_at": iso(now),
+            }
+            seq = self._event(conn, row["owner_id"], "payment_refunded", {
+                "refund": refund, "reservation_id": r["id"], "released_paid_minor": amount,
+                "affected_period_ids": period_ids, "rail": rail_info(rail, rail_ref),
+            }, actor=actor, now=now, mandate_id=r["mandate_id"], transaction_id=transaction_id)
+            body = {"refund": refund, "budgets": self._budgets_by_ids(conn, period_ids), "event_sequence": seq}
+            conn.execute("INSERT INTO refunds VALUES (?,?,?,?,?,?,?,?,?,?)",
+                         (refund["id"], transaction_id, amount, reversed_minor, route_row["route_id"], rail_ref,
+                          req.get("reason"), actor.actor_id, refund["refunded_at"], json.dumps(body)))
+            return 200, body
+
+        status, body, _ = self._idempotent(actor, "refundPayment", key, {"transaction_id": transaction_id, **req}, op)
+        return status, body

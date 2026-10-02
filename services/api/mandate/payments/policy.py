@@ -51,6 +51,9 @@ def validate_policy(policy: dict, now: datetime) -> list[str]:
         problems.append("allowed_merchant_ids must be unique.")
     if len(policy["blocked_categories"]) != len(set(policy["blocked_categories"])):
         problems.append("blocked_categories must be unique.")
+    velocity = policy.get("velocity_limit")
+    if velocity and not (1 <= velocity["window_minutes"] <= 10080 and velocity["max_purchases"] >= 1):
+        problems.append("velocity_limit needs max_purchases >= 1 and window_minutes between 1 and 10080.")
     return problems
 
 
@@ -101,11 +104,15 @@ def mandate_state_violation(mandate: dict, now: datetime) -> dict | None:
     return None
 
 
-def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime) -> Evaluation:
+def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime, *,
+             recent_purchases: dict[str, int] | None = None, waived: frozenset[str] = frozenset()) -> Evaluation:
     """Check a quote against every mandate in the chain and every applicable budget period.
 
     ``chain`` rows carry a parsed ``policy`` dict. ``budgets`` rows carry
     ``mandate_id, period, limit_minor, paid_minor, reserved_minor``.
+    ``recent_purchases`` maps a mandate id to the purchases its subtree made
+    inside that mandate's velocity window. ``waived`` holds review codes a
+    person already approved for this exact purchase; hard rules are never waived.
     """
     ev = Evaluation()
     amount = quote["total_minor"]
@@ -154,6 +161,16 @@ def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime)
                 ev.add(violation("APPROVAL_REQUIRED", m, "approval_above",
                                  f"Orders over {money(threshold)} need the user's approval.", amount, threshold))
 
+        velocity = p.get("velocity_limit")
+        if velocity:
+            ev.rule_ids.append(rule_id(m, "velocity_limit"))
+            count = (recent_purchases or {}).get(m["id"], 0)
+            if count >= velocity["max_purchases"]:
+                ev.add(violation("VELOCITY_LIMIT_EXCEEDED", m, "velocity_limit",
+                                 f"{count} purchase{'s' if count != 1 else ''} in the last "
+                                 f"{velocity['window_minutes']} minutes; this mandate allows "
+                                 f"{velocity['max_purchases']} per {velocity['window_minutes']} minutes."))
+
     by_id = {m["id"]: m for m in chain}
     for b in budgets:
         m = by_id[b["mandate_id"]]
@@ -165,4 +182,5 @@ def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime)
                              f"Order total {total_text} is over the {money(available)} left this "
                              f"{'week' if b['period'] == 'calendar_week' else 'month'}.",
                              amount, available))
+    ev.review = [v for v in ev.review if v["code"] not in waived]
     return ev

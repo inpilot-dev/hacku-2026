@@ -1,0 +1,124 @@
+{
+  "_note": "Payment routes the wallet can rank. Every fee and reward figure cites a source with the time it was read. Figures marked 'inferred' or 'unverified' are shown but never counted in the ranking. Sources were read by Claude through a web fetch on 2026-10-02; a person should re-open each URL and confirm before the demo.",
+  "sources": {
+    "src_tng_single_use_card": {
+      "title": "PCCW/HKT press release: Tap & Go Single Use Card (23 July 2026)",
+      "url": "https://www.pccw.com/assets/Common/files/press-release/2026/Jul/Press%20release_Tap%20%26%20Go%20Single%20Use%20Card_EN.pdf",
+      "observed_at": "2026-10-02T23:24:00+08:00",
+      "quote": "each card is issued with a unique card number, expiry date and CVV. After one successful payment, these credentials will immediately expire ... maximum: HK$2,000 ... validity period of no longer than two months ... Virtual Mastercard Prepaid Card"
+    },
+    "src_tng_charges": {
+      "title": "Tap & Go service charges (page last updated 14 September 2026)",
+      "url": "https://www.tapngo.com.hk/eng/charges.html",
+      "observed_at": "2026-10-02T23:23:00+08:00",
+      "quote": "Annual Fee: Free; Top-up Non-cash: Free; Local and Foreign Transaction (Settled in foreign currency): MasterCard charge 2%, UnionPay charge 1%; Foreign Transaction (Settled in HK$): 1%"
+    },
+    "src_hsbc_red_rebate": {
+      "title": "HSBC Red Credit Card product page",
+      "url": "https://www.hsbc.com.hk/credit-cards/products/red/",
+      "observed_at": "2026-10-02T23:23:00+08:00",
+      "quote": "Earn 4% RewardCash (RC) on the first HKD10,000 you spend online and unlimited 0.4% RC on subsequent online spending each calendar month ... Perpetual annual fee waiver"
+    },
+    "src_hsbc_rewardcash_value": {
+      "title": "HSBC RewardCash redemption",
+      "url": "https://www.hsbc.com.hk/credit-cards/rewards/rewardcash-redemption/",
+      "observed_at": "2026-10-02T23:26:00+08:00",
+      "quote": "Every $1 RewardCash can be used to offset HKD1 on your spending"
+    },
+    "src_hsbc_fps": {
+      "title": "HSBC Faster Payment System (FPS) page",
+      "url": "https://www.hsbc.com.hk/campaigns/fps/",
+      "observed_at": "2026-10-02T23:24:00+08:00",
+      "quote": "No charges for HKD and RMB transfers ... other banks may have different charging policies"
+    },
+    "src_hkicl_fps_faq": {
+      "title": "HKICL FPS consumer FAQ",
+      "url": "https://fps.hkicl.com.hk/eng/fps/consumers/frequently_asked_questions.php",
+      "observed_at": "2026-10-02T23:23:00+08:00",
+      "quote": "Customers may set limits in their direct debit authorizations to different parties."
+    }
+  },
+  "routes": [
+    {
+      "id": "tng_single_use_card",
+      "label": "Tap & Go Single Use Card",
+      "provider": "HKT Tap & Go",
+      "network": "mastercard",
+      "instrument": "Virtual prepaid Mastercard, one payment per card number",
+      "rail": "tap_and_go_single_use_card",
+      "holds_funds_at_rail": true,
+      "settlement": "card authorisation now, capture at checkout",
+      "max_amount_minor": 200000,
+      "max_amount_source": "src_tng_single_use_card",
+      "fee": {
+        "rate_bp": 0,
+        "fixed_minor": 0,
+        "status": "inferred",
+        "note": "The fee table lists charges only for foreign-currency and foreign transactions; nothing is listed for a local HKD purchase.",
+        "source": "src_tng_charges"
+      },
+      "reward": {
+        "status": "none_published",
+        "note": "Neither source lists a reward for Single Use Card spending.",
+        "source": "src_tng_single_use_card",
+        "tiers": []
+      }
+    },
+    {
+      "id": "card_hsbc_red",
+      "label": "HSBC Red credit card (scoped network token)",
+      "provider": "HSBC",
+      "network": null,
+      "network_note": "Card scheme not confirmed from the issuer page; check the card face before claiming Mastercard.",
+      "instrument": "Caregiver's credit card, tokenised per purchase and locked to one merchant, amount and expiry",
+      "rail": "card_network_token",
+      "holds_funds_at_rail": true,
+      "settlement": "card authorisation now, capture at checkout",
+      "max_amount_minor": null,
+      "fee": {
+        "rate_bp": 0,
+        "fixed_minor": 0,
+        "status": "inferred",
+        "note": "Annual fee waived; no charge listed for a local HKD purchase.",
+        "source": "src_hsbc_red_rebate"
+      },
+      "reward": {
+        "status": "observed",
+        "unit": "RewardCash",
+        "value_minor_per_unit": 100,
+        "value_source": "src_hsbc_rewardcash_value",
+        "source": "src_hsbc_red_rebate",
+        "applies_to": "online spending",
+        "cap_period": "calendar_month",
+        "tiers": [
+          {"rate_bp": 400, "up_to_spend_minor": 1000000},
+          {"rate_bp": 40, "up_to_spend_minor": null}
+        ]
+      }
+    },
+    {
+      "id": "fps_edda",
+      "label": "FPS direct debit (eDDA)",
+      "provider": "Caregiver's bank via FPS",
+      "network": "fps",
+      "instrument": "Bank account debit under an eDDA authorisation with its own limit",
+      "rail": "fps_edda",
+      "holds_funds_at_rail": false,
+      "settlement": "instant credit transfer at checkout; no hold, so the reservation lives only in the wallet ledger",
+      "max_amount_minor": null,
+      "fee": {
+        "rate_bp": 0,
+        "fixed_minor": 0,
+        "status": "observed",
+        "note": "HSBC charges nothing for HKD FPS transfers; other banks may differ.",
+        "source": "src_hsbc_fps"
+      },
+      "reward": {
+        "status": "none_published",
+        "note": "No reward for FPS payments.",
+        "source": "src_hsbc_fps",
+        "tiers": []
+      }
+    }
+  ]
+}

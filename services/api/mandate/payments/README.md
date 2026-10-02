@@ -36,10 +36,40 @@ Set `MANDATE_DEMO_TOKENS` for real demo tokens, as described in `auth.py`.
 | Release exactly once | A status-guarded `UPDATE ... WHERE status = 'reserved'` |
 | No tokens at rest | Ed25519 is deterministic, so replays re-sign the persisted claims |
 
-## Payment rail
+## Payment rails and routes
 
-`rails.py` defines a `PaymentRail` interface that maps ledger states to card steps: issue a card on confirm,
-hold on reserve, capture on pay, void on cancel or expiry, and close the card on revoke. The default rail is
-`TapAndGoSingleUseCardSimulator`, a **local simulation** shaped like HKT's Tap & Go Single Use Card. There is no
-Tap & Go sandbox, and no money moves. Receipts say `payment_mode: "sandbox"`, and audit payloads record
-`rail: {name, simulated: true, ref}`. A Stripe test-mode manual-capture adapter would implement the same interface.
+`rails.py` maps ledger states to rail steps: open a rail account on confirm (limit = per-order cap, expiry =
+mandate expiry), mint a **single-use credential** on reserve, capture it once on pay, void it on cancel or expiry,
+refund it on refund, and close the account on revoke. A credential is locked to one merchant, the authorized
+amount, HKD, the reservation's expiry and the token's `token_id`; the rail itself declines a second capture,
+another merchant or a larger amount.
+
+Three rails, all **local simulations** (no sandbox exists for any of them, and no money moves):
+
+| Route | Rail | Shaped like |
+|---|---|---|
+| `tng_single_use_card` | `tap_and_go_single_use_card` | HKT's Tap & Go Single Use Card: virtual prepaid Mastercard, one payment per card, HK$2,000 max |
+| `card_hsbc_red` | `card_network_token` | The caregiver's credit card, tokenised per purchase (the Mastercard agent-token pattern) |
+| `fps_edda` | `fps_edda` | FPS debit under an eDDA authorisation; no hold, so the reservation lives in the ledger |
+
+`routing.py` ranks routes for a quote: net cost = total + fee − reward value, lowest first; ties go to a route that
+holds funds at the rail. Figures live in `fixtures/payment_routes.json`, each with a source URL, the time it was
+read and a quote from the page. Rewards count only when observed. Tiered rewards ("4% on the first HK$10,000 a
+month") use the owner's spend this month from `reward_ledger`, so the ranking can change as the month goes on.
+**The figures were read by Claude through a web fetch on 2026-10-02; re-open each URL before the demo.** Point
+`MANDATE_ROUTES_PATH` at another file to change routes.
+
+Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, simulated: true, ref}`.
+
+## Approvals, refunds and velocity
+
+- **Approval that expires.** A purchase over `approval_above_minor` (or with an unknown category) returns
+  `requires_review` with an `approval_request`. The owner approves or denies it; unanswered, it lapses into
+  `APPROVAL_EXPIRED`. After approval the agent re-calls `POST /authorizations` with the same `transaction_id` and
+  a new `Idempotency-Key`. The approval waives only the review reasons the owner saw, once, for that mandate version.
+- **Refund.** `POST /payments/{txn}/refund` gives the money back on the rail, the amount back to every budget
+  period, and reverses the reward.
+- **Velocity.** `policy.velocity_limit = {max_purchases, window_minutes}` counts reserved and paid purchases in the
+  mandate's subtree.
+
+See `contracts/README.md` section 11 for the API shapes.
