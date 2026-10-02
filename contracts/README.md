@@ -10,10 +10,19 @@ This document is the integration agreement for the four feature owners. All requ
 |---|---|---|
 | Abdullah / agent | Draft interpretation, catalog access, shopping runs, trusted quote requests | Wallet authorization and payment responses |
 | Timmy / wallet | Policy activation/revocation, authoritative quote adapter, reservations, signing, sandbox payment and budgets | Agent basket proposals and audit append function |
-| Verification owner | Bounded Z3 analysis and actual concurrent API evaluation | Transaction state model and wallet APIs |
-| Interface/audit owner | Dashboard, ordered events, export, checkpoint retention and independent verification | All feature contracts |
+| Seungbin / verification + audit | Z3 models, concurrent/retry/revocation evaluation, audit append function, checkpoints, export and independent verifier | Wallet state transitions, catalog evidence and measured API outcomes |
+| Noah / frontend + demo integration | Mandate confirmation, shopping/budget/receipt screens, event feed, audit and verification views, scenario controls and end-to-end integration | Agent, wallet, verification and audit APIs |
 
-Draft interpretation is implemented by the agent owner; financial policy storage is owned by the wallet owner. Agree on router registration and storage migrations rather than editing one shared application file concurrently.
+Draft interpretation is implemented by Abdullah; financial policy storage is owned by Timmy. Seungbin owns the audit append function and verifier. Timmy calls that function inside the same transaction as reservations and payments. Noah owns the frontend and integration wiring, and displays real API outcomes rather than inventing financial state. Agree on router registration and storage migrations rather than editing one shared application file concurrently.
+
+First-version responsibilities:
+
+- **Abdullah:** produce a basket/quote from the agent and expose shopping progress.
+- **Timmy:** approve or refuse authorization, complete a sandbox payment, return a receipt and current budgets.
+- **Seungbin:** evaluate over-budget, duplicate-payment and revocation cases; implement the financial audit function, then add the bounded Z3 model and independent verifier.
+- **Noah:** connect mandate confirmation, basket, decision, receipt and budget into one usable web flow; show rule-specific refusals and wire the demo reset/scenario controls.
+
+Seungbin provides structured results to Noah for the safety and audit screens. Noah supplies reusable screen components so Seungbin can add technical views without editing shared application routing. API contract changes are reviewed together.
 
 The interface submits user requests. The agent worker submits authorization and payment requests using an agent credential. The verification component does not reserve or spend funds. The audit function participates in wallet transactions; it must not call a second independently committing write transaction.
 
@@ -174,7 +183,7 @@ Define the basket hash as SHA-256 over UTF-8 canonical JSON of the immutable quo
 
 Each audit stream starts with a previous hash of 64 zeroes. Hash canonical event fields excluding `event_hash`. Sequences increase monotonically per stream. Event payloads include relevant policy snapshot/version, quote/amount, rule IDs and result; no credentials. Financial events and state changes are one transaction.
 
-`GET /events` is a live-feed poll for the user's authorized stream. Return events after the cursor in order, with `next_after` set to the last returned sequence (or unchanged when empty). `has_more` indicates pagination. The audit exporter includes the full stream; document event-specific payload versions while implementing D's module.
+`GET /events` is a live-feed poll for the user's authorized stream. Return events after the cursor in order, with `next_after` set to the last returned sequence (or unchanged when empty). `has_more` indicates pagination. The audit exporter includes the full stream; document event-specific payload versions while implementing Seungbin's audit module.
 
 `POST /audit/checkpoints` signs and independently retains a checkpoint before reporting success. Implement its retention using a separate verifier component/process. The verifier pins the signing public key and stores checkpoints independently of exports. A checkpoint can be referenced by a stable ID derived from its signed stream ID and sequence, e.g. `stream_demo:42`.
 

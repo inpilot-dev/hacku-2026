@@ -161,16 +161,16 @@ For the prototype, use a separate verifier process and local storage. This is a 
 
 ## 7. Feature ownership for four people
 
-Each owner implements their API/module, UI feature, meaningful checks and demo segment. The assignment below assumes Abdullah wants the model work; the other names can be filled in.
+Each owner implements their feature contracts, modules, meaningful checks and demo segment. Noah owns the main frontend and integration; Abdullah, Timmy and Seungbin provide their feature APIs and coordinate feature-specific views with him.
 
 | Owner | Feature ownership | Backend deliverables | UI and demo deliverables |
 |---|---|---|---|
-| **A — Abdullah** | Mandate interpretation and shopping agent | Model adapter, draft parsing, catalog comparison, basket proposal, escalation requests, observed catalog data | Mandate editor and confirmation; shopping feed; successful purchase proposal and manipulated-listing scenario |
-| **B — Developer 2** | Transaction safety and payment sandbox | Schema/migrations, quote validation, policy checks, atomic reservations, signing, payment, revocation, idempotency | Budget panel, checkout controls, receipt, revoke control; fee-change and concurrent-purchase demonstrations |
-| **C — Developer 3** | Formal verification and evaluation | Z3 unsafe/corrected models, bounded reports, API race tests, scenario runner and baseline evaluation | Safety lab, counterexample timeline, measured-results panel; technical explanation and concurrency proof segment |
-| **D — Developer 4** | Audit, integration and demonstration experience | Event schema, canonical log hashing, checkpoint signer/verifier, fixture reset and scenario orchestration | Dashboard shell, audit viewer, verifier panel, scripted demo controls; pitch assets and integration coordination |
+| **A — Abdullah** | Mandate interpretation and shopping agent | Model adapter, draft parsing, catalog comparison, basket proposal, review requests, observed catalog data | Supply shopping progress and interpreted policy to Noah; demonstrate basket selection and manipulated listings |
+| **B — Timmy** | Transaction safety and payment sandbox | Schema/migrations, quote validation, policy checks, atomic reservations, signing, payment, revocation, idempotency; call Seungbin's audit function transactionally | Supply budget, decision and receipt data to Noah; demonstrate fee-change and concurrent-purchase outcomes |
+| **C — Seungbin** | Formal verification, evaluation and audit | Z3 unsafe/corrected models, API race/retry/revocation checks, manual comparison, canonical audit events, log export, checkpoint signer/retention and independent verifier | Supply counterexample timelines, evaluation results and audit-verification results to Noah; own technical evidence and tamper demonstration |
+| **D — Noah** | Frontend and end-to-end demo integration | API client/integration adapters, live-feed wiring, fixture reset and scenario orchestration; coordinate contracts and startup | Mandate input/confirmation, shopping feed, basket, budget, receipt, revoke control, safety/audit views and demo controls; character UI after the core flow |
 
-Dependencies must be explicit. B owns financial transitions; D supplies a log-append function that B calls inside the database transaction. C owns verification logic and does not modify B's financial implementation without coordination. A's model output is always validated through B's API. D owns top-level application routing and shared layout.
+Dependencies must be explicit. Timmy owns financial transitions; Seungbin supplies a log-append function that Timmy calls inside the database transaction. Seungbin owns verification and audit logic and does not modify Timmy's financial implementation without coordination. Abdullah's model output is always validated through Timmy's API. Noah owns top-level application routing, shared layout and API integration. Seungbin provides structured technical results; Noah displays them without duplicating financial enforcement in the browser.
 
 If B hits a bottleneck, C takes reservation integration tests and D takes API wiring. Do not leave one developer responsible for all backend work or one person only preparing slides.
 
@@ -182,17 +182,17 @@ Suggested module layout:
 
 ```text
 apps/web/src/features/
-  mandate/       # A
-  shopping/      # A
-  wallet/        # B
-  safety-lab/    # C
-  audit/         # D
-  demo/          # D
+  mandate/       # D (Noah); draft API from A
+  shopping/      # D (Noah); agent API from A
+  wallet/        # D (Noah); financial API from B
+  safety-lab/    # D (Noah), technical data/views with C
+  audit/         # D (Noah), audit API from C
+  demo/          # D (Noah)
 services/api/mandate/
   agent/         # A
   payments/      # B
   storage/       # B
-  audit/         # D
+  audit/         # C (Seungbin)
 verification/    # C
 evaluation/      # C
 contracts/       # schema changes reviewed together
