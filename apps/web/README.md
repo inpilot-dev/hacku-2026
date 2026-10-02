@@ -31,3 +31,5 @@ Open the URL printed by Vite. The browser uses the scoped local `dev-user-token`
 ## Serve the built site from the API
 
 For a single-origin presentation build, run `npm install && npm run build` in `apps/web`, then start the API command above. FastAPI serves the built SPA and its assets at `http://127.0.0.1:8000/`; Vite proxying is only needed during frontend development. Unknown `/api/...` paths remain JSON 404 responses rather than falling through to the SPA.
+
+For a reproducible presentation run, build once and use `./scripts/run-demo.sh` from the repository root. It starts the same-origin frontend and API with a fresh, temporary wallet database and signing key; stopping the process removes only that temporary sandbox. To keep demo state across restarts, set `MANDATE_DEMO_DATA_DIR` to a dedicated local demo directory. That directory is preserved and is never cleared by the script. `MANDATE_DEMO_PORT` changes the default port 8000, and `PYTHON_BIN` selects the Python interpreter that has the API dependencies installed.
