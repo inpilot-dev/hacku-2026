@@ -598,6 +598,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
   const loadAudit = useCallback(async () => {
     const version = ++auditRequestVersion.current;
     setAuditState('loading');
+    setVerifier(null);
     try {
       const result = await api.auditExport(token);
       if (version !== auditRequestVersion.current) return;
@@ -625,7 +626,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
       setActionError('There is no retained checkpoint to verify yet. No pass result is available.');
       return;
     }
-    setVerifyBusy('audit'); setActionError('');
+    setVerifyBusy('audit'); setActionError(''); setVerifier(null);
     try {
       setVerifier(await api.verifyAudit(token, { export: audit, retained_checkpoint_id: `${audit.stream_id}:${audit.latest_checkpoint.sequence}` }));
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Verifier request failed.'); }
