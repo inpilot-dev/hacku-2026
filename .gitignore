@@ -1,0 +1,12 @@
+# Node frontend build and dependencies
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Python runtime/cache state
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Local wallet database and signing keys
+services/api/.data/

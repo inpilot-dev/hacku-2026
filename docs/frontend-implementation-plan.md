@@ -4,7 +4,7 @@
 **Owner:** Noah
 **Baseline inspected:** `main` at `0468327` on 2 October 2026
 **Goal:** an integrated first version on Saturday morning; submission freeze Sunday, 4 October, 13:00 Asia/Hong_Kong
-**Status:** implementation plan. Existing source was inspected; backend tests were not executed for this planning task.
+**Status:** implementation in progress. The React/Vite UI, typed wallet client, shared FastAPI entrypoint, health route and gated local checkout adapter are implemented. Abdullah’s catalog/agent-run service and Seungbin’s audit/verifier/Z3 services remain unintegrated in the current checkout; the UI marks those limits explicitly.
 
 ## 1. Product and scope
 

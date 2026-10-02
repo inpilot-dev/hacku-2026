@@ -431,3 +431,29 @@ export type VerificationResult = {
   "counterexample": Array<ModelStep>;
   "message": string;
 };
+
+export type DemoPurchaseRequest = {
+  "mandate_id": string;
+  "quote_id": string;
+  "transaction_id": string;
+};
+
+export type DemoPurchaseResponse = {
+  "authorization": DemoAuthorizationApproved | AuthorizationRefused;
+  "payment": PaymentCompleted | PaymentRefused | null;
+};
+
+export type DemoAuthorizationApproved = {
+  "decision_id": string;
+  "transaction_id": string;
+  "mandate_id": string;
+  "mandate_version": number;
+  "rule_ids": Array<string>;
+  "message": string;
+  "evaluated_at": string;
+  "event_sequence": number;
+  "status": "approved";
+  "reservation": Reservation;
+  "claims": AuthorizationClaims;
+  "budgets": Array<BudgetPeriod>;
+};

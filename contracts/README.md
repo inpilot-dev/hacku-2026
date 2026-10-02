@@ -241,3 +241,9 @@ Map FastAPI validation errors to this agreed envelope rather than leaking a seco
 - Independent checkpoint verification detects covered mutation and truncation.
 
 Prioritize the first single-mandate purchase and refusal for tomorrow morning's v0. The formal and independent audit views can follow after that flow works. Keep all demo reset/time-control functions separate from agent-accessible routes; they are not part of this public contract.
+
+## Local demo checkout adapter (Noah)
+
+`POST /demo/purchases` is a local-only adapter to complete the UI's scripted sandbox path while Abdullah's shopping worker is not integrated. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`. The request uses the authenticated user’s mandate and quote plus a caller-stable transaction ID. The server checks the user owns the mandate and quote, derives the delegatee from that mandate, and calls the normal wallet authorization and payment methods. The browser never receives an agent credential or signed authorization token. A replay uses deterministic server idempotency keys derived from the transaction ID.
+
+This endpoint does not give the user control over an arbitrary actor, does not bypass the policy engine, and does not move real money. Remove it or replace its caller with Abdullah’s agent-run service when that service is integrated.

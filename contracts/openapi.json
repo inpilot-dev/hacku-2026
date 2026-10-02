@@ -2168,6 +2168,97 @@
           }
         }
       }
+    },
+    "/demo/purchases": {
+      "post": {
+        "operationId": "runDemoPurchase",
+        "tags": [
+          "interface"
+        ],
+        "summary": "Run a user-triggered, local demo checkout",
+        "description": "Available only when MANDATE_ENABLE_DEMO_CHECKOUT=1. Requires a user-owned mandate and quote. The server derives the mandate-assigned agent, runs the ordinary wallet authorization and payment checks, and never returns the signed authorization token.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoPurchaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorization and, if approved, sandbox payment decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoPurchaseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Demo checkout is disabled or actor is not a user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mandate or quote not visible to the authenticated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Wallet unavailable; reconcile the same transaction before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4357,6 +4448,129 @@
           "counterexample",
           "message"
         ]
+      },
+      "DemoPurchaseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mandate_id",
+          "quote_id",
+          "transaction_id"
+        ],
+        "properties": {
+          "mandate_id": {
+            "type": "string"
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "description": "Local demonstration adapter only. The server derives the assigned agent from the user-owned mandate; no agent credential is sent to the browser."
+      },
+      "DemoPurchaseResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authorization",
+          "payment"
+        ],
+        "properties": {
+          "authorization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DemoAuthorizationApproved"
+              },
+              {
+                "$ref": "#/components/schemas/AuthorizationRefused"
+              }
+            ]
+          },
+          "payment": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PaymentCompleted"
+              },
+              {
+                "$ref": "#/components/schemas/PaymentRefused"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "Authorization refusal has payment=null. Approval omits the signed token; successful/refused payment has the authoritative wallet decision."
+      },
+      "DemoAuthorizationApproved": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision_id",
+          "transaction_id",
+          "mandate_id",
+          "mandate_version",
+          "rule_ids",
+          "message",
+          "evaluated_at",
+          "event_sequence",
+          "status",
+          "reservation",
+          "claims",
+          "budgets"
+        ],
+        "properties": {
+          "decision_id": {
+            "type": "string"
+          },
+          "transaction_id": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string"
+          },
+          "mandate_version": {
+            "type": "integer"
+          },
+          "rule_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "evaluated_at": {
+            "type": "string"
+          },
+          "event_sequence": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved"
+            ]
+          },
+          "reservation": {
+            "$ref": "#/components/schemas/Reservation"
+          },
+          "claims": {
+            "$ref": "#/components/schemas/AuthorizationClaims"
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetPeriod"
+            }
+          }
+        },
+        "description": "Approved decision with internal authorization token omitted."
       }
     }
   }
