@@ -48,6 +48,7 @@ function App() {
   const [checkoutUncertain, setCheckoutUncertain] = useState(false);
   const [purchaseRefusal, setPurchaseRefusal] = useState<{ message: string; violations: RuleViolation[] } | null>(null);
   const [health, setHealth] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [lastSuccessfulRefresh, setLastSuccessfulRefresh] = useState<string | null>(null);
   const refreshVersion = useRef(0);
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
@@ -125,16 +126,23 @@ function App() {
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current;
     setHealth('checking');
+    let healthSucceeded = false;
     try {
       await api.health();
+      healthSucceeded = true;
       if (version === refreshVersion.current) setHealth('online');
     } catch { if (version === refreshVersion.current) setHealth('offline'); }
-    if (!token || !mandateId || version !== refreshVersion.current) return;
+    if (version !== refreshVersion.current) return;
+    if (!token || !mandateId) {
+      if (healthSucceeded) setLastSuccessfulRefresh(new Date().toISOString());
+      return;
+    }
     try {
       const [m, b] = await Promise.all([api.mandate(token, mandateId), api.budget(token, mandateId)]);
       if (version !== refreshVersion.current) return;
       setMandate(m);
       setBudget(b);
+      setLastSuccessfulRefresh(new Date().toISOString());
     } catch (error) {
       if (version !== refreshVersion.current) return;
       if (error instanceof ApiError && error.status === 404) {
@@ -319,7 +327,7 @@ function App() {
     {mobileNav && <button className="scrim" aria-label="Close navigation" onClick={() => setMobileNav(false)} />}
 
     <main className="main-area">
-      <header className="topbar"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumbs">Family account <span>/</span> <strong>{nav.find((item) => item.id === view)?.label}</strong></div><div className="top-actions"><span className={`connection-pill ${health}`}><span className="connection-dot" />{health === 'online' ? 'Wallet connected' : health === 'offline' ? 'Wallet offline' : 'Connecting'}</span><button className="icon-button" aria-label="Refresh data" onClick={() => void refresh()}><RefreshCw size={17} /></button><button className="top-avatar" aria-label="Account settings" onClick={() => setShowSettings(true)}>MK</button></div></header>
+      <header className="topbar"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumbs">Family account <span>/</span> <strong>{nav.find((item) => item.id === view)?.label}</strong></div><div className="top-actions"><span className={`connection-pill ${health}`}><span className="connection-dot" />{health === 'online' ? 'Wallet connected' : health === 'offline' ? 'Wallet offline' : 'Connecting'}</span><span className="refresh-meta">{lastSuccessfulRefresh ? `Updated ${new Date(lastSuccessfulRefresh).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}` : 'Not refreshed yet'}</span><button className="icon-button" aria-label="Reconnect and refresh wallet data" title="Reconnect and refresh" onClick={() => void refresh()}><RefreshCw size={17} /></button><button className="top-avatar" aria-label="Account settings" onClick={() => setShowSettings(true)}>MK</button></div></header>
       <div className="page-content">
         {catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><ShieldAlert size={16} /></span><span><strong>Unverified catalog:</strong> product prices lack complete source evidence and are not verified live offers. Payments are simulated and no money moves.</span><button onClick={() => setView('activity')}>What this means <ArrowUpRight size={14} /></button></div>}
         {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} busy={busy} onRevoke={() => void revokeMandate()} />}
