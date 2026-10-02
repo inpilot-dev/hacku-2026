@@ -444,6 +444,8 @@ export type DemoPurchaseRequest = {
   "mandate_id": string;
   "quote_id": string;
   "transaction_id": string;
+  "payment_route_id"?: string | null;
+  "approval_id"?: string | null;
 };
 
 export type DemoPurchaseResponse = {
