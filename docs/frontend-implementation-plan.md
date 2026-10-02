@@ -10,7 +10,7 @@
 
 Build a mobile-friendly caregiver shopping application with a desktop demonstration dashboard. A user confirms a spending mandate, starts a grocery order, sees the chosen basket and total, and receives either a sandbox receipt or a clear refusal. Users can revoke spending permission and inspect why each decision happened.
 
-The technical views show two agents competing for a shared budget, the bounded formal-verification result, and independently checked audit records. These views consume Timmy's and Seungbin's real outputs.
+The technical views show two agents competing for a shared budget, the bounded formal-verification result, and independently checked audit records. These views consume Timmy's and Seungbin's real outputs. The UI now has contract-backed polling and action handlers for event, audit export/checkpoint/verifier, and unsafe/atomic solver APIs; the current checkout still returns unavailable for the teammate-owned endpoints.
 
 The initial story is one caregiver delegating weekly groceries. Seungbin proposes one root weekly mandate with two shop-specific child mandates, which fits the current same-owner implementation. Treat this as a proposed demo story until agreed. The current wallet confirmation code requires the parent and child owner to be the same user; do not build a separate-parent-and-student account experience that claims cross-user delegation already works.
 
@@ -82,7 +82,7 @@ Noah connects their modules rather than editing their policy, model or verificat
 
 Use React + TypeScript + Vite with a small CSS token system. Import the existing `contracts/types.ts`; regenerate when the public schema changes. Keep data access in a typed API layer and domain state in feature hooks/reducers. Avoid introducing a large component library or a second backend framework before the first transaction works.
 
-During development, Vite proxies `/api` to the local FastAPI service, preserving `/api/v1`. The frontend uses relative API URLs. This avoids a separate cross-origin configuration for the first local run. For a packaged demo, the shared FastAPI app can serve the built assets and API from one origin, keeping API failures out of the SPA fallback.
+During development, Vite proxies `/api` to the local FastAPI service, preserving `/api/v1`. The frontend uses relative API URLs. This avoids a separate cross-origin configuration for the first local run. For a packaged demo, the shared FastAPI app serves built assets and API from one origin. The SPA fallback excludes unknown API paths so they remain JSON errors.
 
 The shared API entrypoint should reuse:
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
-import type { BudgetResponse, CatalogResponse, Mandate, PaymentCompleted, Policy, Product, Quote } from '../../../../contracts/types';
+import type { AuditEvent, AuditExport, BudgetResponse, CatalogResponse, Mandate, PaymentCompleted, Policy, Product, Quote, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
@@ -200,7 +200,7 @@ function App() {
         {view === 'overview' && <Overview mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} busy={busy} onRevoke={() => void revokeMandate()} />}
         {view === 'shopping' && <Shopping products={products} quantities={quantity} onChange={changeQuantity} quote={quote} busy={busy} active={Boolean(active)} onConfirm={() => setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onPurchase={() => void completeDemoPurchase()} paymentResult={paymentResult} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
         {view === 'wallet' && <WalletView mandate={mandate} budget={budget} currentBudget={currentBudget} spentRatio={spentRatio} busy={busy} onRevoke={() => void revokeMandate()} onRefresh={() => void refresh()} />}
-        {view === 'activity' && <SafetyView mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
+        {view === 'activity' && <SafetyView token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
     </main>
     {showMandateReview && <MandateReviewModal initial={policy} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next) => confirmMandate(next)} />}
@@ -248,17 +248,111 @@ function WalletView({ mandate, budget, currentBudget, spentRatio, busy, onRevoke
   return <><div className="page-heading"><div><div className="eyebrow">FAMILY WALLET</div><h1>Your rules, at a glance.</h1><p>Every amount reflects the latest state returned by the wallet service.</p></div><button className="button button-secondary" onClick={onRefresh}><RefreshCw size={16} /> Refresh wallet</button></div><section className="wallet-hero panel"><div><div className="eyebrow">AVAILABLE THIS WEEK</div><strong>{currentBudget ? money(currentBudget.available_minor) : '—'}</strong><span>{currentBudget ? `of ${money(currentBudget.limit_minor)} weekly allowance` : 'Confirm a mandate to activate your wallet'}</span><div className="progress-track"><span style={{ width: `${spentRatio}%` }} /></div><div className="wallet-breakdown"><span><i className="legend-dot paid-dot" />Paid <strong>{money(currentBudget?.paid_minor ?? 0)}</strong></span><span><i className="legend-dot reserved-dot" />Reserved <strong>{money(currentBudget?.reserved_minor ?? 0)}</strong></span><span><i className="legend-dot available-dot" />Available <strong>{money(currentBudget?.available_minor ?? 0)}</strong></span></div></div><div className="wallet-decoration"><WalletCards size={54} strokeWidth={1.1} /><span>FAMILY<br />ALLOWANCE</span><i>••••  2026</i></div></section><div className="wallet-detail-grid"><section className="panel"><div className="panel-heading"><div><div className="eyebrow">CURRENT PERMISSIONS</div><h2>Who can spend</h2></div><span className={`status-tag ${mandate?.status === 'active' ? 'status-green' : 'status-muted'}`}><i />{mandate?.status ?? 'Not set up'}</span></div>{mandate ? <div className="wallet-rule-list"><Rule icon={<WalletCards size={17} />} label="Per order limit" value={money(mandate.policy.per_order_limit_minor)} detail="Includes delivery fees" /><Rule icon={<Activity size={17} />} label="Weekly limit" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Calendar week · Hong Kong time" /><Rule icon={<Ban size={17} />} label="Blocked" value={mandate.policy.blocked_categories.join(', ')} detail="Always refused" /><Rule icon={<Clock3 size={17} />} label="Expires" value={shortDate(mandate.policy.expires_at)} detail="No automatic renewal" /></div> : <div className="empty-small">No active spending mandate has been confirmed yet.</div>}{mandate?.status === 'active' && <button className="button button-danger-outline" onClick={onRevoke} disabled={busy === 'revoke'}><Ban size={16} />{busy === 'revoke' ? 'Revoking access…' : 'Revoke spending access'}</button>}</section><section className="panel budget-panel"><div className="eyebrow">BUDGET PERIODS</div><h2>Spending by week</h2>{budget?.applicable_budgets.map((period) => <div className="budget-period" key={period.period_id}><div className="budget-period-head"><span><strong>{shortDate(period.starts_at)}</strong><small>Ends {shortDate(period.ends_at)}</small></span><strong>{money(period.available_minor)} <small>left</small></strong></div><div className="progress-track"><span style={{ width: `${Math.min(100, Math.round((period.paid_minor + period.reserved_minor) / period.limit_minor * 100))}%` }} /></div><div className="budget-period-meta"><span>{money(period.paid_minor + period.reserved_minor)} used</span><span>{money(period.limit_minor)} total</span></div></div>) ?? <div className="empty-small">Budget periods will appear after confirmation.</div>}</section></div></>;
 }
 
-function SafetyView({ mandate, health, catalogIsPlaceholder }: { mandate: Mandate | null; health: 'checking' | 'online' | 'offline'; catalogIsPlaceholder: boolean }) {
+function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: string; mandate: Mandate | null; health: 'checking' | 'online' | 'offline'; catalogIsPlaceholder: boolean }) {
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [eventsState, setEventsState] = useState<'loading' | 'connected' | 'unavailable' | 'error'>('loading');
+  const [eventsRefresh, setEventsRefresh] = useState(0);
+  const [audit, setAudit] = useState<AuditExport | null>(null);
+  const [auditState, setAuditState] = useState<'loading' | 'connected' | 'unavailable' | 'error'>('loading');
+  const [verifier, setVerifier] = useState<VerifierResult | null>(null);
+  const [models, setModels] = useState<VerificationResult[]>([]);
+  const [verifyBusy, setVerifyBusy] = useState<'audit' | 'model' | ''>('');
+  const [actionError, setActionError] = useState('');
+
+  useEffect(() => {
+    let disposed = false;
+    let cursor = 0;
+    let timer = 0;
+    async function poll() {
+      try {
+        const page = await api.events(token, cursor, 50);
+        if (disposed) return;
+        cursor = page.next_after;
+        setEvents((current) => [...current, ...page.events].filter((event, index, all) => all.findIndex((item) => item.sequence === event.sequence && item.stream_id === event.stream_id) === index).slice(-100));
+        setEventsState('connected');
+      } catch (error) {
+        if (disposed) return;
+        setEventsState(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'error');
+        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) return;
+      }
+      if (!disposed) timer = window.setTimeout(() => void poll(), 4000);
+    }
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [token, eventsRefresh]);
+
+  const loadAudit = useCallback(async () => {
+    setAuditState('loading');
+    try { setAudit(await api.auditExport(token)); setAuditState('connected'); }
+    catch (error) { setAudit(null); setAuditState(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'error'); }
+  }, [token]);
+  useEffect(() => { void loadAudit(); }, [loadAudit]);
+
+  async function createCheckpoint() {
+    if (!audit) return;
+    setVerifyBusy('audit'); setActionError('');
+    try {
+      await api.createCheckpoint(token, { stream_id: audit.stream_id });
+      await loadAudit();
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Checkpoint request failed.'); }
+    finally { setVerifyBusy(''); }
+  }
+
+  async function runAuditCheck() {
+    if (!audit?.latest_checkpoint) {
+      setActionError('There is no retained checkpoint to verify yet. No pass result is available.');
+      return;
+    }
+    setVerifyBusy('audit'); setActionError('');
+    try {
+      setVerifier(await api.verifyAudit(token, { export: audit, retained_checkpoint_id: `${audit.stream_id}:${audit.latest_checkpoint.sequence}` }));
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Verifier request failed.'); }
+    finally { setVerifyBusy(''); }
+  }
+
+  async function runModelComparison() {
+    setVerifyBusy('model'); setActionError(''); setModels([]);
+    const shared = { initial_available_minor: 40000, purchase_amounts_minor: [30000, 30000], max_steps: 8, timeout_ms: 3000 };
+    try {
+      const results = await Promise.all([
+        api.verifyModel(token, { ...shared, variant: 'unsafe' }),
+        api.verifyModel(token, { ...shared, variant: 'atomic' }),
+      ]);
+      setModels(results);
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Verification request failed.'); }
+    finally { setVerifyBusy(''); }
+  }
+
+  const checkpointAvailable = Boolean(audit?.latest_checkpoint);
   const checks = [
     { name: 'Mandate is confirmed', state: mandate?.status === 'active', detail: mandate ? `Current state: ${mandate.status}` : 'No spending authority has been created.' },
     { name: 'Catalog evidence is source-backed', state: !catalogIsPlaceholder, detail: catalogIsPlaceholder ? 'Prototype fixture uses example.invalid evidence.' : 'Catalog endpoint returned non-placeholder evidence.' },
     { name: 'Wallet API is reachable', state: health === 'online', detail: health === 'online' ? 'Connected to local sandbox wallet.' : health === 'checking' ? 'Checking wallet service…' : 'Wallet service is not responding.' },
-    { name: 'Independent audit verifier', state: false, detail: 'Verifier module is not connected in this checkout.' },
-    { name: 'Bounded concurrency model', state: false, detail: 'Verification service is not connected in this checkout.' },
+    { name: 'Ordered event stream', state: eventsState === 'connected', detail: eventsState === 'connected' ? `${events.length} event(s) loaded; polling every 4 seconds.` : eventsState === 'unavailable' ? 'Events API is not connected in this checkout.' : eventsState === 'error' ? 'Events API request failed; check user access and server logs.' : 'Connecting to events API…' },
+    { name: 'Independent audit checkpoint', state: auditState === 'connected' && checkpointAvailable, detail: auditState === 'connected' ? checkpointAvailable ? `Export includes checkpoint ${audit?.latest_checkpoint?.stream_id}:${audit?.latest_checkpoint?.sequence}; not yet independently checked.` : 'Audit export is available, but it has no checkpoint.' : auditState === 'unavailable' ? 'Audit service is not connected in this checkout.' : auditState === 'error' ? 'Audit export request failed; check user access and server logs.' : 'Loading audit export…' },
+    { name: 'Bounded concurrency model', state: models.length === 2, detail: models.length === 2 ? 'Unsafe and atomic variants returned from the configured solver.' : 'Run the model comparison to obtain current solver results.' },
   ];
-  return <><div className="page-heading"><div><div className="eyebrow">TRANSPARENCY CENTER</div><h1>See what the system can prove.</h1><p>Mandate keeps authority, checkout and safety checks separate. Here’s what’s connected today.</p></div><span className="mode-chip"><span className="mode-dot" />LOCAL SANDBOX</span></div><section className="panel safety-overview"><div className="safety-summary-icon"><Shield size={23} /></div><div><h2>Wallet-enforced permissions</h2><p>Shopping suggestions are not payment authority. The wallet checks the confirmed rules again when a purchase is requested.</p></div><span className="status-tag status-green"><i />Boundary active</span></section><section className="panel checks-panel"><div className="panel-heading"><div><div className="eyebrow">INTEGRATION READINESS</div><h2>Connected services & evidence</h2></div><span className="checks-count">{checks.filter((item) => item.state).length} of {checks.length} ready</span></div><div className="check-list">{checks.map((item) => <div className="check-row" key={item.name}><span className={`check-state ${item.state ? 'check-ready' : 'check-pending'}`}>{item.state ? <BadgeCheck size={17} /> : <Clock3 size={16} />}</span><span><strong>{item.name}</strong><small>{item.detail}</small></span><span className={`check-label ${item.state ? 'ready-label' : ''}`}>{item.state ? 'Connected' : 'Not available'}</span></div>)}</div></section><section className="honesty-grid"><div className="honesty-card"><span className="honesty-icon"><Eye size={18} /></span><strong>Prototype catalog</strong><p>{catalogIsPlaceholder ? 'Prices and fees come from a local placeholder. Don’t present them as actual store prices.' : 'Offer sources are returned by the connected catalog.'}</p></div><div className="honesty-card"><span className="honesty-icon"><WalletCards size={18} /></span><strong>Sandbox payment only</strong><p>No card is issued and no real funds move. A completed receipt is a local simulation.</p></div><div className="honesty-card"><span className="honesty-icon"><FileCheck2 size={18} /></span><strong>Proofs have limits</strong><p>A bounded model checks only its stated assumptions and bound. It does not prove every deployed behavior.</p></div></section><div className="bottom-note"><span><Shield size={15} /> Live policy decisions come from the wallet service.</span><span>Prototype build · <button>Read safety notes</button></span></div></>;
-}
+  const eventLabel = (event: AuditEvent) => event.type.replace(/_/g, ' ');
 
+  return <><div className="page-heading"><div><div className="eyebrow">TRANSPARENCY CENTER</div><h1>See what the system can prove.</h1><p>Mandate keeps authority, checkout and safety checks separate. Here’s what’s connected today.</p></div><span className="mode-chip"><span className="mode-dot" />LOCAL SANDBOX</span></div>
+    <section className="panel safety-overview"><div className="safety-summary-icon"><Shield size={23} /></div><div><h2>Wallet-enforced permissions</h2><p>Shopping suggestions are not payment authority. The wallet checks the confirmed rules again when a purchase is requested.</p></div><span className="status-tag status-green"><i />Policy checked at payment</span></section>
+    <section className="panel checks-panel"><div className="panel-heading"><div><div className="eyebrow">INTEGRATION READINESS</div><h2>Connected services & evidence</h2></div><span className="checks-count">{checks.filter((item) => item.state).length} of {checks.length} ready</span></div><div className="check-list">{checks.map((item) => <div className="check-row" key={item.name}><span className={`check-state ${item.state ? 'check-ready' : 'check-pending'}`}>{item.state ? <BadgeCheck size={17} /> : <Clock3 size={16} />}</span><span><strong>{item.name}</strong><small>{item.detail}</small></span><span className={`check-label ${item.state ? 'ready-label' : ''}`}>{item.state ? 'Connected' : 'Not available'}</span></div>)}</div></section>
+    <div className="safety-labs">
+      <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">AUDIT TRAIL</div><h2>Recent wallet events</h2></div><div className="feed-actions">{eventsState !== 'loading' && <button className="text-button" onClick={() => { setEventsState('loading'); setEventsRefresh((value) => value + 1); }}>Refresh</button>}<span className={`status-tag ${eventsState === 'connected' ? 'status-green' : 'status-muted'}`}><i />{eventsState === 'connected' ? 'Live feed' : eventsState === 'loading' ? 'Connecting' : eventsState === 'unavailable' ? 'Not connected' : 'Unavailable'}</span></div></div>
+        {events.length ? <div className="event-list">{[...events].reverse().slice(0, 8).map((event) => <div className="event-row" key={`${event.stream_id}-${event.sequence}`}><span className={`event-dot event-${event.type}`} /><span className="event-copy"><strong>{eventLabel(event)}</strong><small>Sequence {event.sequence} · {event.mandate_id ?? 'account'}{event.transaction_id ? ` · ${event.transaction_id}` : ''}</small></span><time>{new Date(event.occurred_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}</time></div>)}</div> : <div className="lab-empty">{eventsState === 'unavailable' ? 'The event feed API is not connected yet.' : eventsState === 'error' ? 'Could not load events. The event feed does not assume an empty ledger.' : 'Loading authorized wallet events…'}</div>}
+        {audit?.latest_checkpoint && <div className="checkpoint-row"><FileCheck2 size={15} /><span>Export checkpoint · {audit.latest_checkpoint.stream_id}:{audit.latest_checkpoint.sequence}</span><button className="text-button" onClick={() => void runAuditCheck()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Checking…' : 'Verify history'}</button></div>}
+        {auditState === 'connected' && !checkpointAvailable && <div className="checkpoint-row"><Clock3 size={15} /><span>No checkpoint exists for this export.</span><button className="text-button" onClick={() => void createCheckpoint()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Creating…' : 'Create checkpoint'}</button></div>}
+        {verifier && <div className={`result-banner ${verifier.valid ? 'result-good' : 'result-warn'}`}><strong>{verifier.status.replace(/_/g, ' ')}</strong><span>{verifier.message}</span><small>Checked through sequence {verifier.checked_through_sequence}; {verifier.unanchored_event_count} later event(s) unanchored.</small></div>}
+      </section>
+      <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">SAFETY LAB</div><h2>Can two agents overspend?</h2></div><span className="icon-bubble lavender"><ShieldAlert size={17} /></span></div><p className="lab-description">Compare formal unsafe and atomic models under one HK$400 budget and two HK$300 requests. This runs the solver model; live competing wallet requests are a separate evaluation.</p><button className="button button-secondary lab-run" onClick={() => void runModelComparison()} disabled={verifyBusy !== ''}>{verifyBusy === 'model' ? <span className="spinner spinner-green" /> : <Activity size={15} />}{verifyBusy === 'model' ? 'Running bounded models…' : 'Run unsafe vs atomic models'}</button>
+        {models.length > 0 && <div className="model-results">{models.map((result) => <div className="model-result" key={`${result.id}-${result.variant}`}><div><strong>{result.variant === 'unsafe' ? 'Unsafe' : 'Atomic reservation'}</strong><span className={`solver-tag ${result.status === 'inconclusive' ? 'solver-unknown' : result.status === 'counterexample_found' ? 'solver-bad' : 'solver-good'}`}>{result.status.replace(/_/g, ' ')}</span></div><p>{result.message}</p><small>{result.solver_result.toUpperCase()} · bound {result.max_steps} · {result.runtime_ms} ms</small>{result.counterexample.length > 0 && <div className="counterexample">{result.counterexample.map((step) => <div key={`${result.id}-${step.step}`}><b>{step.step}.</b> {step.actor}: {step.action}<small>{step.explanation}</small></div>)}</div>}</div>)}</div>}
+        {actionError && <div className="form-error" role="alert">{actionError}</div>}
+        <div className="model-limit"><CircleHelp size={14} /><span>Bounded result applies only to this model, bound and listed assumptions. It does not prove the deployed wallet correct.</span></div>
+      </section>
+    </div>
+    <section className="honesty-grid"><div className="honesty-card"><span className="honesty-icon"><Eye size={18} /></span><strong>Prototype catalog</strong><p>{catalogIsPlaceholder ? 'Prices and fees come from a local placeholder. Don’t present them as actual store prices.' : 'Offer sources are returned by the connected catalog.'}</p></div><div className="honesty-card"><span className="honesty-icon"><WalletCards size={18} /></span><strong>Sandbox payment only</strong><p>No card is issued and no real funds move. A completed receipt is a local simulation.</p></div><div className="honesty-card"><span className="honesty-icon"><FileCheck2 size={18} /></span><strong>Evidence has limits</strong><p>An export without an independently retained checkpoint is not a verified audit history.</p></div></section>
+    <div className="bottom-note"><span><Shield size={15} /> Live policy decisions come from the wallet service.</span><span>Prototype build · <button>Read safety notes</button></span></div></>;
+}
 
 function MandateReviewModal({ initial, busy, onClose, onConfirm }: { initial: Policy; busy: boolean; onClose: () => void; onConfirm: (policy: Policy) => Promise<boolean> }) {
   const [orderCap, setOrderCap] = useState(String(initial.per_order_limit_minor / 100));

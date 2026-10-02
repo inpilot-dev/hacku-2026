@@ -1,4 +1,4 @@
-import type { BudgetResponse, CatalogResponse, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, Mandate, Quote, QuoteRequest, RevokeResponse } from '../../../../contracts/types';
+import type { AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, EventsResponse, Mandate, Quote, QuoteRequest, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -55,4 +55,9 @@ export const api = {
   catalog: (token: string, merchantId?: string) => request<CatalogResponse>(`/catalog${merchantId ? `?merchant_id=${encodeURIComponent(merchantId)}` : ''}`, token),
   quote: (token: string, input: QuoteRequest) => request<Quote>('/quotes', token, { method: 'POST', body: JSON.stringify(input) }),
   demoPurchase: (token: string, input: DemoPurchaseRequest) => request<DemoPurchaseResponse>('/demo/purchases', token, { method: 'POST', body: JSON.stringify(input) }),
+  events: (token: string, after = 0, limit = 50) => request<EventsResponse>(`/events?after=${after}&limit=${limit}`, token),
+  auditExport: (token: string) => request<AuditExport>('/audit/export', token),
+  createCheckpoint: (token: string, input: CheckpointRequest) => request<Checkpoint>('/audit/checkpoints', token, { method: 'POST', headers: { 'Idempotency-Key': sessionKey(`checkpoint-${input.stream_id}`) }, body: JSON.stringify(input) }),
+  verifyAudit: (token: string, input: VerifierRequest) => request<VerifierResult>('/verifier/check', token, { method: 'POST', body: JSON.stringify(input) }),
+  verifyModel: (token: string, input: VerificationRequest) => request<VerificationResult>('/verification/runs', token, { method: 'POST', body: JSON.stringify(input) }),
 };
