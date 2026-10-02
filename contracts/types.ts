@@ -1,0 +1,433 @@
+// GENERATED FROM openapi.json. Change the OpenAPI source, then regenerate; do not edit these definitions independently.
+// Runtime validation is still required. Monetary numbers are integer HKD cents.
+
+export type Currency = "HKD";
+
+export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID";
+
+export type Evidence = {
+  "id": string;
+  "source_url": string;
+  "observed_at": string;
+  "kind": "product_price" | "delivery_fee" | "merchant_identity" | "category";
+  "capture_path": string | null;
+  "conditions": string;
+};
+
+export type Category = "produce" | "dairy" | "eggs" | "meat" | "seafood" | "bakery" | "pantry" | "beverage_non_alcoholic" | "alcohol" | "household" | "unknown";
+
+export type Product = {
+  "id": string;
+  "merchant_id": string;
+  "title": string;
+  "description": string;
+  "category": Category;
+  "category_status": "curated" | "verified" | "unknown" | "conflicting";
+  "unit_label": string;
+  "unit_price_minor": number;
+  "currency": Currency;
+  "available": boolean;
+  "evidence_ids": Array<string>;
+};
+
+export type CatalogResponse = {
+  "products": Array<Product>;
+  "evidence": Array<Evidence>;
+};
+
+export type PeriodLimit = {
+  "period": "calendar_week" | "calendar_month";
+  "limit_minor": number;
+  "timezone": "Asia/Hong_Kong";
+};
+
+export type Policy = {
+  "currency": Currency;
+  "per_order_limit_minor": number;
+  "period_limits": Array<PeriodLimit>;
+  "allowed_merchant_ids": Array<string>;
+  "blocked_categories": Array<Category>;
+  "expires_at": string;
+  "approval_above_minor": number | null;
+};
+
+export type DraftRequest = {
+  "text": string;
+  "delegatee_id": string;
+  "parent_mandate_id"?: string | null;
+};
+
+export type Ambiguity = {
+  "field": string;
+  "question": string;
+};
+
+export type DraftResponse = {
+  "draft_id": string;
+  "owner_id": string;
+  "delegatee_id": string;
+  "parent_mandate_id": string | null;
+  "proposed_policy": Policy | null;
+  "ambiguities": Array<Ambiguity>;
+  "summary": string;
+  "expires_at": string;
+};
+
+export type ConfirmRequest = {
+  "draft_id": string;
+  "policy": Policy;
+};
+
+export type Mandate = {
+  "id": string;
+  "owner_id": string;
+  "delegatee_id": string;
+  "parent_mandate_id": string | null;
+  "version": number;
+  "status": "active" | "revoked" | "expired";
+  "policy": Policy;
+  "created_at": string;
+  "revoked_at": string | null;
+};
+
+export type RevokeRequest = {
+  "reason"?: string;
+};
+
+export type RevokeResponse = {
+  "mandate": Mandate;
+  "cancelled_reservation_ids": Array<string>;
+  "event_sequence": number;
+};
+
+export type ShoppingItem = {
+  "name": string;
+  "quantity": number;
+  "unit"?: string | null;
+};
+
+export type AgentRunRequest = {
+  "mandate_id": string;
+  "shopping_list": Array<ShoppingItem>;
+  "instruction"?: string | null;
+  "auto_purchase"?: boolean;
+};
+
+export type AgentRun = {
+  "id": string;
+  "mandate_id": string;
+  "status": "queued" | "running" | "awaiting_review" | "quoted" | "completed" | "refused" | "failed";
+  "provider": "jev" | "fallback" | "scripted";
+  "model_id": string | null;
+  "execution_mode": "local" | "cloud" | "scripted";
+  "quote_id": string | null;
+  "transaction_id": string | null;
+  "payment_id": string | null;
+  "latest_decision_id": string | null;
+  "message": string;
+  "created_at": string;
+  "updated_at": string;
+};
+
+export type QuoteItemRequest = {
+  "product_id": string;
+  "quantity": number;
+};
+
+export type QuoteRequest = {
+  "merchant_id": string;
+  "items": Array<QuoteItemRequest>;
+  "delivery_context_id": string;
+  "expected_revision"?: string | null;
+};
+
+export type QuoteItem = {
+  "product_id": string;
+  "title": string;
+  "quantity": number;
+  "unit_price_minor": number;
+  "line_total_minor": number;
+  "category": Category;
+  "category_status": "curated" | "verified" | "unknown" | "conflicting";
+  "evidence_ids": Array<string>;
+};
+
+export type Charge = {
+  "kind": "delivery" | "other";
+  "label": string;
+  "amount_minor": number;
+  "evidence_ids": Array<string>;
+};
+
+export type Quote = {
+  "id": string;
+  "merchant_id": string;
+  "revision": string;
+  "currency": Currency;
+  "items": Array<QuoteItem>;
+  "subtotal_minor": number;
+  "charges": Array<Charge>;
+  "total_minor": number;
+  "basket_hash": string;
+  "delivery_context_id": string;
+  "data_mode": "observed_snapshot" | "observed_live";
+  "evidence_ids": Array<string>;
+  "created_at": string;
+  "expires_at": string;
+};
+
+export type AuthorizationRequest = {
+  "transaction_id": string;
+  "mandate_id": string;
+  "quote_id": string;
+};
+
+export type RuleViolation = {
+  "code": ReasonCode;
+  "rule_id": string;
+  "mandate_id": string;
+  "message": string;
+  "actual_minor"?: number | null;
+  "limit_minor"?: number | null;
+};
+
+export type BudgetPeriod = {
+  "mandate_id": string;
+  "period_id": string;
+  "period": "calendar_week" | "calendar_month";
+  "starts_at": string;
+  "ends_at": string;
+  "currency": Currency;
+  "limit_minor": number;
+  "paid_minor": number;
+  "reserved_minor": number;
+  "available_minor": number;
+  "version": number;
+};
+
+export type BudgetResponse = {
+  "mandate_id": string;
+  "applicable_budgets": Array<BudgetPeriod>;
+  "server_time": string;
+};
+
+export type Reservation = {
+  "id": string;
+  "transaction_id": string;
+  "mandate_id": string;
+  "mandate_version": number;
+  "quote_id": string;
+  "basket_hash": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "status": "reserved" | "paid" | "cancelled" | "expired";
+  "expires_at": string;
+  "affected_period_ids": Array<string>;
+};
+
+export type AuthorizationClaims = {
+  "transaction_id": string;
+  "reservation_id": string;
+  "mandate_id": string;
+  "mandate_version": number;
+  "quote_id": string;
+  "basket_hash": string;
+  "merchant_id": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "audience": "mandate-payment-sandbox";
+  "issued_at": string;
+  "expires_at": string;
+  "token_id": string;
+};
+
+export type AuthorizationApproved = {
+  "decision_id": string;
+  "transaction_id": string;
+  "mandate_id": string;
+  "mandate_version": number;
+  "rule_ids": Array<string>;
+  "message": string;
+  "evaluated_at": string;
+  "event_sequence": number;
+  "status": "approved";
+  "reservation": Reservation;
+  "authorization_token": string;
+  "claims": AuthorizationClaims;
+  "budgets": Array<BudgetPeriod>;
+};
+
+export type AuthorizationRefused = {
+  "decision_id": string;
+  "transaction_id": string;
+  "mandate_id": string;
+  "mandate_version": number;
+  "rule_ids": Array<string>;
+  "message": string;
+  "evaluated_at": string;
+  "event_sequence": number;
+  "status": "refused" | "requires_review";
+  "violations": Array<RuleViolation>;
+  "budgets": Array<BudgetPeriod>;
+};
+
+export type AuthorizationDecision = AuthorizationApproved | AuthorizationRefused;
+
+export type PaymentRequest = {
+  "transaction_id": string;
+  "quote_id": string;
+  "authorization_token": string;
+};
+
+export type Receipt = {
+  "id": string;
+  "transaction_id": string;
+  "reservation_id": string;
+  "mandate_id": string;
+  "quote_id": string;
+  "merchant_id": string;
+  "basket_hash": string;
+  "amount_minor": number;
+  "currency": Currency;
+  "payment_mode": "sandbox";
+  "status": "paid";
+  "paid_at": string;
+};
+
+export type PaymentCompleted = {
+  "status": "completed";
+  "decision_id": string;
+  "receipt": Receipt;
+  "replayed": boolean;
+  "event_sequence": number;
+};
+
+export type PaymentRefused = {
+  "status": "refused";
+  "decision_id": string;
+  "transaction_id": string;
+  "violations": Array<RuleViolation>;
+  "message": string;
+  "event_sequence": number;
+};
+
+export type PaymentDecision = PaymentCompleted | PaymentRefused;
+
+export type CancelRequest = {
+  "reason"?: string;
+};
+
+export type CancelResponse = {
+  "reservation": Reservation;
+  "released_minor": number;
+  "event_sequence": number;
+};
+
+export type Error = {
+  "error": {
+  "code": "INVALID_REQUEST" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "STATE_CONFLICT" | "SERVICE_BUSY" | "MODEL_UNAVAILABLE" | "INTERNAL_ERROR";
+  "message": string;
+  "request_id": string;
+  "retryable": boolean;
+  "details": Record<string, unknown>;
+};
+};
+
+export type Health = {
+  "status": "ok";
+  "api_version": "0.1.0";
+  "server_time": string;
+  "payment_mode": "sandbox";
+};
+
+export type AuditEvent = {
+  "stream_id": string;
+  "sequence": number;
+  "event_id": string;
+  "type": "mandate_confirmed" | "mandate_revoked" | "quote_created" | "authorization_approved" | "authorization_refused" | "payment_completed" | "payment_refused" | "reservation_cancelled" | "reservation_expired" | "agent_run_updated";
+  "occurred_at": string;
+  "actor_id": string;
+  "mandate_id": string | null;
+  "transaction_id": string | null;
+  "payload": Record<string, unknown>;
+  "previous_hash": string;
+  "event_hash": string;
+};
+
+export type EventsResponse = {
+  "events": Array<AuditEvent>;
+  "next_after": number;
+  "has_more": boolean;
+};
+
+export type Checkpoint = {
+  "stream_id": string;
+  "sequence": number;
+  "event_hash": string;
+  "key_id": string;
+  "created_at": string;
+  "signature": string;
+};
+
+export type AuditExport = {
+  "format_version": "0.1.0";
+  "stream_id": string;
+  "events": Array<AuditEvent>;
+  "latest_checkpoint": Checkpoint | null;
+  "public_key_id": string;
+};
+
+export type CheckpointRequest = {
+  "stream_id": string;
+};
+
+export type VerifierRequest = {
+  "export": AuditExport;
+  "retained_checkpoint_id": string;
+};
+
+export type VerifierResult = {
+  "status": "valid_through_checkpoint" | "invalid" | "no_trusted_checkpoint";
+  "valid": boolean;
+  "checked_through_sequence": number;
+  "export_last_sequence": number;
+  "unanchored_event_count": number;
+  "failures": Array<{
+  "code": "HASH_MISMATCH" | "SEQUENCE_GAP" | "CHECKPOINT_MISMATCH" | "SIGNATURE_INVALID" | "TRUNCATED_BEFORE_CHECKPOINT" | "STREAM_MISMATCH";
+  "sequence": number | null;
+  "message": string;
+}>;
+  "message": string;
+};
+
+export type VerificationRequest = {
+  "variant": "unsafe" | "atomic";
+  "max_steps"?: number;
+  "initial_available_minor": number;
+  "purchase_amounts_minor": Array<number>;
+  "timeout_ms"?: number;
+};
+
+export type ModelStep = {
+  "step": number;
+  "actor": string;
+  "action": string;
+  "paid_minor": number;
+  "reserved_minor": number;
+  "remaining_minor": number;
+  "explanation": string;
+};
+
+export type VerificationResult = {
+  "id": string;
+  "variant": "unsafe" | "atomic";
+  "status": "counterexample_found" | "no_counterexample_within_bound" | "inconclusive";
+  "solver_result": "sat" | "unsat" | "unknown" | "timeout";
+  "max_steps": number;
+  "transaction_count": number;
+  "runtime_ms": number;
+  "assumptions": Array<string>;
+  "checked_properties": Array<string>;
+  "counterexample": Array<ModelStep>;
+  "message": string;
+};

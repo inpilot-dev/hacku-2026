@@ -1,0 +1,4363 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Mandate Hackathon API",
+    "version": "0.1.0",
+    "description": "Contract-first prototype: one trusted FastAPI transaction service, scoped agent access, independently retained audit checkpoints and a bounded verification component. HKD only. All payments simulated. See README.md for normative transaction, delegation and evidence requirements."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000/api/v1",
+      "description": "Local API; expose only scoped ingress when needed."
+    }
+  ],
+  "tags": [
+    {
+      "name": "system"
+    },
+    {
+      "name": "mandate"
+    },
+    {
+      "name": "agent"
+    },
+    {
+      "name": "wallet"
+    },
+    {
+      "name": "interface"
+    },
+    {
+      "name": "audit"
+    },
+    {
+      "name": "verification"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": [
+          "system"
+        ],
+        "summary": "Check local service readiness",
+        "description": "",
+        "security": [],
+        "x-roles": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/draft": {
+      "post": {
+        "operationId": "draftMandate",
+        "tags": [
+          "mandate"
+        ],
+        "summary": "Interpret user text into an inactive draft",
+        "description": "Model output is a proposal. Unresolved ambiguities must be confirmed through the final explicit Policy.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Resource created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/confirm": {
+      "post": {
+        "operationId": "confirmMandate",
+        "tags": [
+          "mandate"
+        ],
+        "summary": "Activate an explicitly confirmed policy",
+        "description": "Caller owns the draft and is authorized to delegate from the parent. Parent must remain active; child constraints can only narrow authority.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Resource created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mandate"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}": {
+      "get": {
+        "operationId": "getMandate",
+        "tags": [
+          "mandate"
+        ],
+        "summary": "Read visible mandate",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mandate"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}/revoke": {
+      "post": {
+        "operationId": "revokeMandate",
+        "tags": [
+          "mandate"
+        ],
+        "summary": "Revoke permission and cancel unpaid dependent reservations",
+        "description": "Owner or authorized ancestor owner only. Revocation and payment commit serialize in the same trusted service. Completed payments are not retroactively reversed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "operationId": "getCatalog",
+        "tags": [
+          "agent"
+        ],
+        "summary": "Read supported products and observed evidence",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "merchant_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent-runs": {
+      "post": {
+        "operationId": "startAgentRun",
+        "tags": [
+          "agent"
+        ],
+        "summary": "Start a shopping run",
+        "description": "Returns promptly; polling reads progress. Auto-purchase still uses the same wallet APIs and confirmed mandate.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent-runs/{run_id}": {
+      "get": {
+        "operationId": "getAgentRun",
+        "tags": [
+          "agent"
+        ],
+        "summary": "Read run progress",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRun"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quotes": {
+      "post": {
+        "operationId": "createQuote",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Create authoritative sandbox quote",
+        "description": "Prices, fees and category provenance come from the trusted merchant adapter, never agent amounts. Client-supplied revision is advisory; server computes current revision.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Resource created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quotes/{quote_id}": {
+      "get": {
+        "operationId": "getQuote",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Read stored quote",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "quote_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Quote"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/authorizations": {
+      "post": {
+        "operationId": "authorizePurchase",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Check policy and atomically reserve every applicable budget",
+        "description": "A well-formed request is HTTP 200 whether approved, refused or requiring review. Atomically reserve all ancestor and child budget periods. Refusal reserves nothing. No approval token in refusal.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationDecision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments": {
+      "post": {
+        "operationId": "commitPayment",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Commit one authorized sandbox payment",
+        "description": "Verify JWS then current reservation, quote, ancestors, expiry and revocation. Payment receipt, budget state and audit event commit atomically. Same completed transaction returns its original receipt without another debit, even after later revocation; that is retrieval, not a new payment.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDecision"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/{transaction_id}": {
+      "get": {
+        "operationId": "getPayment",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Read receipt for a completed transaction",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reservations/{reservation_id}/cancel": {
+      "post": {
+        "operationId": "cancelReservation",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Cancel own unpaid reservation",
+        "description": "Only owning agent or authorized user; repeated cancellation releases zero more funds. Cancelling a paid reservation is 409; refund is outside v0.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "reservation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/wallet/{mandate_id}": {
+      "get": {
+        "operationId": "getBudget",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Read paid, reserved and available applicable budgets",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "getEvents",
+        "tags": [
+          "interface"
+        ],
+        "summary": "Poll ordered events",
+        "description": "Events are scoped to the authorized demo user's stream. Agents cannot read unrelated owner logs.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit/export": {
+      "get": {
+        "operationId": "exportAudit",
+        "tags": [
+          "audit"
+        ],
+        "summary": "Export an authorized audit stream",
+        "description": "",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "stream_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditExport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit/checkpoints": {
+      "post": {
+        "operationId": "createCheckpoint",
+        "tags": [
+          "audit"
+        ],
+        "summary": "Sign checkpoint and retain it independently",
+        "description": "Verifier process stores checkpoint out of band before export mutation. Failure to retain is surfaced; an export checkpoint alone is not an independent anchor.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckpointRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Resource created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Checkpoint"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verifier/check": {
+      "post": {
+        "operationId": "verifyAudit",
+        "tags": [
+          "audit"
+        ],
+        "summary": "Verify export against an independently retained checkpoint",
+        "description": "Implemented in verifier component/process; frontend may route through an adapter. Trust pinned key and stored checkpoint, not the export's declarations.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "verifier"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifierRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifierResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/verification/runs": {
+      "post": {
+        "operationId": "verifyStateModel",
+        "tags": [
+          "verification"
+        ],
+        "summary": "Run bounded Z3 analysis",
+        "description": "Bounded model check, not a proof of all deployed code. Unknown and timeout are inconclusive. Work must not hold financial DB transactions.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request; business refusal may be returned inside the decision object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerificationResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Server resolves an opaque configured credential to actor ID, role and authorized resources. Do not accept role/owner from request headers or body. Separate demo user and agent secrets; do not expose user secret to the agent."
+      }
+    },
+    "schemas": {
+      "Currency": {
+        "type": "string",
+        "enum": [
+          "HKD"
+        ]
+      },
+      "ReasonCode": {
+        "type": "string",
+        "enum": [
+          "ORDER_CAP_EXCEEDED",
+          "PERIOD_BUDGET_EXCEEDED",
+          "MERCHANT_NOT_ALLOWED",
+          "CATEGORY_BLOCKED",
+          "CATEGORY_REVIEW_REQUIRED",
+          "MANDATE_NOT_ACTIVE",
+          "MANDATE_EXPIRED",
+          "MANDATE_REVOKED",
+          "MANDATE_VERSION_CHANGED",
+          "QUOTE_EXPIRED",
+          "QUOTE_CHANGED",
+          "RESERVATION_EXPIRED",
+          "RESERVATION_CANCELLED",
+          "AUTHORIZATION_INVALID",
+          "AUTHORIZATION_EXPIRED",
+          "TRANSACTION_CONFLICT",
+          "APPROVAL_REQUIRED",
+          "POLICY_NOT_NARROWER",
+          "PARENT_MANDATE_INVALID"
+        ]
+      },
+      "Evidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "product_price",
+              "delivery_fee",
+              "merchant_identity",
+              "category"
+            ]
+          },
+          "capture_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Project-relative screenshot or evidence path; no credentials."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conditions": {
+            "type": "string",
+            "description": "Applicability of the observation, e.g. basket threshold, delivery area, membership."
+          }
+        },
+        "required": [
+          "id",
+          "source_url",
+          "observed_at",
+          "kind",
+          "capture_path",
+          "conditions"
+        ]
+      },
+      "Category": {
+        "type": "string",
+        "enum": [
+          "produce",
+          "dairy",
+          "eggs",
+          "meat",
+          "seafood",
+          "bakery",
+          "pantry",
+          "beverage_non_alcoholic",
+          "alcohol",
+          "household",
+          "unknown"
+        ]
+      },
+      "Product": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "description": "Untrusted listing text; never authority."
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "category_status": {
+            "type": "string",
+            "enum": [
+              "curated",
+              "verified",
+              "unknown",
+              "conflicting"
+            ]
+          },
+          "unit_label": {
+            "type": "string"
+          },
+          "unit_price_minor": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Observed unit price in HKD cents; never a float."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            }
+          }
+        },
+        "required": [
+          "id",
+          "merchant_id",
+          "title",
+          "description",
+          "category",
+          "category_status",
+          "unit_label",
+          "unit_price_minor",
+          "currency",
+          "available",
+          "evidence_ids"
+        ]
+      },
+      "CatalogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          }
+        },
+        "required": [
+          "products",
+          "evidence"
+        ]
+      },
+      "PeriodLimit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "calendar_week",
+              "calendar_month"
+            ]
+          },
+          "limit_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "timezone": {
+            "type": "string",
+            "enum": [
+              "Asia/Hong_Kong"
+            ]
+          }
+        },
+        "required": [
+          "period",
+          "limit_minor",
+          "timezone"
+        ]
+      },
+      "Policy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "per_order_limit_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "period_limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PeriodLimit"
+            },
+            "minItems": 1
+          },
+          "allowed_merchant_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "blocked_categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Category"
+            },
+            "uniqueItems": true
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "approval_above_minor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Optional threshold; exceeding it returns APPROVAL_REQUIRED. MVP does not grant new approval automatically."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "currency",
+          "per_order_limit_minor",
+          "period_limits",
+          "allowed_merchant_ids",
+          "blocked_categories",
+          "expires_at",
+          "approval_above_minor"
+        ]
+      },
+      "DraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "delegatee_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "parent_mandate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "delegatee_id"
+        ]
+      },
+      "Ambiguity": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "question"
+        ]
+      },
+      "DraftResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "owner_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "delegatee_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "parent_mandate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proposed_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Policy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ambiguities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Ambiguity"
+            }
+          },
+          "summary": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "draft_id",
+          "owner_id",
+          "delegatee_id",
+          "parent_mandate_id",
+          "proposed_policy",
+          "ambiguities",
+          "summary",
+          "expires_at"
+        ]
+      },
+      "ConfirmRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          }
+        },
+        "required": [
+          "draft_id",
+          "policy"
+        ]
+      },
+      "Mandate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "owner_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "delegatee_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "parent_mandate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 timestamp with an explicit UTC offset."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "owner_id",
+          "delegatee_id",
+          "parent_mandate_id",
+          "version",
+          "status",
+          "policy",
+          "created_at",
+          "revoked_at"
+        ]
+      },
+      "RevokeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "RevokeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mandate": {
+            "$ref": "#/components/schemas/Mandate"
+          },
+          "cancelled_reservation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            }
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "mandate",
+          "cancelled_reservation_ids",
+          "event_sequence"
+        ]
+      },
+      "ShoppingItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "quantity"
+        ]
+      },
+      "AgentRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "shopping_list": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShoppingItem"
+            },
+            "minItems": 1
+          },
+          "instruction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "auto_purchase": {
+            "type": "boolean",
+            "default": false,
+            "description": "Only within an already confirmed mandate. Default false for early integration."
+          }
+        },
+        "required": [
+          "mandate_id",
+          "shopping_list"
+        ]
+      },
+      "AgentRun": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_review",
+              "quoted",
+              "completed",
+              "refused",
+              "failed"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "jev",
+              "fallback",
+              "scripted"
+            ]
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "execution_mode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "cloud",
+              "scripted"
+            ]
+          },
+          "quote_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_decision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "id",
+          "mandate_id",
+          "status",
+          "provider",
+          "model_id",
+          "execution_mode",
+          "quote_id",
+          "transaction_id",
+          "payment_id",
+          "latest_decision_id",
+          "message",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "QuoteItemRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "product_id",
+          "quantity"
+        ]
+      },
+      "QuoteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteItemRequest"
+            },
+            "minItems": 1
+          },
+          "delivery_context_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "merchant_id",
+          "items",
+          "delivery_context_id"
+        ]
+      },
+      "QuoteItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "title": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unit_price_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "line_total_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "category_status": {
+            "type": "string",
+            "enum": [
+              "curated",
+              "verified",
+              "unknown",
+              "conflicting"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            }
+          }
+        },
+        "required": [
+          "product_id",
+          "title",
+          "quantity",
+          "unit_price_minor",
+          "line_total_minor",
+          "category",
+          "category_status",
+          "evidence_ids"
+        ]
+      },
+      "Charge": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "delivery",
+              "other"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "amount_minor",
+          "evidence_ids"
+        ]
+      },
+      "Quote": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "revision": {
+            "type": "string"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteItem"
+            }
+          },
+          "subtotal_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "charges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Charge"
+            }
+          },
+          "total_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "basket_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "delivery_context_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "data_mode": {
+            "type": "string",
+            "enum": [
+              "observed_snapshot",
+              "observed_live"
+            ]
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "id",
+          "merchant_id",
+          "revision",
+          "currency",
+          "items",
+          "subtotal_minor",
+          "charges",
+          "total_minor",
+          "basket_hash",
+          "delivery_context_id",
+          "data_mode",
+          "evidence_ids",
+          "created_at",
+          "expires_at"
+        ],
+        "description": "Authoritative for the sandbox merchant adapter, not proof of a live merchant checkout. Amounts and categories are computed server-side from catalog/evidence."
+      },
+      "AuthorizationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Client-created stable UUID recommended; retained across retries."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          }
+        },
+        "required": [
+          "transaction_id",
+          "mandate_id",
+          "quote_id"
+        ]
+      },
+      "RuleViolation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ReasonCode"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "message": {
+            "type": "string"
+          },
+          "actual_minor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit_minor": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "rule_id",
+          "mandate_id",
+          "message"
+        ]
+      },
+      "BudgetPeriod": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "period_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "calendar_week",
+              "calendar_month"
+            ]
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "limit_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "paid_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reserved_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "available_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "mandate_id",
+          "period_id",
+          "period",
+          "starts_at",
+          "ends_at",
+          "currency",
+          "limit_minor",
+          "paid_minor",
+          "reserved_minor",
+          "available_minor",
+          "version"
+        ]
+      },
+      "BudgetResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "applicable_budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetPeriod"
+            }
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "mandate_id",
+          "applicable_budgets",
+          "server_time"
+        ]
+      },
+      "Reservation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "basket_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "reserved",
+              "paid",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "affected_period_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Opaque server-generated identifier."
+            }
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "mandate_id",
+          "mandate_version",
+          "quote_id",
+          "basket_hash",
+          "amount_minor",
+          "currency",
+          "status",
+          "expires_at",
+          "affected_period_ids"
+        ]
+      },
+      "AuthorizationClaims": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "reservation_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "basket_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "audience": {
+            "type": "string",
+            "enum": [
+              "mandate-payment-sandbox"
+            ]
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          }
+        },
+        "required": [
+          "transaction_id",
+          "reservation_id",
+          "mandate_id",
+          "mandate_version",
+          "quote_id",
+          "basket_hash",
+          "merchant_id",
+          "amount_minor",
+          "currency",
+          "audience",
+          "issued_at",
+          "expires_at",
+          "token_id"
+        ],
+        "description": "Public display of verified claims. The signed token is authoritative; payment also checks current persisted state."
+      },
+      "AuthorizationApproved": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rule_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved"
+            ]
+          },
+          "reservation": {
+            "$ref": "#/components/schemas/Reservation"
+          },
+          "authorization_token": {
+            "type": "string",
+            "description": "Opaque compact JWS signed with EdDSA/Ed25519. Do not persist token in audit or print it in logs."
+          },
+          "claims": {
+            "$ref": "#/components/schemas/AuthorizationClaims"
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetPeriod"
+            }
+          }
+        },
+        "required": [
+          "decision_id",
+          "transaction_id",
+          "mandate_id",
+          "mandate_version",
+          "rule_ids",
+          "message",
+          "evaluated_at",
+          "event_sequence",
+          "status",
+          "reservation",
+          "authorization_token",
+          "claims",
+          "budgets"
+        ]
+      },
+      "AuthorizationRefused": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rule_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          },
+          "evaluated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "refused",
+              "requires_review"
+            ]
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleViolation"
+            },
+            "minItems": 1
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BudgetPeriod"
+            }
+          }
+        },
+        "required": [
+          "decision_id",
+          "transaction_id",
+          "mandate_id",
+          "mandate_version",
+          "rule_ids",
+          "message",
+          "evaluated_at",
+          "event_sequence",
+          "status",
+          "violations",
+          "budgets"
+        ]
+      },
+      "AuthorizationDecision": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuthorizationApproved"
+          },
+          {
+            "$ref": "#/components/schemas/AuthorizationRefused"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "status",
+          "mapping": {
+            "approved": "#/components/schemas/AuthorizationApproved",
+            "refused": "#/components/schemas/AuthorizationRefused",
+            "requires_review": "#/components/schemas/AuthorizationRefused"
+          }
+        }
+      },
+      "PaymentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "authorization_token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "quote_id",
+          "authorization_token"
+        ]
+      },
+      "Receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "reservation_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "merchant_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "basket_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "payment_mode": {
+            "type": "string",
+            "enum": [
+              "sandbox"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "paid"
+            ]
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "id",
+          "transaction_id",
+          "reservation_id",
+          "mandate_id",
+          "quote_id",
+          "merchant_id",
+          "basket_hash",
+          "amount_minor",
+          "currency",
+          "payment_mode",
+          "status",
+          "paid_at"
+        ]
+      },
+      "PaymentCompleted": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed"
+            ]
+          },
+          "decision_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/Receipt"
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "status",
+          "decision_id",
+          "receipt",
+          "replayed",
+          "event_sequence"
+        ]
+      },
+      "PaymentRefused": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "refused"
+            ]
+          },
+          "decision_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "transaction_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "violations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleViolation"
+            },
+            "minItems": 1
+          },
+          "message": {
+            "type": "string"
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "status",
+          "decision_id",
+          "transaction_id",
+          "violations",
+          "message",
+          "event_sequence"
+        ]
+      },
+      "PaymentDecision": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PaymentCompleted"
+          },
+          {
+            "$ref": "#/components/schemas/PaymentRefused"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "status",
+          "mapping": {
+            "completed": "#/components/schemas/PaymentCompleted",
+            "refused": "#/components/schemas/PaymentRefused"
+          }
+        }
+      },
+      "CancelRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": []
+      },
+      "CancelResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reservation": {
+            "$ref": "#/components/schemas/Reservation"
+          },
+          "released_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "reservation",
+          "released_minor",
+          "event_sequence"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "INVALID_REQUEST",
+                  "UNAUTHENTICATED",
+                  "FORBIDDEN",
+                  "NOT_FOUND",
+                  "IDEMPOTENCY_CONFLICT",
+                  "STATE_CONFLICT",
+                  "SERVICE_BUSY",
+                  "MODEL_UNAVAILABLE",
+                  "INTERNAL_ERROR"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "message",
+              "request_id",
+              "retryable",
+              "details"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Health": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "api_version": {
+            "type": "string",
+            "enum": [
+              "0.1.0"
+            ]
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "payment_mode": {
+            "type": "string",
+            "enum": [
+              "sandbox"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "api_version",
+          "server_time",
+          "payment_mode"
+        ]
+      },
+      "AuditEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stream_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "event_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "mandate_confirmed",
+              "mandate_revoked",
+              "quote_created",
+              "authorization_approved",
+              "authorization_refused",
+              "payment_completed",
+              "payment_refused",
+              "reservation_cancelled",
+              "reservation_expired",
+              "agent_run_updated"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "actor_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "mandate_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Opaque server-generated identifier."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Versioned event-specific payload; include policy snapshot/version and rule IDs for policy decisions. Never include bearer/JWS secrets."
+          },
+          "previous_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "event_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "stream_id",
+          "sequence",
+          "event_id",
+          "type",
+          "occurred_at",
+          "actor_id",
+          "mandate_id",
+          "transaction_id",
+          "payload",
+          "previous_hash",
+          "event_hash"
+        ]
+      },
+      "EventsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "next_after": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "events",
+          "next_after",
+          "has_more"
+        ]
+      },
+      "Checkpoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stream_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "event_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "key_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "signature": {
+            "type": "string",
+            "description": "Base64url Ed25519 signature of canonical checkpoint fields excluding signature."
+          }
+        },
+        "required": [
+          "stream_id",
+          "sequence",
+          "event_hash",
+          "key_id",
+          "created_at",
+          "signature"
+        ]
+      },
+      "AuditExport": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "format_version": {
+            "type": "string",
+            "enum": [
+              "0.1.0"
+            ]
+          },
+          "stream_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            }
+          },
+          "latest_checkpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Checkpoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "public_key_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          }
+        },
+        "required": [
+          "format_version",
+          "stream_id",
+          "events",
+          "latest_checkpoint",
+          "public_key_id"
+        ]
+      },
+      "CheckpointRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "stream_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          }
+        },
+        "required": [
+          "stream_id"
+        ]
+      },
+      "VerifierRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "export": {
+            "$ref": "#/components/schemas/AuditExport"
+          },
+          "retained_checkpoint_id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          }
+        },
+        "required": [
+          "export",
+          "retained_checkpoint_id"
+        ],
+        "description": "Verifier resolves checkpoint ID from its own retained store and trusts pinned keys. It does not trust a new checkpoint supplied by the export."
+      },
+      "VerifierResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid_through_checkpoint",
+              "invalid",
+              "no_trusted_checkpoint"
+            ]
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "checked_through_sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "export_last_sequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unanchored_event_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "HASH_MISMATCH",
+                    "SEQUENCE_GAP",
+                    "CHECKPOINT_MISMATCH",
+                    "SIGNATURE_INVALID",
+                    "TRUNCATED_BEFORE_CHECKPOINT",
+                    "STREAM_MISMATCH"
+                  ]
+                },
+                "sequence": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "sequence",
+                "message"
+              ]
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "valid",
+          "checked_through_sequence",
+          "export_last_sequence",
+          "unanchored_event_count",
+          "failures",
+          "message"
+        ]
+      },
+      "VerificationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": [
+              "unsafe",
+              "atomic"
+            ]
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "default": 8
+          },
+          "initial_available_minor": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "purchase_amounts_minor": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000,
+            "default": 3000
+          }
+        },
+        "required": [
+          "variant",
+          "initial_available_minor",
+          "purchase_amounts_minor"
+        ]
+      },
+      "ModelStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actor": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "paid_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reserved_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "remaining_minor": {
+            "type": "integer"
+          },
+          "explanation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "actor",
+          "action",
+          "paid_minor",
+          "reserved_minor",
+          "remaining_minor",
+          "explanation"
+        ]
+      },
+      "VerificationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Opaque server-generated identifier."
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "unsafe",
+              "atomic"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "counterexample_found",
+              "no_counterexample_within_bound",
+              "inconclusive"
+            ]
+          },
+          "solver_result": {
+            "type": "string",
+            "enum": [
+              "sat",
+              "unsat",
+              "unknown",
+              "timeout"
+            ]
+          },
+          "max_steps": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "transaction_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "runtime_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checked_properties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "counterexample": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelStep"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "variant",
+          "status",
+          "solver_result",
+          "max_steps",
+          "transaction_count",
+          "runtime_ms",
+          "assumptions",
+          "checked_properties",
+          "counterexample",
+          "message"
+        ]
+      }
+    }
+  }
+}
