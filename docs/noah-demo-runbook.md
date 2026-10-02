@@ -28,6 +28,8 @@ The captured Wellcome catalog is the default. Its current snapshot is timestampe
 
 If you start a fresh order after a receipt, the active order panel clears the prior checkout result. The saved receipt remains in the wallet history; it is not presented as the outcome of the new basket.
 
+A clean-ledger browser rehearsal on 3 October confirmed the refusal scene with the captured Blue Girl beer at HK$51: the wallet returned the blocked-category refusal and no receipt. Revoking the mandate then made the shopping inputs and quote action read-only/disabled. The event API remains unconnected in this checkout.
+
 ## Evidence boundaries to say aloud
 
 - Prices are observations from the capture timestamp, not live checkout prices.
