@@ -358,6 +358,7 @@ function App() {
       }
       if (result.payment.status === 'completed') {
         setPaymentResult(result.payment);
+        setPurchaseRefusal(null);
         setCheckoutUncertain(false);
         try { setBudget(await api.budget(token, mandate.id)); } catch { /* Keep the authoritative receipt even if the follow-up refresh fails. */ }
         announce({ title: result.payment.replayed ? 'Existing receipt recovered' : 'Sandbox purchase complete', detail: `${money(result.payment.receipt.amount_minor)} simulated · no money moved.`, tone: 'success' });
