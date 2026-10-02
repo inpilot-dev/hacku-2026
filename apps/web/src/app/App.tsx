@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
-import type { AuditEvent, AuditExport, BudgetResponse, CatalogResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, VerificationResult, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
@@ -52,6 +52,10 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showMandateReview, setShowMandateReview] = useState(false);
   const [policy, setPolicy] = useState<Policy>(initialPolicy);
+  const acceptAgentQuote = useCallback((nextQuote: Quote | null) => {
+    setQuote(nextQuote);
+    setPaymentResult(null);
+  }, []);
 
   const announce = useCallback((next: Toast) => {
     setToast(next);
@@ -210,7 +214,7 @@ function App() {
       <div className="page-content">
         {catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><ShieldAlert size={16} /></span><span><strong>Unverified catalog:</strong> product prices lack complete source evidence and are not verified live offers. Payments are simulated and no money moves.</span><button onClick={() => setView('activity')}>What this means <ArrowUpRight size={14} /></button></div>}
         {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} busy={busy} onRevoke={() => void revokeMandate()} />}
-        {view === 'shopping' && <Shopping products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity} quote={quote} busy={busy} active={Boolean(active)} onConfirm={() => setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onPurchase={() => void completeDemoPurchase()} paymentResult={paymentResult} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
+        {view === 'shopping' && <Shopping token={token} mandateId={mandate?.id ?? ''} products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity} quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)} onConfirm={() => setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onPurchase={() => void completeDemoPurchase()} paymentResult={paymentResult} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
         {view === 'wallet' && <WalletView mandate={mandate} budget={budget} currentBudget={currentBudget} spentRatio={spentRatio} busy={busy} onRevoke={() => void revokeMandate()} onRefresh={() => void refresh()} />}
         {view === 'activity' && <SafetyView token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
@@ -268,13 +272,96 @@ function Overview({ token, mandate, active, spentRatio, currentBudget, onShop, o
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
 
-function Shopping({ products, evidence, quantities, onChange, quote, busy, active, onConfirm, onBuildQuote, onPurchase, paymentResult, onUnavailable, catalogIsPlaceholder }: { products: Product[]; evidence: Evidence[]; quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null; busy: string; active: boolean; onConfirm: () => void; onBuildQuote: () => void; onPurchase: () => void; paymentResult: PaymentCompleted | null; onUnavailable: () => void; catalogIsPlaceholder: boolean }) {
+function Shopping({ token, mandateId, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onPurchase, paymentResult, onUnavailable, catalogIsPlaceholder }: { token: string; mandateId: string; products: Product[]; evidence: Evidence[]; quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null; onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void; onBuildQuote: () => void; onPurchase: () => void; paymentResult: PaymentCompleted | null; onUnavailable: () => void; catalogIsPlaceholder: boolean }) {
+  const [shoppingListText, setShoppingListText] = useState('Apples\nMilk\nEggs');
+  const [instruction, setInstruction] = useState('');
+  const [agentRunId, setAgentRunId] = useState(() => mandateId ? sessionStorage.getItem(`mandate-agent-run-${mandateId}`) ?? '' : '');
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+  const [agentSubmitting, setAgentSubmitting] = useState(false);
+  const [agentError, setAgentError] = useState('');
+  const [agentQuoteUnavailable, setAgentQuoteUnavailable] = useState(false);
+  const [quoteRetry, setQuoteRetry] = useState(0);
+  const storageKey = mandateId ? `mandate-agent-run-${mandateId}` : '';
+  const agentWorking = agentRun?.status === 'queued' || agentRun?.status === 'running';
+  const basketCount = quote ? quote.items.reduce((sum, item) => sum + item.quantity, 0) : Object.values(quantities).reduce((sum, count) => sum + count, 0);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    setAgentRunId(sessionStorage.getItem(storageKey) ?? '');
+    setAgentRun(null);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!agentRunId || !mandateId) return;
+    let disposed = false;
+    let timer = 0;
+    let loadedQuoteId = '';
+    async function poll() {
+      try {
+        const latest = await api.agentRun(token, agentRunId);
+        if (disposed) return;
+        setAgentRun(latest);
+        setAgentError('');
+        if (latest.status === 'quoted' && latest.quote_id && latest.quote_id !== loadedQuoteId) {
+          loadedQuoteId = latest.quote_id;
+          try {
+            onQuoteChange(await api.quoteById(token, latest.quote_id));
+            if (!disposed) setAgentQuoteUnavailable(false);
+          } catch (error) {
+            if (!disposed) {
+              setAgentQuoteUnavailable(true);
+              setAgentError(`Run is ready, but its quote could not be loaded: ${error instanceof Error ? error.message : 'Request failed.'}`);
+            }
+          }
+        }
+        if (latest.status === 'queued' || latest.status === 'running') timer = window.setTimeout(() => void poll(), 1400);
+      } catch (error) {
+        if (disposed) return;
+        const status = error instanceof ApiError ? error.status : 0;
+        setAgentError(status === 404 ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
+        if (![401, 403, 404].includes(status)) timer = window.setTimeout(() => void poll(), 4000);
+      }
+    }
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [agentRunId, mandateId, onQuoteChange, quoteRetry, token]);
+
+  async function startAgentRun(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active || !mandateId || agentSubmitting || agentWorking || busy) return;
+    const shoppingList = shoppingListText.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).map((name) => ({ name, quantity: 1 }));
+    if (shoppingList.length === 0) { setAgentError('Add at least one item, one per line.'); return; }
+    const request: AgentRunRequest = { mandate_id: mandateId, shopping_list: shoppingList, instruction: instruction.trim() || null, auto_purchase: false };
+    setAgentError(''); setAgentQuoteUnavailable(false); setAgentRun(null); setAgentRunId(''); onQuoteChange(null);
+    if (storageKey) sessionStorage.removeItem(storageKey);
+    setAgentSubmitting(true);
+    try {
+      const started = await api.startAgentRun(token, request);
+      clearIdempotency('agent-run');
+      if (storageKey) sessionStorage.setItem(storageKey, started.id);
+      setAgentRun(started);
+      setAgentRunId(started.id);
+    } catch (error) {
+      setAgentError(error instanceof ApiError && error.status === 404
+        ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.'
+        : error instanceof Error ? error.message : 'Could not start the shopping agent.');
+    } finally { setAgentSubmitting(false); }
+  }
+
   return <>
-    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Pick a few essentials. The wallet will check the final quoted total against your family rules.</p></div><span className="merchant-chip"><span className="merchant-logo">D</span><span><strong>Demo Grocery Store A</strong><small>Prototype merchant · delivery</small></span><ChevronDown size={15} /></span></div>
-    {!active && <div className="inline-alert"><ShieldAlert size={18} /><span><strong>Set up your allowance before shopping.</strong> The wallet needs active spending rules to create a quote.</span><button className="text-button" onClick={onConfirm}>Set up now <ArrowUpRight size={14} /></button></div>}
-    <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">DEMO CATALOG</div><h2>Everyday essentials</h2></div><span className="catalog-count">{products.length} items</span></div><div className="product-list">{products.map((product, index) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={index} disabled={busy === 'quote' || busy === 'purchase'} />)}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
-      <aside className="panel basket-panel"><div className="panel-heading"><div><div className="eyebrow">YOUR BASKET</div><h2>Order summary</h2></div><span className="basket-badge"><ShoppingBasket size={14} />{Object.values(quantities).reduce((sum, count) => sum + count, 0)}</span></div>{quote ? <>{paymentResult && <div className="purchase-receipt"><span className="receipt-check"><BadgeCheck size={18} /></span><span><strong>Sandbox receipt saved</strong><small>{paymentResult.receipt.id} · {shortDate(paymentResult.receipt.paid_at)}</small></span><b>{money(paymentResult.receipt.amount_minor)}</b></div>}<div className="quote-status"><BadgeCheck size={17} /><span><strong>Wallet quote ready</strong><small>Expires {new Date(quote.expires_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}</small></span></div><div className="quote-lines">{quote.items.map((item) => <div className="quote-evidence-line" key={item.product_id}><span>{item.title} <small>×{item.quantity}</small><EvidenceRefs ids={item.evidence_ids} evidence={evidence} /></span><strong>{money(item.line_total_minor)}</strong></div>)}{quote.charges.length ? quote.charges.map((charge, index) => <div className="quote-evidence-line" key={`${charge.kind}-${index}`}><span>{charge.label}<EvidenceRefs ids={charge.evidence_ids} evidence={evidence} /></span><strong>{money(charge.amount_minor)}</strong></div>) : <div><span>Delivery</span><strong>{money(0)}</strong></div>}</div><div className="basket-total"><span>Total from wallet</span><strong>{money(quote.total_minor)}</strong></div><button className="button button-primary full-button" onClick={onPurchase} disabled={busy === 'purchase' || Boolean(paymentResult)}>{busy === 'purchase' ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy === 'purchase' ? 'Checking wallet…' : paymentResult ? 'Purchase complete' : 'Complete sandbox purchase'}</button><p className="checkout-note">Local scripted demo only · wallet policy still decides · no real funds move.</p></> : <><div className="basket-empty"><div className="basket-art"><ShoppingBasket size={25} /></div><strong>Your basket is waiting</strong><p>Add items to see a quote from the wallet, including delivery.</p></div><div className="basket-estimate"><span>Estimated total</span><strong>{money(products.reduce((sum, product) => sum + product.unit_price_minor * (quantities[product.id] ?? 0), 0))}</strong></div><button className="button button-primary full-button" onClick={onBuildQuote} disabled={!active || busy === 'quote' || !Object.values(quantities).some((n) => n > 0)}>{busy === 'quote' ? <span className="spinner" /> : <Shield size={16} />}{busy === 'quote' ? 'Getting wallet quote…' : 'Check against family rules'}</button><p className="checkout-note">{catalogIsPlaceholder ? 'Unverified prices · not live offer data' : 'Wallet checks the final basket total.'}</p></>}</aside></div>
-    <div className="bottom-note"><span><Shield size={15} /> The shopping agent is not connected yet. The wallet remains the only authority for spending.</span><button className="text-button" onClick={onUnavailable}>How checkout works <ArrowUpRight size={14} /></button></div>
+    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">D</span><span><strong>Demo Grocery Store A</strong><small>Currently supported merchant</small></span><ChevronDown size={15} /></span></div>
+    {!active && <div className="inline-alert"><ShieldAlert size={18} /><span><strong>Set up your allowance before shopping.</strong> The wallet needs active spending rules to create an agent run or quote.</span><button className="text-button" onClick={onConfirm}>Set up now <ArrowUpRight size={14} /></button></div>}
+    <form className="panel agent-request-panel" onSubmit={(event) => void startAgentRun(event)}>
+      <div className="agent-request-heading"><span className="icon-bubble lavender"><Sparkles size={17} /></span><div><div className="eyebrow">SHOPPING AGENT</div><h2>Build a basket from your list</h2></div></div>
+      <label>Items <small>One item per line; each starts at quantity 1.</small><textarea value={shoppingListText} onChange={(event) => setShoppingListText(event.target.value)} rows={3} disabled={!active || agentSubmitting || agentWorking} /></label>
+      <label>Extra instruction <small>Optional preference for the agent; confirmed spending rules still take priority.</small><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="e.g. Prefer lower-sugar options" disabled={!active || agentSubmitting || agentWorking} /></label>
+      <div className="agent-request-footer"><span><Shield size={14} /> Auto-purchase is off. Review the returned quote before checkout.</span><button className="button button-primary" type="submit" disabled={!active || agentSubmitting || agentWorking || Boolean(busy) || !shoppingListText.trim()}>{agentSubmitting || agentWorking ? <span className="spinner" /> : <Sparkles size={15} />}{agentSubmitting ? 'Starting agent…' : agentWorking ? 'Building basket…' : 'Ask agent to build basket'}</button></div>
+      {agentRun && <div className={`agent-run-status agent-run-${agentRun.status}`} role="status"><strong>{agentRun.status.replace(/_/g, ' ')}</strong><span>{agentRun.message}</span><small>{agentRun.provider} · {agentRun.execution_mode}{agentRun.model_id ? ` · ${agentRun.model_id}` : ''}</small></div>}
+      {agentError && <div className="form-error" role="alert">{agentError}{agentQuoteUnavailable && <button type="button" className="text-button" onClick={() => { setAgentError(''); setQuoteRetry((value) => value + 1); }}>Retry loading quote</button>}</div>}
+    </form>
+    <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">SCRIPTED CATALOG FALLBACK</div><h2>Choose items manually</h2></div><span className="catalog-count">{products.length} items</span></div><div className="product-list">{products.map((product, index) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={index} disabled={agentWorking || busy === 'quote' || busy === 'purchase'} />)}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
+      <aside className="panel basket-panel"><div className="panel-heading"><div><div className="eyebrow">YOUR BASKET</div><h2>Order summary</h2></div><span className="basket-badge"><ShoppingBasket size={14} />{basketCount}</span></div>{quote ? <>{paymentResult && <div className="purchase-receipt"><span className="receipt-check"><BadgeCheck size={18} /></span><span><strong>Sandbox receipt saved</strong><small>{paymentResult.receipt.id} · {shortDate(paymentResult.receipt.paid_at)}</small></span><b>{money(paymentResult.receipt.amount_minor)}</b></div>}<div className="quote-status"><BadgeCheck size={17} /><span><strong>Wallet quote ready</strong><small>Expires {new Date(quote.expires_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}</small></span></div><div className="quote-lines">{quote.items.map((item) => <div className="quote-evidence-line" key={item.product_id}><span>{item.title} <small>×{item.quantity}</small><EvidenceRefs ids={item.evidence_ids} evidence={evidence} /></span><strong>{money(item.line_total_minor)}</strong></div>)}{quote.charges.length ? quote.charges.map((charge, index) => <div className="quote-evidence-line" key={`${charge.kind}-${index}`}><span>{charge.label}<EvidenceRefs ids={charge.evidence_ids} evidence={evidence} /></span><strong>{money(charge.amount_minor)}</strong></div>) : <div><span>Delivery</span><strong>{money(0)}</strong></div>}</div><div className="basket-total"><span>Total from wallet</span><strong>{money(quote.total_minor)}</strong></div><button className="button button-primary full-button" onClick={onPurchase} disabled={busy === 'purchase' || Boolean(paymentResult)}>{busy === 'purchase' ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy === 'purchase' ? 'Checking wallet…' : paymentResult ? 'Purchase complete' : 'Complete sandbox purchase'}</button><p className="checkout-note">Wallet policy still decides · local demo payment · no real funds move.</p></> : <><div className="basket-empty"><div className="basket-art"><ShoppingBasket size={25} /></div><strong>Your basket is waiting</strong><p>Add items to see a quote from the wallet, including delivery.</p></div><div className="basket-estimate"><span>Estimated total</span><strong>{money(products.reduce((sum, product) => sum + product.unit_price_minor * (quantities[product.id] ?? 0), 0))}</strong></div><button className="button button-primary full-button" onClick={onBuildQuote} disabled={!active || busy === 'quote' || !Object.values(quantities).some((n) => n > 0)}>{busy === 'quote' ? <span className="spinner" /> : <Shield size={16} />}{busy === 'quote' ? 'Getting wallet quote…' : 'Check against family rules'}</button><p className="checkout-note">{catalogIsPlaceholder ? 'Unverified prices · not live offer data' : 'Wallet checks the final basket total.'}</p></>}</aside></div>
+    <div className="bottom-note"><span><Shield size={15} /> Shopping suggestions cannot authorize spending. The wallet is the final authority.</span><button className="text-button" onClick={onUnavailable}>How checkout works <ArrowUpRight size={14} /></button></div>
   </>;
 }
 
