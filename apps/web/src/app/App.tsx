@@ -494,6 +494,7 @@ function App() {
           onEditRefusedBasket={editRefusedBasket} onPurchase={() => void completeDemoPurchase()}
           onReconcile={(savedQuote) => void reconcileCheckout(savedQuote)} paymentResult={paymentResult}
           checkoutUncertain={checkoutUncertain} purchaseRefusal={purchaseRefusal}
+          onResetCheckout={() => { setPaymentResult(null); setPurchaseRefusal(null); setCheckoutUncertain(false); }}
           paymentOptions={paymentOptions} paymentOptionsState={paymentOptionsState}
           selectedPaymentRouteId={selectedPaymentRouteId} onSelectPaymentRoute={setSelectedPaymentRouteId}
           onApproveReview={(id) => void decidePurchaseApproval(id, true)} onResumeApproval={(id) => void completeDemoPurchase(id)}
@@ -568,12 +569,12 @@ function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
 
-function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, paymentResult, checkoutUncertain, purchaseRefusal, paymentOptions, paymentOptionsState, selectedPaymentRouteId, onSelectPaymentRoute, onApproveReview, onResumeApproval, onDenyReview, onUnavailable, catalogIsPlaceholder }: {
+function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, onResetCheckout, paymentResult, checkoutUncertain, purchaseRefusal, paymentOptions, paymentOptionsState, selectedPaymentRouteId, onSelectPaymentRoute, onApproveReview, onResumeApproval, onDenyReview, onUnavailable, catalogIsPlaceholder }: {
   token: string; mandateId: string; mandateStatus: Mandate['status'] | null; products: Product[]; storeLabel: string; evidence: Evidence[];
   quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null;
   onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void;
   onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void;
-  onPurchase: () => void; onReconcile: (quote: Quote) => void; paymentResult: (PaymentCompleted | RecoveredPayment) | null;
+  onPurchase: () => void; onReconcile: (quote: Quote) => void; onResetCheckout: () => void; paymentResult: (PaymentCompleted | RecoveredPayment) | null;
   checkoutUncertain: boolean; purchaseRefusal: PurchaseRefusal | null;
   paymentOptions: PaymentOptionsResponse | null; paymentOptionsState: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
   selectedPaymentRouteId: string; onSelectPaymentRoute: (routeId: string) => void;
@@ -662,6 +663,7 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
     if (shoppingList.length === 0) { setAgentError('Add at least one item, one per line.'); return; }
     const request: AgentRunRequest = { mandate_id: mandateId, shopping_list: shoppingList, instruction: instruction.trim() || null, auto_purchase: false };
     setAgentError(''); setAgentQuoteUnavailable(false); setAgentRun(null); setAgentRunId(''); onQuoteChange(null);
+    onResetCheckout();
     if (storageKey) sessionStorage.removeItem(storageKey);
     setAgentSubmitting(true);
     try {
