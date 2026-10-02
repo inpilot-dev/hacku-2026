@@ -45,6 +45,27 @@ class Catalog:
         path = path or os.environ.get("MANDATE_CATALOG_PATH") or DEFAULT_CATALOG
         return cls(json.loads(Path(path).read_text()))
 
+    def listing(self, merchant_id: str | None = None) -> dict:
+        """Products plus every evidence record they, their merchant and its fee rules cite.
+
+        Read-only view for GET /catalog (contract CatalogResponse). Raises
+        CatalogError("not_found") for an unknown merchant.
+        """
+        merchants = [merchant_id] if merchant_id is not None else list(self._data["merchants"])
+        cited: list[str] = []
+        for mid in merchants:
+            cited += self.merchant(mid).get("evidence_ids", [])
+        products = [copy.deepcopy(p) for p in self._data["products"] if p["merchant_id"] in merchants]
+        for product in products:
+            cited += product["evidence_ids"]
+        for context in self._data["delivery_contexts"]:
+            if context["merchant_id"] in merchants:
+                for rule in context["fee_rules"]:
+                    cited += rule["evidence_ids"]
+        wanted = set(cited)
+        evidence = [copy.deepcopy(e) for e in self._data["evidence"] if e["id"] in wanted]
+        return {"products": products, "evidence": evidence}
+
     def merchant(self, merchant_id: str) -> dict:
         merchant = self._data["merchants"].get(merchant_id)
         if merchant is None:

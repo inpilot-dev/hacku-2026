@@ -10,3 +10,8 @@ __pycache__/
 
 # Local wallet database and signing keys
 services/api/.data/
+
+# Local secrets (API keys)
+.env
+.env.*
+!.env.example

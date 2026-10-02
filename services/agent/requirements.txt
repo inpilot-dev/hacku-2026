@@ -1,0 +1,3 @@
+# Browser navigation for catalog_capture.browse (the static Wellcome capture needs nothing).
+# Pinned: jev_adapter patches internals of this exact commit.
+jev-ultrafast @ git+https://github.com/browser-use/jev-ultrafast@1231850
