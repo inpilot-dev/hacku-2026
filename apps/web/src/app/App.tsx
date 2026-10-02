@@ -8,6 +8,18 @@ import { money, shortDate } from '../lib/format';
 const DEFAULT_TOKEN = 'dev-user-token';
 function clearIdempotency(operation: string) { sessionStorage.removeItem(`mandate-idempotency-${operation}`); }
 const DRAFT_ID = 'draft_demo';
+function hasSourceBackedCatalog(catalog: CatalogResponse) {
+  const evidence = new Map(catalog.evidence.map((item) => [item.id, item]));
+  const availableProducts = catalog.products.filter((product) => product.available);
+  return availableProducts.length > 0 && availableProducts.every((product) => product.evidence_ids.some((id) => {
+    const item = evidence.get(id);
+    if (!item || item.kind !== 'product_price' || !item.capture_path || !Number.isFinite(Date.parse(item.observed_at))) return false;
+    try {
+      const source = new URL(item.source_url);
+      return ['http:', 'https:'].includes(source.protocol) && !source.hostname.endsWith('.invalid');
+    } catch { return false; }
+  }));
+}
 const initialPolicy = {
   currency: 'HKD' as const,
   per_order_limit_minor: 30000,
@@ -50,7 +62,7 @@ function App() {
     try {
       const result = await api.catalog(token, 'demo_store_a');
       setCatalog(result);
-      setCatalogIsPlaceholder(result.evidence.some((item) => item.source_url.includes('example.invalid')));
+      setCatalogIsPlaceholder(!hasSourceBackedCatalog(result));
     } catch {
       const fallback = placeholderCatalog as CatalogResponse;
       setCatalog(fallback);
@@ -353,10 +365,10 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
   const checkpointAvailable = Boolean(audit?.latest_checkpoint);
   const checks = [
     { name: 'Mandate is confirmed', state: mandate?.status === 'active', detail: mandate ? `Current state: ${mandate.status}` : 'No spending authority has been created.' },
-    { name: 'Catalog evidence is source-backed', state: !catalogIsPlaceholder, detail: catalogIsPlaceholder ? 'Prototype fixture uses example.invalid evidence.' : 'Catalog endpoint returned non-placeholder evidence.' },
+    { name: 'Catalog evidence is source-backed', state: !catalogIsPlaceholder, detail: catalogIsPlaceholder ? 'Displayed products lack a valid price source, observation time or captured evidence.' : 'Every available product links to captured, timestamped price evidence.' },
     { name: 'Wallet API is reachable', state: health === 'online', detail: health === 'online' ? 'Connected to local sandbox wallet.' : health === 'checking' ? 'Checking wallet service…' : 'Wallet service is not responding.' },
     { name: 'Ordered event stream', state: eventsState === 'connected', detail: eventsState === 'connected' ? `${events.length} event(s) loaded; polling every 4 seconds.` : eventsState === 'unavailable' ? 'Events API is not connected in this checkout.' : eventsState === 'error' ? 'Events API request failed; check user access and server logs.' : 'Connecting to events API…' },
-    { name: 'Independent audit checkpoint', state: auditState === 'connected' && checkpointAvailable, detail: auditState === 'connected' ? checkpointAvailable ? `Export includes checkpoint ${audit?.latest_checkpoint?.stream_id}:${audit?.latest_checkpoint?.sequence}; not yet independently checked.` : 'Audit export is available, but it has no checkpoint.' : auditState === 'unavailable' ? 'Audit service is not connected in this checkout.' : auditState === 'error' ? 'Audit export request failed; check user access and server logs.' : 'Loading audit export…' },
+    { name: 'Checkpoint available for verification', state: auditState === 'connected' && checkpointAvailable, detail: auditState === 'connected' ? checkpointAvailable ? `Export includes checkpoint ${audit?.latest_checkpoint?.stream_id}:${audit?.latest_checkpoint?.sequence}; run the independent verifier to check it.` : 'Audit export is available, but it has no checkpoint.' : auditState === 'unavailable' ? 'Audit service is not connected in this checkout.' : auditState === 'error' ? 'Audit export request failed; check user access and server logs.' : 'Loading audit export…' },
     { name: 'Bounded concurrency model', state: models.length === 2, detail: models.length === 2 ? 'Unsafe and atomic variants returned from the configured solver.' : 'Run the model comparison to obtain current solver results.' },
   ];
   const eventLabel = (event: AuditEvent) => event.type.replace(/_/g, ' ');
