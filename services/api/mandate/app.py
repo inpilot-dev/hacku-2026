@@ -36,6 +36,10 @@ def build_app():
     if assets.is_dir():
         app.mount("/assets", StaticFiles(directory=assets), name="web-assets")
 
+    @app.api_route("/api/{api_path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], include_in_schema=False)
+    def unknown_api_route(api_path: str):
+        raise HTTPException(status_code=404, detail="API route not found.")
+
     @app.get("/")
     def web_index():
         index = WEB_DIST / "index.html"

@@ -318,8 +318,8 @@ function Shopping({ token, mandateId, products, evidence, quantities, onChange, 
       } catch (error) {
         if (disposed) return;
         const status = error instanceof ApiError ? error.status : 0;
-        setAgentError(status === 404 ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
-        if (![401, 403, 404].includes(status)) timer = window.setTimeout(() => void poll(), 4000);
+        setAgentError([404, 405].includes(status) ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
+        if (![401, 403, 404, 405].includes(status)) timer = window.setTimeout(() => void poll(), 4000);
       }
     }
     void poll();
@@ -342,7 +342,7 @@ function Shopping({ token, mandateId, products, evidence, quantities, onChange, 
       setAgentRun(started);
       setAgentRunId(started.id);
     } catch (error) {
-      setAgentError(error instanceof ApiError && error.status === 404
+      setAgentError(error instanceof ApiError && [404, 405].includes(error.status)
         ? 'Agent-run service is not connected in this checkout. You can still build a quote from the catalog below.'
         : error instanceof Error ? error.message : 'Could not start the shopping agent.');
     } finally { setAgentSubmitting(false); }
