@@ -83,9 +83,13 @@ First run, 2026-10-03, Wellcome:
   - ParknShop returns HTTP 403 (Access Denied) to both scripts and a normal browser session.
   - Neither is captured, and no access control is bypassed.
 
-## Note for the frontend (Noah)
+## Frontend integration status (Noah)
 
-`GET /api/v1/catalog?merchant_id=...` now returns the real catalog the wallet quotes from. `App.tsx` still
-hardcodes `demo_store_a`, `ctx_a_standard` and the `p_a_*` product IDs, and falls back to the bundled
-placeholder JSON. To show observed data, the shopping screen needs to take its merchant, products and
-evidence from `GET /catalog`, and the mandate form needs to allow `wellcome`.
+The React client now loads `GET /api/v1/catalog`, prefers captured `wellcome` products and evidence, uses
+`ctx_wellcome_click_collect` for wallet quotes, and creates its sample mandate for `wellcome`. The bundled
+placeholder catalog remains a fallback and is labelled as unverified. The normal `just dev` and `just demo`
+recipes select `data/catalog/wellcome.json` unless `MANDATE_CATALOG_PATH` is explicitly set.
+
+The UI blocks Wellcome quotes at or below HK$50 because the captured evidence only proves free Click & Collect
+above that amount. This is a client-side guard for the prototype flow; the wallet catalog adapter still needs
+to reject out-of-evidence delivery subtotals server-side before this constraint can be considered enforced.

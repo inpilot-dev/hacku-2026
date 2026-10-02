@@ -2,45 +2,40 @@
 
 React + TypeScript + Vite client for Noah's HacKU 2026 integration role. It consumes `../../contracts/types.ts` and keeps the wallet as the authority for policy decisions and basket totals.
 
-## Run locally
+## Run locally with the observed Wellcome snapshot
 
-From the repository root, install the API and web dependencies once:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r services/api/requirements-wallet.txt
-npm --prefix apps/web ci
-```
-
-Terminal 1:
+Prerequisites: Python 3.12+, Node.js/npm, `uv` and the `just` command runner. From the repository root:
 
 ```bash
-source .venv/bin/activate
-cd services/api
-MANDATE_ENABLE_DEMO_CHECKOUT=1 uvicorn mandate.app:app --reload --port 8000
+just install
 ```
 
-Terminal 2:
+Run the API and Vite client together:
 
 ```bash
-cd apps/web
-npm run dev
+just dev
 ```
 
-Open `http://127.0.0.1:5173/`. The browser uses the scoped local `dev-user-token` by default. The API and Vite development server bind to loopback; do not expose the prototype API or dev credentials on a shared network. To reset the local wallet state, stop the API and remove `services/api/.data/wallet/`.
+Open `http://127.0.0.1:5173/`. The API uses the captured Wellcome catalog by default. The browser uses the scoped local `dev-user-token` by default. Both servers bind to loopback; do not expose the prototype API or dev credentials on a shared network.
+
+For a single-origin presentation demo with a fresh temporary wallet:
+
+```bash
+just demo
+```
+
+Open the URL printed by the script (default `http://127.0.0.1:8000/`). Stopping the process removes the temporary sandbox database and key. To preserve demo state across restarts, set `MANDATE_DEMO_DATA_DIR` to a dedicated local directory before `just demo`; that directory is not cleared by the script. `MANDATE_DEMO_PORT` changes the port. Set `MANDATE_CATALOG_PATH` to override the captured catalog.
 
 ## Current honest limitations
 
-- The bundled catalog is explicitly placeholder data. The UI labels its prices as prototype data and asks the wallet service to calculate the actual quote.
+- The default catalog is a timestamped Wellcome snapshot captured from public pages, not a live retailer connection. The UI shows the observation date, evidence links and the Click & Collect scope. The placeholder catalog is used only as a labeled fallback.
+- Wellcome's captured evidence establishes free Click & Collect only for orders over HK$50. The UI blocks lower baskets, but the wallet catalog adapter still needs to reject unpriced delivery subtotals server-side; do not describe this client-side guard as an authorization boundary.
 - `POST /api/v1/demo/purchases` is a local-only, user-triggered integration adapter. It derives the agent from the user's own mandate and calls the same wallet authorization/payment checks; it never sends the signing capability or agent credential to the browser. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`.
 - The mandate form can request a natural-language draft from the contract endpoint. The response remains inactive until the user reviews the structured fields and confirms it. If the draft endpoint is absent, the form explicitly falls back to the seeded structured policy.
 - The shopping form uses the contract-defined agent run/start, progress and quote APIs, with `auto_purchase: false`. It leaves the manual catalog flow available when the agent-run backend is absent; do not treat the contract client as proof that the worker is deployed.
 - The default payment rail is a local simulator. No real funds move.
-- Draft interpretation, catalog API, agent shopping runs, independent audit verification and bounded Z3 evaluation are not implemented in the current checkout. The UI displays these limitations and is structured to replace them with the agreed APIs.
+- The observed catalog API and shared FastAPI entrypoint are implemented. Draft interpretation, agent shopping runs, independent audit verification and bounded Z3 evaluation are not mounted in the current checkout. The UI displays these limits and is structured to consume the agreed APIs when available.
 
 ## Serve the built site from the API
 
-For a single-origin presentation build, activate the `.venv`, run `npm --prefix apps/web ci && npm --prefix apps/web run build` from the repository root, then start the API command above. FastAPI serves the built SPA and its assets at `http://127.0.0.1:8000/`; Vite proxying is only needed during frontend development. Unknown `/api/...` paths remain JSON 404 responses rather than falling through to the SPA.
-
-For a reproducible presentation run, activate the `.venv`, build once, then use `./scripts/run-demo.sh` from the repository root. It starts the same-origin frontend and API with a fresh, temporary wallet database and signing key; stopping the process removes only that temporary sandbox. To keep demo state across restarts, set `MANDATE_DEMO_DATA_DIR` to a dedicated local demo directory. That directory is preserved and is never cleared by the script. `MANDATE_DEMO_PORT` changes the default port 8000, and `PYTHON_BIN` selects the Python interpreter that has the API dependencies installed.
+For a reproducible presentation run without the task runner, build with `npm --prefix apps/web run build`, then invoke `./scripts/run-demo.sh` from the repository root with the project Python interpreter. It starts the same-origin frontend and API and uses the captured catalog unless `MANDATE_CATALOG_PATH` is set explicitly.

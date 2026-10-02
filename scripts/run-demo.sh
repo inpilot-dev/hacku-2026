@@ -27,6 +27,9 @@ cleanup() {
 trap cleanup EXIT
 
 export MANDATE_ENABLE_DEMO_CHECKOUT=1
+if [[ -z "${MANDATE_CATALOG_PATH:-}" ]]; then
+  export MANDATE_CATALOG_PATH="$REPO_ROOT/data/catalog/wellcome.json"
+fi
 export MANDATE_WALLET_DATA_DIR="$demo_data_dir"
 export MANDATE_WALLET_KEY_DIR="$demo_data_dir/keys"
 

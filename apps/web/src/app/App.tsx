@@ -6,6 +6,17 @@ import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
 
 const DEFAULT_TOKEN = 'dev-user-token';
+const WELLCOME_STORE_ID = 'wellcome';
+const WELLCOME_PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
+const SAMPLE_STORE_ID = 'demo_store_a';
+const STORE_LABELS: Record<string, string> = {
+  [WELLCOME_STORE_ID]: 'Wellcome · Click & Collect',
+  [SAMPLE_STORE_ID]: 'Demo Grocery Store A · sample data',
+};
+const DELIVERY_CONTEXTS: Record<string, string> = {
+  [WELLCOME_STORE_ID]: WELLCOME_PICKUP_CONTEXT_ID,
+  [SAMPLE_STORE_ID]: 'ctx_a_standard',
+};
 function clearIdempotency(operation: string) { sessionStorage.removeItem(`mandate-idempotency-${operation}`); }
 const DRAFT_ID = 'draft_demo';
 function hasVerifiedEvidenceReference(item: Evidence) {
@@ -33,7 +44,7 @@ const initialPolicy = {
   currency: 'HKD' as const,
   per_order_limit_minor: 30000,
   period_limits: [{ period: 'calendar_week' as const, limit_minor: 80000, timezone: 'Asia/Hong_Kong' as const }],
-  allowed_merchant_ids: ['demo_store_a'],
+  allowed_merchant_ids: [WELLCOME_STORE_ID],
   blocked_categories: ['alcohol' as const],
   expires_at: '2026-10-31T23:59:59+08:00',
   approval_above_minor: null,
@@ -75,7 +86,7 @@ function App() {
   const catalogRequestVersion = useRef(0);
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
-  const [quantity, setQuantity] = useState<Record<string, number>>({ p_a_apples: 1, p_a_milk: 1, p_a_eggs: 1 });
+  const [quantity, setQuantity] = useState<Record<string, number>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [showMandateReview, setShowMandateReview] = useState(false);
   const [policy, setPolicy] = useState<Policy>(initialPolicy);
@@ -102,7 +113,7 @@ function App() {
   const loadCatalog = useCallback(async () => {
     const version = ++catalogRequestVersion.current;
     try {
-      const result = await api.catalog(token, 'demo_store_a');
+      const result = await api.catalog(token);
       if (version !== catalogRequestVersion.current) return;
       setCatalog(result);
       setCatalogIsPlaceholder(!hasSourceBackedCatalog(result));
@@ -228,7 +239,32 @@ function App() {
   useEffect(() => { sessionStorage.setItem('mandate.userToken.v1', token); }, [token]);
   useEffect(() => { if (mandateId) localStorage.setItem('mandate-id', mandateId); }, [mandateId]);
 
-  const products = useMemo(() => catalog?.products.filter((product) => product.merchant_id === 'demo_store_a' && product.available) ?? [], [catalog]);
+  const storeId = useMemo(() => {
+    const merchants = new Set(catalog?.products.filter((product) => product.available).map((product) => product.merchant_id) ?? []);
+    const permitted = mandate?.policy.allowed_merchant_ids.find((merchantId) => merchants.has(merchantId));
+    if (permitted) return permitted;
+    if (!catalog || merchants.has(WELLCOME_STORE_ID)) return WELLCOME_STORE_ID;
+    return merchants.has(SAMPLE_STORE_ID) ? SAMPLE_STORE_ID : '';
+  }, [catalog, mandate]);
+  const storeLabel = STORE_LABELS[storeId] ?? (storeId || 'No supported store in catalog');
+  const products = useMemo(() => catalog?.products.filter((product) => product.merchant_id === storeId && product.available) ?? [], [catalog, storeId]);
+  const latestCatalogObservation = useMemo(() => {
+    const observations = catalog?.evidence.filter((item) => item.kind === 'product_price').map((item) => item.observed_at).sort() ?? [];
+    return observations[observations.length - 1] ?? null;
+  }, [catalog]);
+  useEffect(() => {
+    if (!products.length) return;
+    const starterProducts = ['produce', 'pantry'].map((category) => products.find((product) => product.category === category)).filter((product): product is Product => Boolean(product));
+    setQuantity((current) => Object.keys(current).length ? current : Object.fromEntries(
+      starterProducts.map((product) => [product.id, 1]),
+    ));
+  }, [products]);
+  useEffect(() => {
+    if (mandate || !storeId) return;
+    setPolicy((current) => current.allowed_merchant_ids.length === 1 && current.allowed_merchant_ids[0] === storeId
+      ? current
+      : { ...current, allowed_merchant_ids: [storeId] });
+  }, [mandate, storeId]);
   const pickedCount = Object.values(quantity).reduce((sum, count) => sum + count, 0);
   const currentBudget = budget?.applicable_budgets[0];
   const spentRatio = currentBudget ? Math.min(100, Math.round((currentBudget.paid_minor / currentBudget.limit_minor) * 100)) : 0;
@@ -258,7 +294,11 @@ function App() {
       if (!active || !mandate) throw new Error('Confirm an active spending mandate first.');
       const items = Object.entries(quantity).filter(([, count]) => count > 0).map(([product_id, count]) => ({ product_id, quantity: count }));
       if (!items.length) throw new Error('Add at least one item to your basket.');
-      const result = await api.quote(token, { merchant_id: 'demo_store_a', delivery_context_id: 'ctx_a_standard', items });
+      const deliveryContextId = DELIVERY_CONTEXTS[storeId];
+      if (!deliveryContextId) throw new Error(`No supported delivery context is configured for ${storeLabel}.`);
+      const subtotal = products.filter((product) => (quantity[product.id] ?? 0) > 0).reduce((sum, product) => sum + product.unit_price_minor * (quantity[product.id] ?? 0), 0);
+      if (storeId === WELLCOME_STORE_ID && subtotal <= 5000) throw new Error('Wellcome only publishes free Click & Collect above HK$50. Add items to exceed HK$50 before requesting a quote; lower basket fees are not verified.');
+      const result = await api.quote(token, { merchant_id: storeId, delivery_context_id: deliveryContextId, items });
       setQuote(result);
       announce({ title: 'Server quote ready', detail: `The wallet priced this basket at ${money(result.total_minor)}.`, tone: 'success' });
     } catch (error) {
@@ -442,10 +482,11 @@ function App() {
       <header className="topbar"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobileNav(true)}><Menu size={20} /></button><div className="breadcrumbs">Family account <span>/</span> <strong>{nav.find((item) => item.id === view)?.label}</strong></div><div className="top-actions"><span className={`connection-pill ${health}`}><span className="connection-dot" />{health === 'online' ? 'Wallet connected' : health === 'offline' ? 'Wallet offline' : 'Connecting'}</span><span className="refresh-meta">{lastSuccessfulRefresh ? `Updated ${new Date(lastSuccessfulRefresh).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}` : 'Not refreshed yet'}</span><button className="icon-button" aria-label="Reconnect and refresh wallet data" title="Reconnect and refresh" onClick={() => void refresh()}><RefreshCw size={17} /></button><button className="top-avatar" aria-label="Account settings" onClick={() => setShowSettings(true)}>MK</button></div></header>
       <div className="page-content">
         {catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><ShieldAlert size={16} /></span><span><strong>Unverified catalog:</strong> product prices lack complete source evidence and are not verified live offers. Payments are simulated and no money moves.</span><button onClick={() => setView('activity')}>What this means <ArrowUpRight size={14} /></button></div>}
+        {catalog && !catalogIsPlaceholder && <div className="dev-banner"><span className="banner-icon"><Eye size={16} /></span><span><strong>Observed price snapshot:</strong> Wellcome prices were captured {latestCatalogObservation ? new Date(latestCatalogObservation).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' }) : 'at the linked source times'}; offers may have changed. Only Click & Collect is configured, and its free-pickup evidence applies above HK$50.</span><button onClick={() => setView('activity')}>Evidence details <ArrowUpRight size={14} /></button></div>}
         {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} onWallet={() => setView('wallet')} busy={busy} onRevoke={() => void revokeMandate()} />}
         {view === 'shopping' && <Shopping
           token={token} mandateId={mandate?.id ?? ''} mandateStatus={mandate?.status ?? null}
-          products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity}
+          products={products} storeLabel={storeLabel} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity}
           quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)}
           onConfirm={() => mandate ? setView('wallet') : setShowMandateReview(true)}
           onBuildQuote={() => void buildQuote()} onRefreshQuote={(oldQuote) => void refreshQuote(oldQuote)}
@@ -463,7 +504,7 @@ function App() {
         {view === 'activity' && <SafetyView key={token} token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
     </main>
-    {showMandateReview && <MandateReviewModal token={token} initial={policy} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next, draftId) => confirmMandate(next, draftId)} />}
+    {showMandateReview && <MandateReviewModal token={token} initial={policy} storeId={storeId} storeLabel={storeLabel} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next, draftId) => confirmMandate(next, draftId)} />}
     {showSettings && <Settings token={token} onToken={setToken} mandateId={mandateId} onMandateId={setMandateId} onClose={() => setShowSettings(false)} />}
     {toast && <div className={`toast toast-${toast.tone}`} role="status"><span>{toast.tone === 'success' ? <BadgeCheck size={19} /> : toast.tone === 'error' ? <ShieldAlert size={19} /> : <CircleHelp size={19} />}</span><div><strong>{toast.title}</strong><small>{toast.detail}</small></div><button className="icon-button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={16} /></button></div>}
   </div>;
@@ -526,8 +567,8 @@ function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
 
-function Shopping({ token, mandateId, mandateStatus, products, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, paymentResult, checkoutUncertain, purchaseRefusal, paymentOptions, paymentOptionsState, selectedPaymentRouteId, onSelectPaymentRoute, onApproveReview, onResumeApproval, onDenyReview, onUnavailable, catalogIsPlaceholder }: {
-  token: string; mandateId: string; mandateStatus: Mandate['status'] | null; products: Product[]; evidence: Evidence[];
+function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evidence, quantities, onChange, quote, onQuoteChange, busy, active, onConfirm, onBuildQuote, onRefreshQuote, onEditRefusedBasket, onPurchase, onReconcile, paymentResult, checkoutUncertain, purchaseRefusal, paymentOptions, paymentOptionsState, selectedPaymentRouteId, onSelectPaymentRoute, onApproveReview, onResumeApproval, onDenyReview, onUnavailable, catalogIsPlaceholder }: {
+  token: string; mandateId: string; mandateStatus: Mandate['status'] | null; products: Product[]; storeLabel: string; evidence: Evidence[];
   quantities: Record<string, number>; onChange: (id: string, delta: number) => void; quote: Quote | null;
   onQuoteChange: (quote: Quote | null) => void; busy: string; active: boolean; onConfirm: () => void;
   onBuildQuote: () => void; onRefreshQuote: (quote: Quote) => void; onEditRefusedBasket: (quote: Quote) => void;
@@ -538,19 +579,33 @@ function Shopping({ token, mandateId, mandateStatus, products, evidence, quantit
   onApproveReview: (approvalId: string) => void; onResumeApproval: (approvalId: string) => void; onDenyReview: (approvalId: string) => void;
   onUnavailable: () => void; catalogIsPlaceholder: boolean;
 }) {
-  const [shoppingListText, setShoppingListText] = useState('Apples\nMilk\nEggs');
+  const [shoppingListText, setShoppingListText] = useState('');
   const [instruction, setInstruction] = useState('');
   const [agentRunId, setAgentRunId] = useState(() => mandateId ? sessionStorage.getItem(`mandate-agent-run-${mandateId}`) ?? '' : '');
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
   const [agentSubmitting, setAgentSubmitting] = useState(false);
   const [agentError, setAgentError] = useState('');
   const [agentQuoteUnavailable, setAgentQuoteUnavailable] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogCategory, setCatalogCategory] = useState('');
   const [quoteRetry, setQuoteRetry] = useState(0);
   const [quoteNow, setQuoteNow] = useState(Date.now());
   const storageKey = mandateId ? `mandate-agent-run-${mandateId}` : '';
   const agentWorking = agentRun?.status === 'queued' || agentRun?.status === 'running';
   const basketCount = quote ? quote.items.reduce((sum, item) => sum + item.quantity, 0) : Object.values(quantities).reduce((sum, count) => sum + count, 0);
+  const catalogCategories = useMemo(() => [...new Set(products.map((product) => product.category))].sort(), [products]);
+  const visibleProducts = useMemo(() => {
+    const needle = catalogSearch.trim().toLocaleLowerCase();
+    return products.filter((product) => (!catalogCategory || product.category === catalogCategory)
+      && (!needle || `${product.title} ${product.description}`.toLocaleLowerCase().includes(needle)));
+  }, [catalogCategory, catalogSearch, products]);
   const quoteExpired = Boolean(quote && Date.parse(quote.expires_at) <= quoteNow);
+
+  useEffect(() => {
+    if (!shoppingListText.trim()) {
+      setShoppingListText(['produce', 'pantry'].map((category) => products.find((product) => product.category === category)).filter((product): product is Product => Boolean(product)).map((product) => product.title).join('\n'));
+    }
+  }, [products]);
 
   useEffect(() => {
     if (!quote) return;
@@ -622,7 +677,7 @@ function Shopping({ token, mandateId, mandateStatus, products, evidence, quantit
   }
 
   return <>
-    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">D</span><span><strong>Demo Grocery Store A</strong><small>Currently supported merchant</small></span><ChevronDown size={15} /></span></div>
+    <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">{storeLabel[0] ?? '—'}</span><span><strong>{storeLabel}</strong><small>{catalogIsPlaceholder ? 'Sample catalog' : 'Observed prices · Click & Collect'}</small></span><ChevronDown size={15} /></span></div>
     {!active && <div className="inline-alert">{mandateStatus && <AgentCharacter name="kip" state="revoked" label={mandateStatus === 'expired' ? 'Kip shows the allowance has expired' : 'Kip shows spending access has been revoked'} size={40} />}<span><strong>{mandateStatus === 'expired' ? 'This allowance has expired.' : mandateStatus === 'revoked' ? 'Spending access was revoked.' : 'Set up your allowance before shopping.'}</strong> The wallet needs an active allowance before it can create an agent run or quote.</span><button className="text-button" onClick={onConfirm}>{mandateStatus ? 'Review wallet status' : 'Set up now'} <ArrowUpRight size={14} /></button></div>}
     <form className="panel agent-request-panel" onSubmit={(event) => void startAgentRun(event)}>
       <div className="agent-request-heading"><AgentCharacter name="kumi" state={paymentResult ? 'happy' : agentRun?.status === 'failed' || agentRun?.status === 'refused' ? 'sad' : 'idle'} label="Kumi, shopping agent" /><div><div className="eyebrow">SHOPPING AGENT</div><h2>Build a basket from your list</h2></div></div>
@@ -632,7 +687,7 @@ function Shopping({ token, mandateId, mandateStatus, products, evidence, quantit
       {agentRun && <div className={`agent-run-status agent-run-${agentRun.status}`} role="status"><strong>{agentRun.status.replace(/_/g, ' ')}</strong><span>{agentRun.message}</span><small>{agentRun.provider} · {agentRun.execution_mode}{agentRun.model_id ? ` · ${agentRun.model_id}` : ''}</small></div>}
       {agentError && <div className="form-error" role="alert">{agentError}{agentQuoteUnavailable && <button type="button" className="text-button" onClick={() => { setAgentError(''); setQuoteRetry((value) => value + 1); }}>Retry loading quote</button>}</div>}
     </form>
-    <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">SCRIPTED CATALOG FALLBACK</div><h2>Choose items manually</h2></div><span className="catalog-count">{products.length} items</span></div><div className="product-list">{products.map((product, index) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={index} disabled={agentWorking || busy === 'quote' || busy === 'quote-restore' || busy === 'purchase'} />)}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
+    <div className="shopping-layout"><section className="panel product-panel"><div className="panel-heading"><div><div className="eyebrow">{catalogIsPlaceholder ? 'SAMPLE CATALOG' : 'OBSERVED STORE CATALOG'}</div><h2>{storeLabel}</h2></div><span className="catalog-count">{visibleProducts.length} of {products.length}</span></div><div className="catalog-filters"><label>Search products<input type="search" value={catalogSearch} onChange={(event) => setCatalogSearch(event.target.value)} placeholder="Search this catalog" /></label><label>Category<select value={catalogCategory} onChange={(event) => setCatalogCategory(event.target.value)}><option value="">All categories</option>{catalogCategories.map((category) => <option key={category} value={category}>{category.replace(/_/g, ' ')}</option>)}</select></label></div><div className="product-list">{visibleProducts.length ? visibleProducts.map((product) => <ProductRow key={product.id} product={product} evidence={evidence} quantity={quantities[product.id] ?? 0} onChange={onChange} index={products.indexOf(product)} disabled={agentWorking || busy === 'quote' || busy === 'quote-restore' || busy === 'purchase'} />) : <div className="catalog-empty">No products match this search. Try a different name or category.</div>}</div><div className="product-footnote"><span><LockKeyhole size={14} />{catalogIsPlaceholder ? 'Unverified catalog price · wallet calculates the final quote.' : 'Captured price evidence linked below each listing.'}</span><button className="text-button" onClick={onUnavailable}>See available stores <ArrowUpRight size={14} /></button></div></section>
       <aside className="panel basket-panel">
         <div className="panel-heading">
           <div><div className="eyebrow">YOUR BASKET</div><h2>Order summary</h2></div>
@@ -677,8 +732,9 @@ function Shopping({ token, mandateId, mandateStatus, products, evidence, quantit
 }
 
 function ProductRow({ product, evidence, quantity, onChange, index, disabled }: { product: Product; evidence: Evidence[]; quantity: number; onChange: (id: string, delta: number) => void; index: number; disabled: boolean }) {
-  const emoji = ['🍎', '🥛', '🥚', '🍚', '🍺', '🍵', '🧺', '🧴', '🍞', '🍪'][index % 10];
-  return <div className="product-row"><div className={`product-image product-image-${index % 5}`}><span>{emoji}</span></div><div className="product-info"><strong>{product.title}</strong><small>{product.description || product.unit_label}</small><span className="product-category">{product.category.replace(/_/g, ' ')}</span><EvidenceRefs ids={product.evidence_ids} evidence={evidence} /></div><div className="product-price"><strong>{money(product.unit_price_minor)}</strong><small>/{product.unit_label}</small></div><div className="quantity-control"><button aria-label={`Remove one ${product.title}`} onClick={() => onChange(product.id, -1)} disabled={disabled || quantity === 0}>−</button><span>{quantity}</span><button aria-label={`Add one ${product.title}`} onClick={() => onChange(product.id, 1)} disabled={disabled}>+</button></div></div>;
+  const emoji = product.category === 'produce' ? '🍎' : product.category === 'pantry' ? '🍚' : product.category === 'beverage_non_alcoholic' ? '🧃' : product.category === 'alcohol' ? '🥂' : ['🧺', '🧴', '🍞', '🍪'][index % 4];
+  const description = product.description.trim() && product.description.trim() !== product.title.trim() ? product.description : product.unit_label;
+  return <div className="product-row"><div className={`product-image product-image-${index % 5}`}><span>{emoji}</span></div><div className="product-info"><strong>{product.title}</strong><small>{description}</small><span className="product-category">{product.category.replace(/_/g, ' ')}</span><EvidenceRefs ids={product.evidence_ids} evidence={evidence} /></div><div className="product-price"><strong>{money(product.unit_price_minor)}</strong><small>/{product.unit_label}</small></div><div className="quantity-control"><button aria-label={`Remove one ${product.title}`} onClick={() => onChange(product.id, -1)} disabled={disabled || quantity === 0}>−</button><span>{quantity}</span><button aria-label={`Add one ${product.title}`} onClick={() => onChange(product.id, 1)} disabled={disabled}>+</button></div></div>;
 }
 
 function EvidenceRefs({ ids, evidence }: { ids: string[]; evidence: Evidence[] }) {
@@ -867,7 +923,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
     <div className="bottom-note"><span><Shield size={15} /> Live policy decisions come from the wallet service.</span><span>Prototype build · <button>Read safety notes</button></span></div></>;
 }
 
-function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { token: string; initial: Policy; busy: boolean; onClose: () => void; onConfirm: (policy: Policy, draftId: string) => Promise<boolean> }) {
+function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose, onConfirm }: { token: string; initial: Policy; storeId: string; storeLabel: string; busy: boolean; onClose: () => void; onConfirm: (policy: Policy, draftId: string) => Promise<boolean> }) {
   const [orderCap, setOrderCap] = useState(String(initial.per_order_limit_minor / 100));
   const [weeklyCap, setWeeklyCap] = useState(String(initial.period_limits[0] ? initial.period_limits[0].limit_minor / 100 : 800));
   const [expires, setExpires] = useState(initial.expires_at.slice(0, 10));
@@ -877,13 +933,13 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
   const [maxPurchases, setMaxPurchases] = useState(String(initial.velocity_limit?.max_purchases ?? 3));
   const [windowMinutes, setWindowMinutes] = useState(String(initial.velocity_limit?.window_minutes ?? 60));
   const [basePolicy, setBasePolicy] = useState(initial);
-  const [draftText, setDraftText] = useState('Buy groceries each week. Spend no more than HK$300 per order and HK$800 per week. Only from Demo Grocery Store A. No alcohol. Permission expires 31 October 2026.');
+  const [draftText, setDraftText] = useState(`Buy groceries each week. Spend no more than HK$300 per order and HK$800 per week. Only from ${storeLabel}. No alcohol. Permission expires 31 October 2026.`);
   const [draftResponse, setDraftResponse] = useState<DraftResponse | null>(null);
   const [draftId, setDraftId] = useState(DRAFT_ID);
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftError, setDraftError] = useState('');
   const [error, setError] = useState('');
-  const supportedPolicy = basePolicy.period_limits.length === 1 && basePolicy.period_limits[0].period === 'calendar_week' && basePolicy.period_limits[0].timezone === 'Asia/Hong_Kong' && basePolicy.allowed_merchant_ids.length === 1 && basePolicy.allowed_merchant_ids[0] === 'demo_store_a';
+  const supportedPolicy = Boolean(DELIVERY_CONTEXTS[storeId]) && basePolicy.period_limits.length === 1 && basePolicy.period_limits[0].period === 'calendar_week' && basePolicy.period_limits[0].timezone === 'Asia/Hong_Kong' && basePolicy.allowed_merchant_ids.length === 1 && basePolicy.allowed_merchant_ids[0] === storeId;
 
   function resetToSeededPolicy() {
     setDraftResponse(null); setDraftId(DRAFT_ID); setDraftError(''); setBasePolicy(initial);
@@ -959,13 +1015,13 @@ function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { toke
     </section>
     <form onSubmit={(event) => void submit(event)}>
       <div className="limit-fields"><label>Max per order <span className="money-input"><i>HK$</i><input aria-label="Maximum per order in HKD" type="number" min="1" step="1" value={orderCap} onChange={(event) => setOrderCap(event.target.value)} /></span></label><label>Weekly limit <span className="money-input"><i>HK$</i><input aria-label="Weekly spending limit in HKD" type="number" min="1" step="1" value={weeklyCap} onChange={(event) => setWeeklyCap(event.target.value)} /></span></label></div>
-      <label>Allowed store<input value={basePolicy.allowed_merchant_ids.map((id) => id === 'demo_store_a' ? 'Demo Grocery Store A' : id).join(', ') || 'No store specified'} readOnly /></label><label>Permission expires<input aria-label="Permission expiry date" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></label>
+      <label>Allowed store<input value={basePolicy.allowed_merchant_ids.length === 1 && basePolicy.allowed_merchant_ids[0] === storeId ? storeLabel : basePolicy.allowed_merchant_ids.join(', ') || 'No store specified'} readOnly /></label><label>Permission expires<input aria-label="Permission expiry date" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></label>
       <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
       <label>Require approval above (optional)<span className="money-input"><i>HK$</i><input aria-label="Require approval for purchases above this amount in HKD" type="number" min="0.01" step="0.01" value={approvalAbove} onChange={(event) => setApprovalAbove(event.target.value)} placeholder="No threshold" /></span></label>
       <label className="check-option"><input type="checkbox" checked={velocityEnabled} onChange={(event) => setVelocityEnabled(event.target.checked)} /><span><strong>Limit purchase frequency</strong><small>Count reserved or paid purchases made under this mandate and its descendants.</small></span></label>
       {velocityEnabled && <div className="limit-fields"><label>Purchases in window<input aria-label="Maximum purchases in velocity window" type="number" min="1" max="1000" step="1" value={maxPurchases} onChange={(event) => setMaxPurchases(event.target.value)} /></label><label>Window in minutes<input aria-label="Velocity window in minutes" type="number" min="1" max="10080" step="1" value={windowMinutes} onChange={(event) => setWindowMinutes(event.target.value)} /></label></div>}
       <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span></div>
-      {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for Demo Grocery Store A. This proposal needs a compatible policy before it can be activated.</span></div>}
+      {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for {storeLabel}. This proposal needs a matching store policy before it can be activated.</span></div>}
       <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Confirming activates the exact structured rules shown here.</span></div>
       {error && <div className="form-error" role="alert">{error}</div>}
       <div className="modal-actions"><button type="button" className="button button-secondary" onClick={onClose} disabled={busy || draftBusy}>Cancel</button><button type="submit" className="button button-primary" disabled={busy || draftBusy || !supportedPolicy}>{busy ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy ? 'Confirming…' : supportedPolicy ? 'Activate these rules' : 'Policy needs adjustment'}</button></div>

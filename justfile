@@ -20,7 +20,7 @@ dev:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT
-    (cd services/api && MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000) &
+    (cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/wellcome.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000) &
     (cd apps/web && npm run dev) &
     wait
 
