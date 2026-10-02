@@ -33,5 +33,6 @@ Open the local URL printed by the command. Stopping it removes only that tempora
 
 - [API contracts](contracts/README.md)
 - [Noah’s frontend and end-to-end integration plan](docs/frontend-implementation-plan.md)
+- [Noah’s local demo and reset runbook](docs/noah-demo-runbook.md)
 - [Overall product and technical plan](docs/mandate-build-plan.md)
 - [Observed catalog capture and evidence notes](services/agent/README.md)
