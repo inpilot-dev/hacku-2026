@@ -59,6 +59,7 @@ function App() {
   const [health, setHealth] = useState<'checking' | 'online' | 'offline'>('checking');
   const [lastSuccessfulRefresh, setLastSuccessfulRefresh] = useState<string | null>(null);
   const refreshVersion = useRef(0);
+  const catalogRequestVersion = useRef(0);
   const [busy, setBusy] = useState('');
   const [toast, setToast] = useState<Toast | null>(null);
   const [quantity, setQuantity] = useState<Record<string, number>>({ p_a_apples: 1, p_a_milk: 1, p_a_eggs: 1 });
@@ -79,11 +80,14 @@ function App() {
   }, []);
 
   const loadCatalog = useCallback(async () => {
+    const version = ++catalogRequestVersion.current;
     try {
       const result = await api.catalog(token, 'demo_store_a');
+      if (version !== catalogRequestVersion.current) return;
       setCatalog(result);
       setCatalogIsPlaceholder(!hasSourceBackedCatalog(result));
     } catch {
+      if (version !== catalogRequestVersion.current) return;
       const fallback = placeholderCatalog as CatalogResponse;
       setCatalog(fallback);
       setCatalogIsPlaceholder(true);
@@ -359,7 +363,7 @@ function App() {
         {view === 'overview' && <Overview token={token} mandate={mandate} active={Boolean(active)} spentRatio={spentRatio} currentBudget={currentBudget} onShop={() => setView('shopping')} onSetup={() => setShowMandateReview(true)} onWallet={() => setView('wallet')} busy={busy} onRevoke={() => void revokeMandate()} />}
         {view === 'shopping' && <Shopping token={token} mandateId={mandate?.id ?? ''} mandateStatus={mandate?.status ?? null} products={products} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity} quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)} onConfirm={() => mandate ? setView('wallet') : setShowMandateReview(true)} onBuildQuote={() => void buildQuote()} onRefreshQuote={(oldQuote) => void refreshQuote(oldQuote)} onEditRefusedBasket={editRefusedBasket} onPurchase={() => void completeDemoPurchase()} onReconcile={(savedQuote) => void reconcileCheckout(savedQuote)} paymentResult={paymentResult} checkoutUncertain={checkoutUncertain} purchaseRefusal={purchaseRefusal} onUnavailable={() => announce({ title: 'Checkout not connected yet', detail: 'The shopping worker is not in this checkout. This screen does not expose agent credentials or fake a completed purchase.', tone: 'neutral' })} catalogIsPlaceholder={catalogIsPlaceholder} />}
         {view === 'wallet' && <WalletView mandate={mandate} budget={budget} currentBudget={currentBudget} spentRatio={spentRatio} busy={busy} onRevoke={() => void revokeMandate()} onRefresh={() => void refresh()} />}
-        {view === 'activity' && <SafetyView token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
+        {view === 'activity' && <SafetyView key={token} token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
     </main>
     {showMandateReview && <MandateReviewModal token={token} initial={policy} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next, draftId) => confirmMandate(next, draftId)} />}
@@ -551,6 +555,7 @@ function WalletView({ mandate, budget, currentBudget, spentRatio, busy, onRevoke
 }
 
 function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: string; mandate: Mandate | null; health: 'checking' | 'online' | 'offline'; catalogIsPlaceholder: boolean }) {
+  const auditRequestVersion = useRef(0);
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [eventsState, setEventsState] = useState<'loading' | 'connected' | 'unavailable' | 'error'>('loading');
   const [eventsRefresh, setEventsRefresh] = useState(0);
@@ -584,9 +589,16 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
   }, [token, eventsRefresh]);
 
   const loadAudit = useCallback(async () => {
+    const version = ++auditRequestVersion.current;
     setAuditState('loading');
-    try { setAudit(await api.auditExport(token)); setAuditState('connected'); }
-    catch (error) { setAudit(null); setAuditState(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'error'); }
+    try {
+      const result = await api.auditExport(token);
+      if (version !== auditRequestVersion.current) return;
+      setAudit(result); setAuditState('connected');
+    } catch (error) {
+      if (version !== auditRequestVersion.current) return;
+      setAudit(null); setAuditState(error instanceof ApiError && error.status === 404 ? 'unavailable' : 'error');
+    }
   }, [token]);
   useEffect(() => { void loadAudit(); }, [loadAudit]);
 
