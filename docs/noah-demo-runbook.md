@@ -2,6 +2,8 @@
 
 This runbook covers the working frontend/wallet path. The presentation uses a local payment simulator; **no real payment is made**. Use the fresh ephemeral data directory created by `just demo` so each rehearsal starts with no mandate or receipts.
 
+A recorded 25.6-second walkthrough is available at [docs/demo/mandate-demo.mp4](demo/mandate-demo.mp4), with scope and limitations in [docs/demo/README.md](demo/README.md). It shows mandate activation, a sandbox receipt, an alcohol refusal, revocation, and the disconnected activity state.
+
 ## Start and reset
 
 From the repository root:
