@@ -15,6 +15,18 @@ Open the loopback URL printed by the command. Stop with Ctrl-C. The temporary wa
 
 The captured Wellcome catalog is the default. Its current snapshot is timestamped in the UI; it is not a live price feed. Product availability and promotions may change. Re-capture with `just capture`, review the evidence, then rebuild/rehearse if using a newer snapshot.
 
+If `just` is not installed, the demo can be prepared and launched directly from the repository root:
+
+```bash
+uv venv .venv --allow-existing
+uv pip install --python .venv/bin/python -r services/api/requirements-wallet.txt
+npm ci --prefix apps/web
+npm run build --prefix apps/web
+PYTHON_BIN="$PWD/.venv/bin/python" ./scripts/run-demo.sh
+```
+
+The launcher still creates and removes a fresh temporary wallet on exit.
+
 ## Main presentation flow
 
 1. **Show the bounds.** Choose **Set up family spending** and review the sample mandate: HK$300 per order, HK$800 per week, Wellcome Click & Collect only, no alcohol, expiry 31 October 2026. Confirm the structured rules. Natural-language interpretation is not connected in this checkout, so do not present the draft text as model-produced.
@@ -42,3 +54,5 @@ A clean-ledger browser rehearsal on 3 October confirmed the refusal scene with t
 ## Backup run
 
 If the observed catalog API or saved evidence is unavailable, the app falls back to a visibly labeled placeholder catalog; do not show placeholder prices as retailer evidence. Keep the UI build and local server on the main machine, and rehearse the same start/reset sequence on the backup machine before the event. If an external teammate module is still absent, use the manual catalog path and the actual wallet refusal/receipt flow; do not fabricate the missing agent, audit or solver output.
+
+On 3 October, the current main commit was also checked from a separate temporary Git worktree with a fresh Python runtime environment and `npm ci`. The frontend built and the single-origin demo served `/`, `/api/v1/health`, and the authenticated captured catalog route. The temporary worktree and demo ledger were removed after shutdown. This confirms a clean-checkout recovery path on this machine; a second physical machine still needs its own rehearsal.
