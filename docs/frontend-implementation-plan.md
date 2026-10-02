@@ -28,19 +28,19 @@ Extensions after integration: conversational draft UX, character animation, frid
 
 ## 2. Current repository reality
 
-The latest pulled changes include Timmy's wallet implementation and Seungbin's architecture proposal. There is no web app, shared FastAPI entrypoint, agent router or verifier router in the inspected commit.
+The repository now contains the React/Vite client and shared FastAPI app alongside Timmy's wallet. Abdullah's agent/draft/catalog APIs and Seungbin's independent audit/verifier/Z3 services are still absent from the current checkout; the UI keeps those integrations visibly disconnected instead of returning fabricated results.
 
-| Area | Current state | Consequence for Noah |
+| Area | Current state at `97134bd` | Consequence for Noah |
 |---|---|---|
-| Wallet | Ten route definitions, service, models, signing, storage and tests exist | Integrate the existing router; do not reimplement policy or ledger |
-| Local wallet app | `mandate.payments.dev_app:seeded_app` is available | First integration can use it; later create the shared composition entrypoint |
-| Drafts | Internal `InMemoryDrafts`; seeded `draft_demo` | Use a clearly labeled seeded mandate flow while Abdullah builds draft API |
+| Wallet | Timmy's routes, service, models, signing, SQLite storage and sandbox rail are present | Compose and consume wallet APIs; do not reimplement policy or ledger |
+| Shared app | `mandate.app:app` mounts wallet routes, demo checkout, health and the built SPA | Keep this as the single entrypoint and preserve JSON errors for unknown API paths |
+| Drafts | Wallet has an in-memory seeded `draft_demo`; natural-language draft route is not in this checkout | Keep explicit seeded/structured fallback; do not claim a real model interpretation |
 | Quotes | Server calculates catalog totals and hashes | Never manufacture final prices in the browser |
-| Agent | No implementation in inspected commit | Use isolated development adapters until Abdullah's run API is available |
-| Audit | Wallet shim writes stub events until `mandate.audit` exists | Do not present stub records as independently verified history |
-| Catalog | Explicitly unobserved placeholder data | Show a persistent development-data banner; replace before evidence demo |
+| Agent | No agent router/worker is present in this checkout; client methods follow the contract | Keep manual catalog selection available and label agent run as disconnected |
+| Audit | Wallet shim writes stub events; no independent audit/checkpoint/verifier routes are mounted | Never present stub records as independently verified history |
+| Catalog | Bundled catalog is explicitly unobserved placeholder data | Keep development-data labels; do not claim real merchant observations |
 | Payment rail | Local simulated adapter; no money moves | Receipts and screens clearly say sandbox simulation |
-| Verification/evaluation | Proposed, not yet implemented | Render honest not-connected states rather than invented passing results |
+| Verification/evaluation | No Z3 or evaluation router is mounted in this checkout | Render honest not-connected states rather than invented passing results |
 | Rubric | Percentages are asserted in Seungbin's proposal; handbook not inspected here | Obtain the source before using those weights to prioritize or claim compliance |
 
 Existing wallet routes:

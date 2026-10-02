@@ -595,6 +595,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
     setVerifyBusy('audit'); setActionError('');
     try {
       await api.createCheckpoint(token, { stream_id: audit.stream_id });
+      clearIdempotency(`checkpoint-${audit.stream_id}`);
       await loadAudit();
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Checkpoint request failed.'); }
     finally { setVerifyBusy(''); }
@@ -637,7 +638,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
   const eventLabel = (event: AuditEvent) => event.type.replace(/_/g, ' ');
 
   return <><div className="page-heading"><div><div className="eyebrow">TRANSPARENCY CENTER</div><h1>See what the system can prove.</h1><p>Mandate keeps authority, checkout and safety checks separate. Here’s what’s connected today.</p></div><span className="mode-chip"><span className="mode-dot" />LOCAL SANDBOX</span></div>
-    <section className="panel safety-overview"><div className="safety-summary-icon"><Shield size={23} /></div><div><h2>Wallet-enforced permissions</h2><p>Shopping suggestions are not payment authority. The wallet checks the confirmed rules again when a purchase is requested.</p></div><span className="status-tag status-green"><i />Policy checked at payment</span></section>
+    <section className="panel safety-overview"><div className="safety-summary-icon"><Shield size={23} /></div><div><h2>Wallet-enforced permissions</h2><p>Shopping suggestions are not payment authority. The wallet checks the confirmed rules again when a purchase is requested.</p></div><span className="status-tag status-muted"><i />Wallet controls approval</span></section>
     <section className="panel checks-panel"><div className="panel-heading"><div><div className="eyebrow">INTEGRATION READINESS</div><h2>Connected services & evidence</h2></div><span className="checks-count">{checks.filter((item) => item.state).length} of {checks.length} ready</span></div><div className="check-list">{checks.map((item) => <div className="check-row" key={item.name}><span className={`check-state ${item.state ? 'check-ready' : 'check-pending'}`}>{item.state ? <BadgeCheck size={17} /> : <Clock3 size={16} />}</span><span><strong>{item.name}</strong><small>{item.detail}</small></span><span className={`check-label ${item.state ? 'ready-label' : ''}`}>{item.state ? 'Connected' : 'Not available'}</span></div>)}</div></section>
     <div className="safety-labs">
       <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">AUDIT TRAIL</div><h2>Recent wallet events</h2></div><div className="feed-actions">{eventsState !== 'loading' && <button className="text-button" onClick={() => { setEventsState('loading'); setEventsRefresh((value) => value + 1); }}>Refresh</button>}<span className={`status-tag ${eventsState === 'connected' ? 'status-green' : 'status-muted'}`}><i />{eventsState === 'connected' ? 'Live feed' : eventsState === 'loading' ? 'Connecting' : eventsState === 'unavailable' ? 'Not connected' : 'Unavailable'}</span></div></div>
