@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, EventsResponse, Mandate, Quote, QuoteRequest, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, Quote, QuoteRequest, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -59,6 +59,9 @@ export const api = {
     return response.json() as Promise<{ status: string; payment_mode: string; server_time: string }>;
   }),
   mandate: (token: string, id: string) => request<Mandate>(`/mandates/${encodeURIComponent(id)}`, token),
+  draft: async (token: string, input: DraftRequest) => request<DraftResponse>('/mandates/draft', token, {
+    method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('mandate-draft', input) }, body: JSON.stringify(input),
+  }),
   confirm: async (token: string, input: ConfirmRequest) => request<Mandate>('/mandates/confirm', token, {
     method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('confirm-draft-demo', input) }, body: JSON.stringify(input),
   }),

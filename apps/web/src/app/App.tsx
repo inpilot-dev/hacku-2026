@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
-import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, VerificationResult, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, Policy, Product, Quote, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
@@ -107,10 +107,10 @@ function App() {
   const spentRatio = currentBudget ? Math.min(100, Math.round((currentBudget.paid_minor / currentBudget.limit_minor) * 100)) : 0;
   const active = mandate?.status === 'active';
 
-  async function confirmMandate(requestedPolicy: Policy = policy): Promise<boolean> {
+  async function confirmMandate(requestedPolicy: Policy = policy, draftId = DRAFT_ID): Promise<boolean> {
     setBusy('mandate');
     try {
-      const result = await api.confirm(token, { draft_id: DRAFT_ID, policy: requestedPolicy });
+      const result = await api.confirm(token, { draft_id: draftId, policy: requestedPolicy });
       clearIdempotency('confirm-draft-demo');
       setMandate(result); setMandateId(result.id); setQuote(null); setPaymentResult(null);
       setView('overview');
@@ -219,7 +219,7 @@ function App() {
         {view === 'activity' && <SafetyView token={token} mandate={mandate} health={health} catalogIsPlaceholder={catalogIsPlaceholder} />}
       </div>
     </main>
-    {showMandateReview && <MandateReviewModal initial={policy} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next) => confirmMandate(next)} />}
+    {showMandateReview && <MandateReviewModal token={token} initial={policy} busy={busy === 'mandate'} onClose={() => setShowMandateReview(false)} onConfirm={(next, draftId) => confirmMandate(next, draftId)} />}
     {showSettings && <Settings token={token} onToken={setToken} mandateId={mandateId} onMandateId={setMandateId} onClose={() => setShowSettings(false)} />}
     {toast && <div className={`toast toast-${toast.tone}`} role="status"><span>{toast.tone === 'success' ? <BadgeCheck size={19} /> : toast.tone === 'error' ? <ShieldAlert size={19} /> : <CircleHelp size={19} />}</span><div><strong>{toast.title}</strong><small>{toast.detail}</small></div><button className="icon-button" aria-label="Dismiss notification" onClick={() => setToast(null)}><X size={16} /></button></div>}
   </div>;
@@ -495,30 +495,88 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
     <div className="bottom-note"><span><Shield size={15} /> Live policy decisions come from the wallet service.</span><span>Prototype build · <button>Read safety notes</button></span></div></>;
 }
 
-function MandateReviewModal({ initial, busy, onClose, onConfirm }: { initial: Policy; busy: boolean; onClose: () => void; onConfirm: (policy: Policy) => Promise<boolean> }) {
+function MandateReviewModal({ token, initial, busy, onClose, onConfirm }: { token: string; initial: Policy; busy: boolean; onClose: () => void; onConfirm: (policy: Policy, draftId: string) => Promise<boolean> }) {
   const [orderCap, setOrderCap] = useState(String(initial.per_order_limit_minor / 100));
   const [weeklyCap, setWeeklyCap] = useState(String(initial.period_limits[0] ? initial.period_limits[0].limit_minor / 100 : 800));
   const [expires, setExpires] = useState(initial.expires_at.slice(0, 10));
   const [blockAlcohol, setBlockAlcohol] = useState(initial.blocked_categories.includes('alcohol'));
+  const [basePolicy, setBasePolicy] = useState(initial);
+  const [draftText, setDraftText] = useState('Buy groceries each week. Spend no more than HK$300 per order and HK$800 per week. Only from Demo Grocery Store A. No alcohol. Permission expires 31 October 2026.');
+  const [draftResponse, setDraftResponse] = useState<DraftResponse | null>(null);
+  const [draftId, setDraftId] = useState(DRAFT_ID);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftError, setDraftError] = useState('');
   const [error, setError] = useState('');
+  const supportedPolicy = basePolicy.period_limits.length === 1 && basePolicy.period_limits[0].period === 'calendar_week' && basePolicy.period_limits[0].timezone === 'Asia/Hong_Kong' && basePolicy.allowed_merchant_ids.length === 1 && basePolicy.allowed_merchant_ids[0] === 'demo_store_a';
+
+  function resetToSeededPolicy() {
+    setDraftResponse(null); setDraftId(DRAFT_ID); setDraftError(''); setBasePolicy(initial);
+    setOrderCap(String(initial.per_order_limit_minor / 100));
+    setWeeklyCap(String(initial.period_limits[0] ? initial.period_limits[0].limit_minor / 100 : 800));
+    setExpires(initial.expires_at.slice(0, 10));
+    setBlockAlcohol(initial.blocked_categories.includes('alcohol'));
+  }
+
+  async function interpretRequest() {
+    const text = draftText.trim();
+    if (!text) { setDraftError('Describe the spending rules you want to review.'); return; }
+    resetToSeededPolicy();
+    setDraftBusy(true); setDraftError('');
+    try {
+      const result = await api.draft(token, { text, delegatee_id: 'agent_student' });
+      clearIdempotency('mandate-draft');
+      setDraftResponse(result); setDraftId(result.draft_id);
+      if (result.proposed_policy) {
+        const proposed = result.proposed_policy;
+        setBasePolicy(proposed);
+        setOrderCap(String(proposed.per_order_limit_minor / 100));
+        setWeeklyCap(String(proposed.period_limits[0] ? proposed.period_limits[0].limit_minor / 100 : 0));
+        setExpires(proposed.expires_at.slice(0, 10));
+        setBlockAlcohol(proposed.blocked_categories.includes('alcohol'));
+      }
+    } catch (draftFailure) {
+      resetToSeededPolicy();
+      setDraftError(draftFailure instanceof ApiError && [404, 405].includes(draftFailure.status)
+        ? 'Natural-language interpretation is not connected in this checkout. You can still set the structured rules below.'
+        : draftFailure instanceof Error ? draftFailure.message : 'Could not interpret this request.');
+    } finally { setDraftBusy(false); }
+  }
+
+  function editDraftText(text: string) {
+    setDraftText(text);
+    setDraftError('');
+    if (!draftResponse) return;
+    resetToSeededPolicy();
+  }
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const perOrder = Math.round(Number(orderCap) * 100);
     const weekly = Math.round(Number(weeklyCap) * 100);
     if (!Number.isFinite(perOrder) || perOrder < 1 || !Number.isFinite(weekly) || weekly < 1) { setError('Enter valid positive HKD spending limits.'); return; }
     if (!expires || new Date(`${expires}T23:59:59+08:00`) <= new Date()) { setError('Choose an expiry date in the future.'); return; }
-    const next: Policy = { ...initial, per_order_limit_minor: perOrder, period_limits: [{ ...initial.period_limits[0], limit_minor: weekly }], expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockAlcohol ? ['alcohol'] : [] };
+    const blockedCategories: Policy['blocked_categories'] = basePolicy.blocked_categories.filter((category) => category !== 'alcohol');
+    if (blockAlcohol) blockedCategories.push('alcohol');
+    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories };
     setError('');
-    await onConfirm(next);
+    await onConfirm(next, draftId);
   }
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}><section className="settings-modal mandate-modal" role="dialog" aria-modal="true" aria-labelledby="mandate-review-title"><div className="modal-heading"><span className="settings-icon"><Shield size={18} /></span><button className="icon-button" aria-label="Close mandate review" onClick={onClose} disabled={busy}><X size={18} /></button></div><div className="eyebrow">REVIEW BEFORE ACTIVATION</div><h2 id="mandate-review-title">Set the spending boundaries</h2><p>These limits will become active only after the wallet confirms them. The assistant cannot raise them.</p><form onSubmit={(event) => void submit(event)}>
-    <div className="limit-fields"><label>Max per order <span className="money-input"><i>HK$</i><input aria-label="Maximum per order in HKD" type="number" min="1" step="1" value={orderCap} onChange={(event) => setOrderCap(event.target.value)} /></span></label><label>Weekly limit <span className="money-input"><i>HK$</i><input aria-label="Weekly spending limit in HKD" type="number" min="1" step="1" value={weeklyCap} onChange={(event) => setWeeklyCap(event.target.value)} /></span></label></div>
-    <label>Allowed store<input value="Demo Grocery Store A" readOnly /></label><label>Permission expires<input aria-label="Permission expiry date" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></label>
-    <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
-    <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Review the rules and confirm to activate this spending authority.</span></div>
-    {error && <div className="form-error" role="alert">{error}</div>}
-    <div className="modal-actions"><button type="button" className="button button-secondary" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="button button-primary" disabled={busy}>{busy ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy ? 'Confirming…' : 'Activate these rules'}</button></div>
-  </form></section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy && !draftBusy) onClose(); }}><section className="settings-modal mandate-modal" role="dialog" aria-modal="true" aria-labelledby="mandate-review-title"><div className="modal-heading"><span className="settings-icon"><Shield size={18} /></span><button className="icon-button" aria-label="Close mandate review" onClick={onClose} disabled={busy || draftBusy}><X size={18} /></button></div><div className="eyebrow">REVIEW BEFORE ACTIVATION</div><h2 id="mandate-review-title">Set the spending boundaries</h2><p>Interpretation is only a proposal. Check every rule and explicitly confirm it; the assistant cannot raise your limits later.</p>
+    <section className="draft-interpreter" aria-label="Interpret a natural-language mandate"><label>Your request<textarea value={draftText} onChange={(event) => editDraftText(event.target.value)} rows={3} disabled={busy || draftBusy} /></label><button type="button" className="button button-secondary" onClick={() => void interpretRequest()} disabled={busy || draftBusy}>{draftBusy ? <span className="spinner spinner-green" /> : <Sparkles size={15} />}{draftBusy ? 'Interpreting request…' : 'Interpret request'}</button>
+      {draftResponse && <div className="draft-result"><strong>Proposed by interpreter</strong><p>{draftResponse.summary}</p><small>Assigned agent: {draftResponse.delegatee_id} · Draft expires {shortDate(draftResponse.expires_at)}</small>{draftResponse.ambiguities.length > 0 && <div className="draft-ambiguities"><b>Clarify before confirming</b>{draftResponse.ambiguities.map((item) => <p key={`${item.field}-${item.question}`}><strong>{item.field}:</strong> {item.question}</p>)}</div>}</div>}
+      {!draftResponse && <small className="draft-seed-note">Until interpretation returns, the text above is not applied; confirmation uses the structured rules and the local sample draft.</small>}
+      {draftError && <div className="form-error" role="alert">{draftError}</div>}
+    </section>
+    <form onSubmit={(event) => void submit(event)}>
+      <div className="limit-fields"><label>Max per order <span className="money-input"><i>HK$</i><input aria-label="Maximum per order in HKD" type="number" min="1" step="1" value={orderCap} onChange={(event) => setOrderCap(event.target.value)} /></span></label><label>Weekly limit <span className="money-input"><i>HK$</i><input aria-label="Weekly spending limit in HKD" type="number" min="1" step="1" value={weeklyCap} onChange={(event) => setWeeklyCap(event.target.value)} /></span></label></div>
+      <label>Allowed store<input value={basePolicy.allowed_merchant_ids.map((id) => id === 'demo_store_a' ? 'Demo Grocery Store A' : id).join(', ') || 'No store specified'} readOnly /></label><label>Permission expires<input aria-label="Permission expiry date" type="date" value={expires} onChange={(event) => setExpires(event.target.value)} /></label>
+      <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
+      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {basePolicy.approval_above_minor === null ? 'none' : money(basePolicy.approval_above_minor)}</span></div>
+      {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for Demo Grocery Store A. This proposal needs a compatible policy before it can be activated.</span></div>}
+      <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Confirming activates the exact structured rules shown here.</span></div>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <div className="modal-actions"><button type="button" className="button button-secondary" onClick={onClose} disabled={busy || draftBusy}>Cancel</button><button type="submit" className="button button-primary" disabled={busy || draftBusy || !supportedPolicy}>{busy ? <span className="spinner" /> : <LockKeyhole size={16} />}{busy ? 'Confirming…' : supportedPolicy ? 'Activate these rules' : 'Policy needs adjustment'}</button></div>
+    </form></section></div>;
 }
 
 function Settings({ token, onToken, mandateId, onMandateId, onClose }: { token: string; onToken: (value: string) => void; mandateId: string; onMandateId: (value: string) => void; onClose: () => void }) {

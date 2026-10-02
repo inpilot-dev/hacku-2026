@@ -25,6 +25,7 @@ Open the URL printed by Vite. The browser uses the scoped local `dev-user-token`
 
 - The bundled catalog is explicitly placeholder data. The UI labels its prices as prototype data and asks the wallet service to calculate the actual quote.
 - `POST /api/v1/demo/purchases` is a local-only, user-triggered integration adapter. It derives the agent from the user's own mandate and calls the same wallet authorization/payment checks; it never sends the signing capability or agent credential to the browser. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`.
+- The mandate form can request a natural-language draft from the contract endpoint. The response remains inactive until the user reviews the structured fields and confirms it. If the draft endpoint is absent, the form explicitly falls back to the seeded structured policy.
 - The shopping form uses the contract-defined agent run/start, progress and quote APIs, with `auto_purchase: false`. It leaves the manual catalog flow available when the agent-run backend is absent; do not treat the contract client as proof that the worker is deployed.
 - The default payment rail is a local simulator. No real funds move.
 - Draft interpretation, catalog API, agent shopping runs, independent audit verification and bounded Z3 evaluation are not implemented in the current checkout. The UI displays these limitations and is structured to replace them with the agreed APIs.
