@@ -14,7 +14,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .m2-pill i{width:7px;height:7px;border-radius:50%;background:var(--green-500)}.m2-pill.off i{background:var(--red-500)}
 
 .m2-avatar{display:block;flex:none;object-fit:contain}
-.m2-sticker{display:grid;place-items:center;flex:none;border-radius:50%;background:var(--color-surface-secondary);transform:none!important}
+.m2-sticker{display:grid;place-items:center;flex:none;background:transparent;transform:none!important}
 .m2-sticker img{width:84%;height:84%;object-fit:contain}
 .m2-loading{display:grid;place-items:center;min-height:60vh}
 .m2-error{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin-bottom:20px;border-radius:var(--radius-xl);background:var(--color-background-danger-soft);color:var(--color-text-danger);font-size:var(--font-text-sm-size)}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
 import './openai-tokens.css';
+import ReactiveCharacter from '../components/ReactiveCharacter';
 import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
@@ -78,11 +79,11 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
 };
 
 function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
-  return <img className="m2-avatar" src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
+  return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
-  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><img src={`/agents/${name}-${state}.png`} alt="" /></span>;
+  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><ReactiveCharacter name={name} state={state} size={size} /></span>;
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
