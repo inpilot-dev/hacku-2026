@@ -13,6 +13,10 @@ from mandate.agent.drafts import DraftService
 from mandate.agent.run_routes import build_agent_run_router
 from mandate.agent.runs import AgentRuns
 from mandate.integration.demo_routes import build_demo_router
+from mandate.stores.carts import CartSync
+from mandate.stores.connections import StoreConnections
+from mandate.stores.routes import build_store_router
+from mandate.stores.steel import SteelStoreBrowser
 from mandate.audit.routes import build_router as build_audit_router
 from mandate.verification import build_router as build_verification_router
 
@@ -32,6 +36,9 @@ def build_app():
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
     app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts), warm_transcription=True),
                        prefix="/api/v1")
+    store_browser = SteelStoreBrowser()
+    stores = StoreConnections(store_browser, wallet.clock.now)
+    app.include_router(build_store_router(stores, CartSync(wallet, stores, store_browser)), prefix="/api/v1")
     # Audit forwards checkpoints/checks to the separate verifier process (MANDATE_VERIFIER_URL).
     app.include_router(build_audit_router(wallet.db), prefix="/api/v1")
     app.include_router(build_verification_router(), prefix="/api/v1")
