@@ -5,7 +5,7 @@ import { api, ApiError } from '../lib/api';
 import { categoryLabel, money, periodWord } from '../lib/format';
 import StoresPanel from './StoresPanel';
 import './onboarding.css';
-import MessageList from '../shopping/MessageList';
+import MessageList, { type ConversationMessage } from '../shopping/MessageList';
 
 /*
  * First run (and every new allowance): say who it's for and set the rules, then connect the stores Kumi may shop at.
@@ -59,6 +59,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     : { wellcome: true, marketplace: true });
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [setupMessages, setSetupMessages] = useState<ConversationMessage[]>([]);
   const [reviewPolicy, setReviewPolicy] = useState<Policy | null>(null);
 
   function rulesValid() {
@@ -98,6 +99,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
       approval_above_minor: rules.askMinor,
       risk_review: riskReviewOn,
     };
+    setSetupMessages((current) => [...current.filter((m) => m.id !== 'chosen-stores'), { id: 'chosen-stores', speaker: 'you', text: `You may shop at ${merchants.map(storeName).join(', ')}.` }]);
     setReviewPolicy(policy);
     setStep('review');
   }
@@ -133,7 +135,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     </ol>
     {error && <p className="ob-error" role="alert">{error}</p>}
 
-    <MessageList messages={[{ id: `setup-${step}`, speaker: step === 'stores' ? 'kumi' : 'kip', text: step === 'rules' ? 'First, tell me who this is for and set the spending limits. These are draft rules until you confirm.' : step === 'stores' ? 'Choose the stores I may use. Connecting your account lets me add items to its cart; it does not place an order.' : 'Here is the exact permission you are granting. Check every rule before switching it on.' }]} />
+    <MessageList messages={[...setupMessages, { id: `setup-${step}`, speaker: step === 'stores' ? 'kumi' : 'kip', text: step === 'rules' ? 'First, tell me who this is for and set the spending limits. These are draft rules until you confirm.' : step === 'stores' ? 'Choose the stores I may use. Connecting your account lets me add items to its cart; it does not place an order.' : 'Here is the exact permission you are granting. Check every rule before switching it on.' }]} />
     {step === 'rules' ? <>
       <h2>The rules</h2>
       <label className="m2-ledger-row"><span>Who it’s for</span><b><input className="ob-holder" value={holder} maxLength={40} placeholder="Me" onChange={(e) => setHolder(e.target.value)} aria-label="Who this allowance is for (leave blank for yourself)" /></b></label>
@@ -151,12 +153,12 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
           onClick={() => setBlocked((current) => on ? current.filter((x) => x !== c) : [...current, c])}>{categoryLabel(c)}</button>; })}
       </div></div>
       <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
-      <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next: stores<ArrowRight size={18} /></button>
+      <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) { setSetupMessages([{ id: 'chosen-rules', speaker: 'you', text: `Shop for ${holder.trim() || 'me'}. Budget: HK$${weekly} per ${periodWord(period)}; HK$${perOrder} per order. ${blocked.length ? `Do not buy ${blocked.map(categoryLabel).join(', ')}.` : 'No categories blocked.'}` }]); setStep('stores'); } }}>Next: stores<ArrowRight size={18} /></button>
       {onBack && <button className="m2-link" onClick={onBack}>Back</button>}
     </> : step === 'stores' ? <>
       <h2>Where Kumi may shop</h2>
       <p className="m2-muted ob-small">Sign in to the store accounts the shopping is for, so Kumi can put the basket straight into the real cart. Kumi never checks out: Kip still has to approve every purchase against these rules.</p>
-      <StoresPanel token={token} online={online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} onStores={setStores} />
+      <StoresPanel token={token} online={online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} onStores={setStores} onMessage={(text, isError) => setSetupMessages((current) => [...current, { id: crypto.randomUUID(), speaker: 'kumi', text, tone: isError ? 'bad' : 'info' }])} />
       <p className="m2-muted ob-small">{connectedCount ? `Kumi will fill your real cart at ${connectedCount} connected store${connectedCount > 1 ? 's' : ''}.` : 'No store connected yet: Kumi can still price baskets from the store snapshot, but not fill a real cart.'}</p>
       <button className="m2-cta" onClick={prepareReview}>Review permission<ArrowRight size={18} /></button>
       <button className="m2-link" onClick={() => setStep('rules')}>Back to rules</button>

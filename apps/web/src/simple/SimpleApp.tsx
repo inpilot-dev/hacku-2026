@@ -374,16 +374,17 @@ export default function SimpleApp() {
     setError(''); setBusy('parse');
     try {
       const parsed = await api.parseShoppingList(TOKEN, { text });
-      if (!parsed.items.length) { setError('Kumi couldn’t find any items in that. Try “rice, milk, 3 apples”.'); return; }
+      if (!parsed.items.length) { setError('Kumi couldn’t find any items in that. Try “rice, milk, 3 apples”.'); setListText(text); return; }
       note('kumi', `Heard: ${parsed.items.map((item) => `${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}${parsed.source === 'rules' ? ' (split by simple rules)' : ''}`, 'info');
       await shop({ kind: 'list', items: parsed.items });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kumi could not read that list.');
+      setListText(text);
     } finally { setBusy(''); }
   }
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
-    if (!mandate || !canSpend) return;
+    if (!mandate || !canSpend || phase === 'packing' || phase === 'paying') return;
     if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.');
     else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`);
     const spoken = chosen !== 'custom' && 'kind' in chosen;
@@ -429,7 +430,7 @@ export default function SimpleApp() {
   }
 
   async function checkout(approvalId?: string) {
-    if (!mandate || !quote) return;
+    if (!mandate || !quote || phase === 'paying') return;
     say('you', approvalId ? 'Proceed with this approved basket.' : `Check the rules and pay ${money(quote.total_minor)} in the sandbox.`);
     setPhase('paying'); setError('');
     const key = `mandate-tx-${quote.id}`;
@@ -441,17 +442,17 @@ export default function SimpleApp() {
       const auth = result.authorization;
       if (auth.status === 'requires_review' && auth.approval_request) {
         setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request });
-        note('kip', `Kip wants your OK for ${money(quote.total_minor)}`, 'info');
+        note('kip', `Your approval is needed for ${money(quote.total_minor)}: ${auth.message}. Nothing is paid while this waits.`, 'info');
       } else if (auth.status !== 'approved') {
         setVerdict({ kind: 'refused', message: auth.message, violations: auth.violations });
-        note('kip', `Kip blocked ${money(quote.total_minor)}`, 'bad');
+        note('kip', `Purchase blocked: ${auth.message}. ${auth.violations.map((v) => v.message).join(' ')} Nothing was paid.`, 'bad');
       } else if (result.payment?.status === 'completed') {
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
         rememberReceipt(result.payment.receipt);
         note('kip', `Sandbox payment confirmed: ${money(result.payment.receipt.amount_minor)}. Receipt ${result.payment.receipt.id}. No real retailer payment was submitted.`, 'good');
       } else if (result.payment?.status === 'refused') {
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
-        note('kip', 'Payment refused', 'bad');
+        note('kip', `Payment refused: ${result.payment.message}. Nothing was paid.`, 'bad');
       } else {
         setVerdict({ kind: 'uncertain', message: 'The wallet approved it but hasn’t confirmed payment yet.' });
       }
@@ -475,6 +476,8 @@ export default function SimpleApp() {
 
   async function decide(approve: boolean) {
     if (verdict?.kind !== 'review') return;
+    if (busy === 'decide') return;
+    say('you', approve ? 'Approve this basket once.' : 'Decline this purchase.');
     setBusy('decide');
     try {
       if (approve) {
