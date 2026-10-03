@@ -4,13 +4,13 @@
 **Owner:** Noah
 **Baseline inspected:** `main` at `0468327` on 2 October 2026
 **Goal:** an integrated first version on Saturday morning; submission freeze Sunday, 4 October, 13:00 Asia/Hong_Kong
-**Status:** Noah-owned local integration is implemented and has a documented clean-checkout launch path. The React/Vite UI, typed wallet client, shared FastAPI entrypoint, health route, observed Wellcome catalog and gated local checkout adapter are connected. The UI also consumes Timmy’s route/approval data, handles receipts and refusals, and makes revoked/expired mandates read-only. Local acceptance rehearsal confirms a simulated receipt, an alcohol-policy refusal and a post-revocation refusal. A 390px mobile browser rehearsal now covers mandate confirmation, quoting, receipt, refusal and revocation; it found and fixed an enabled quantity-control issue after revocation. All four primary views also fit the 390px viewport, and the mandate-review dialog scrolls through to its confirmation button. No real funds move. Remaining completion dependencies are owned by teammates: Abdullah’s live draft/shopping-run APIs, Timmy’s server-side coverage enforcement for the HK$50 pickup evidence and payment-route revalidation, and Seungbin’s event/audit/verifier/Z3/concurrency services. Keep the explicit disconnected states until those endpoints are present and reviewed. A second physical machine rehearsal is still outstanding.
+**Status (3 October 2026, main `608af4f`):** Noah-owned frontend and shared-app integration is connected to the merged wallet, deterministic draft parser, Jev shopping-run API, audit/checkpoint/verifier services and Z3 model. The current one-screen experience links to the full dashboard and Safety Lab. The 390px browser flow, sandbox checkout/refusal/revocation, live audit checkpoint and tamper detection, and both Z3 variants have been exercised. No real funds move. The API enforces observed pickup-fee coverage. A second physical-machine rehearsal is still outstanding; Seungbin PR #12 is a WIP evaluation extension and its model-dependent scenarios are not part of the current `main` integration.
 
 ## 1. Product and scope
 
 Build a mobile-friendly caregiver shopping application with a desktop demonstration dashboard. A user confirms a spending mandate, starts a grocery order, sees the chosen basket and total, and receives either a sandbox receipt or a clear refusal. Users can revoke spending permission and inspect why each decision happened.
 
-The technical views show two agents competing for a shared budget, the bounded formal-verification result, and independently checked audit records. These views consume Timmy's and Seungbin's real outputs. The UI now has contract-backed polling and action handlers for event, audit export/checkpoint/verifier, and unsafe/atomic solver APIs; the current checkout still returns unavailable for the teammate-owned endpoints. Product prices and quote delivery charges display their linked evidence IDs as source links with evidence kind and observation date; placeholder or incomplete evidence is labelled unverified and is never linked as a live source.
+The technical views show two agents competing for a shared budget, the bounded formal-verification result, and independently checked audit records. These views consume Seungbin's real API outputs or the identified, timestamped evaluation artifact. The UI has contract-backed polling and action handlers for events, audit export/checkpoint/verifier, and unsafe/atomic solver APIs. Product prices and quote delivery charges display their linked evidence IDs as source links with evidence kind and observation date; placeholder or incomplete evidence is labelled unverified and is never linked as a live source.
 
 The initial story is one caregiver delegating weekly groceries. Seungbin proposes one root weekly mandate with two shop-specific child mandates, which fits the current same-owner implementation. Treat this as a proposed demo story until agreed. The current wallet confirmation code requires the parent and child owner to be the same user; do not build a separate-parent-and-student account experience that claims cross-user delegation already works.
 
@@ -28,19 +28,19 @@ Extensions after integration: conversational draft UX, character animation, frid
 
 ## 2. Current repository reality
 
-The repository contains the React/Vite client, shared FastAPI app, Timmy's wallet and Abdullah's observed Wellcome catalog API/capture utilities. Abdullah's natural-language draft and shopping-run endpoints, and Seungbin's independent audit/verifier/Z3 services, are still absent from the current checkout; the UI keeps those functions visibly disconnected instead of returning fabricated results.
+The repository contains the React/Vite client, shared FastAPI app, Timmy's wallet, Abdullah's observed Wellcome catalog and draft/shopping-run APIs, and Seungbin's independent audit/verifier/Z3 services. Their routers are mounted by the shared app. External Jev selection still depends on configured credentials and network access; the default one-screen path honestly labels its preset-basket fallback.
 
-| Area | Current state at `97134bd` | Consequence for Noah |
+| Area | Current state at `608af4f` | Consequence for Noah |
 |---|---|---|
 | Wallet | Timmy's routes, service, models, signing, SQLite storage and sandbox rail are present | Compose and consume wallet APIs; do not reimplement policy or ledger |
-| Shared app | `mandate.app:app` mounts wallet routes, demo checkout, health and the built SPA | Keep this as the single entrypoint and preserve JSON errors for unknown API paths |
-| Drafts | Wallet has an in-memory seeded `draft_demo`; natural-language draft route is not in this checkout | Keep explicit seeded/structured fallback; do not claim a real model interpretation |
+| Shared app | `mandate.app:app` mounts wallet, catalog, demo, agent, audit and verification routes, health and the built SPA | Keep this as the single entrypoint and preserve JSON errors for unknown API paths |
+| Drafts | Mounted `/mandates/draft` uses deterministic fixed rules and returns ambiguities instead of guessing | Describe as rule-based parsing, not model interpretation; user explicitly confirms rules |
 | Quotes | Server calculates catalog totals and hashes | Never manufacture final prices in the browser |
-| Agent | No shopping-run router/worker is present; Abdullah's separate `services/agent` captures observed products through Jev/Steel | Keep manual catalog selection available and label agent-run status as disconnected |
-| Audit | Wallet shim writes stub events; no independent audit/checkpoint/verifier routes are mounted | Never present stub records as independently verified history |
+| Agent | Mounted `/agent-runs` calls the Jev selector over allowed catalog products; run state is in memory | Keep manual/preset path and report provider or fallback honestly; runs are lost on API restart |
+| Audit | Seungbin's chained events, signed checkpoints and independent verifier are mounted and started by `scripts/run-demo.sh` | Create a retained checkpoint before calling history verified; keep unanchored records distinct |
 | Catalog | `GET /catalog` serves the wallet's trusted catalog; `data/catalog/wellcome.json` has captured, timestamped Wellcome evidence | Use the observed snapshot by default, retain the explicit placeholder fallback, and disclose snapshot age/coverage limits |
 | Payment rail | Local simulated adapter; no money moves | Receipts and screens clearly say sandbox simulation |
-| Verification/evaluation | No Z3 or evaluation router is mounted in this checkout | Render honest not-connected states rather than invented passing results |
+| Verification/evaluation | Z3 API is mounted; measured HTTP race is bundled from `evaluation/results/latest.json` with source commit/time/delay | Run solver on demand and state its assumptions/bound; label measured data as a recorded evaluation, not a fresh browser race |
 | Rubric | Percentages are asserted in Seungbin's proposal; handbook not inspected here | Obtain the source before using those weights to prioritize or claim compliance |
 
 Existing wallet routes:
@@ -343,6 +343,8 @@ This rule is for active work sessions. There is no background polling job or una
 
 ## 14. Integration checkpoint — 3 October 2026
 
+> Historical checkpoint written before Abdullah PR #8 and Seungbin PRs #9 and #11 were merged. Its remaining-dependency statements are superseded by the current checkpoint in §15.
+
 The wallet exposes payment-route comparisons, one-time approval requests, refunds and velocity limits. The web client integrates the quote-specific route picker, owner approve/decline actions, and an explicit continuation action for an approval that succeeded before a client/network failure. The demo purchase adapter resumes only the matching transaction after checking that its approval is approved; the wallet still reevaluates policy and budget before payment.
 
 The mandate review now exposes the approval threshold and purchase-frequency limit, and the wallet view reads those values from the confirmed policy. The demo request contract carries an optional route ID and approval ID. The browser still receives no signed authorization token or payment credential.
@@ -370,3 +372,13 @@ When the agent-run endpoint is unavailable, the web app now presents an opt-in l
 The opt-in scripted fallback was exercised in the browser against a clean local wallet: the absent `POST /agent-runs` endpoint returned 404, exact matches for the two prefilled catalog titles populated the basket, and the wallet returned an HK$100.90 quote. Attempting a new scripted match clears the old checkout first; an unmatched partial title then emptied the previous cart and was rejected without generating a replacement quote. At a 390px viewport, the fallback controls stayed within the viewport (document width 390px). The production frontend build passed after this change.
 
 The pushed fallback commit `81ae821` was rechecked from a disposable clean checkout: `npm ci`, the production frontend build, a new Python 3.12 virtual environment, and wallet requirements installation all completed. `scripts/run-demo.sh` then served the homepage, `/api/v1/health`, and the authenticated 80-product catalog with HTTP 200; `/api/v1/agent-runs` returned the expected 404. The demo server was stopped and the temporary checkout removed.
+
+## 15. Integrated team services — 3 October 2026
+
+GitHub `main` was synchronized before review and advanced through Seungbin PR #9 (`68039a2`) and PR #11 (`608af4f`). The latest teammate work was checked first in a disposable worktree based on `origin/seungbin/race-view`; no OpenAPI/type contract changes were included. PR #9 adds the event feed, signed checkpoints, independent verifier and bounded Z3 endpoint. PR #11 adds the recorded HTTP-race comparison to the classic Safety Lab and serializes concurrent Z3 calls to avoid the reported Z3 global-context crash. PR #12 remains an open WIP and is not merged.
+
+Validation on the disposable integration tree: `npm run build` passed; all 108 `services/api/tests` passed; all 3 `evaluation/tests` passed. The evaluation harness expects `services/api/.venv/bin/python`, so its test run mapped that repo-local path to the isolated Python 3.12 environment. The one-origin demo returned HTTP 200 for the SPA, health, authenticated 80-product catalog and Z3 endpoint.
+
+The visible browser flow was rehearsed at 390px against an ephemeral wallet: mandate activation, preset basket fallback when Jev credentials are absent, HK$151.80 sandbox receipt and refreshed HK$648.20 balance. The default one-screen UI exposes the classic dashboard through **How this works → Open the full dashboard**. The full dashboard showed the four real wallet events; checkpoint creation and ordinary verification returned **valid through checkpoint**; tamper-and-verify returned **HASH_MISMATCH** at the edited event; the Z3 endpoint returned an unsafe counterexample and an atomic **no counterexample within bound** result; the measured HTTP panel showed the captured evaluation outcomes and clearly stated its artificial unsafe-baseline delay. No real payment was made.
+
+Updated runbook/recording notes now distinguish the current connected prototype from the older 25.6-second recording, which predates the agent and audit integrations. Remaining Noah-owned item: rehearse reset/start and the same user-visible path on a second physical machine, then refresh the recording if useful. That hardware action cannot be verified from the current machine.
