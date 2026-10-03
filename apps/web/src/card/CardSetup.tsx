@@ -21,7 +21,7 @@ const MCC_NAMES: Record<string, string> = {
   '5921': 'Liquor stores',
 };
 
-const STATUS_LABEL: Record<VirtualCard['status'], string> = { active: 'Active', frozen: 'Locked', used: 'Used', cancelled: 'Cancelled' };
+const STATUS_LABEL: Record<VirtualCard['status'], string> = { active: 'Active', frozen: 'Paused', used: 'Used', cancelled: 'Cancelled' };
 const merchantName = (id: string) => id === 'wellcome' ? 'Wellcome' : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-HK', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Hong_Kong' });
 
@@ -58,7 +58,9 @@ export default function CardSetup() {
     if (!card) return;
     setBusy(true); setError('');
     try {
-      const result = card.status === 'frozen' ? await api.unfreezeCard(TOKEN, mandateId) : await api.freezeCard(TOKEN, mandateId);
+      const action = card.status === 'frozen' ? 'unfreeze' : 'freeze';
+      const result = action === 'unfreeze' ? await api.unfreezeCard(TOKEN, mandateId) : await api.freezeCard(TOKEN, mandateId);
+      sessionStorage.removeItem(`mandate-idempotency-${action}-${mandateId}`);
       setCard(result.card);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The issuer did not accept the change.');
@@ -105,11 +107,11 @@ export default function CardSetup() {
         <p className="vc-muted">Copied from the allowance. To change them, start a new allowance.</p>
       </Step>
 
-      <Step n={3} title="Lock" done={card.status === 'active'}>
+      <Step n={3} title="Pause" done={card.status === 'active'}>
         <div className="vc-lock">
           <div>
-            <b>{card.status === 'frozen' ? 'Card is locked' : card.status === 'active' ? 'Card is on' : `Card is ${STATUS_LABEL[card.status].toLowerCase()}`}</b>
-            <span className="vc-muted">{lockable ? 'Locking declines every purchase until you unlock it.' : 'Revoked allowances cannot be unlocked.'}</span>
+            <b>{card.status === 'frozen' ? 'Card is paused' : card.status === 'active' ? 'Card is on' : `Card is ${STATUS_LABEL[card.status].toLowerCase()}`}</b>
+            <span className="vc-muted">{lockable ? 'Pausing declines every purchase until you resume it.' : 'Revoked allowances cannot be unlocked.'}</span>
           </div>
           <button type="button" role="switch" aria-checked={card.status === 'active'} aria-label="Card on" className={`vc-switch${card.status === 'active' ? ' on' : ''}`}
             onClick={() => void toggleLock()} disabled={busy || !lockable}><i /></button>

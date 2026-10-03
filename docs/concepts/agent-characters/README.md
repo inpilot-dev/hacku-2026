@@ -1,7 +1,7 @@
 # Agent characters (concept)
 
-Concept art for the Mandate agents, for Noah to use in the frontend as he sees
-fit. Nothing here is wired into `apps/web` yet.
+Character artwork used in the Mandate frontend. `ReactiveCharacter` adds hover
+greetings and eye-only idle expressions to both the simple and classic views.
 
 ![All states](all-states.jpg)
 
@@ -28,13 +28,9 @@ reference was Meta's Muse characters; these designs are original.
 PNGs are 512x512 with transparent backgrounds. 1024px versions are in the
 project's shared files under `mascots/`.
 
-Example use: copy the PNGs to `apps/web/public/agents/`, then
-`<img src="/agents/kip-refused.png" alt="" width="120">`. A gentle idle bob:
-
-```css
-.agent-avatar { animation: bob 2.4s ease-in-out infinite; }
-@keyframes bob { 50% { transform: translateY(-4px) scale(1.02, .98); } }
-```
+Use `apps/web/src/components/ReactiveCharacter.tsx` to display a character.
+Idle characters blink and glance around; hovering shows a smile. Status
+expressions remain unchanged. Backgrounds are transparent, with no body motion.
 
 ## Re-rendering
 
@@ -46,3 +42,17 @@ npm i three@0.169.0
 PAGE=agents.html python3 shoot.py out kip-refused stella-pass
 python3 sheet.py out kip-refused stella-pass   # optional contact sheet
 ```
+
+## Hover greetings
+
+Each character also has a `smile` state rendered from the same scene, without
+sparkles, coins, or approval/check badges. The web UI uses `public/agents/*-smile.png`
+on hover only for idle characters. No breathing or pointer-follow motion is used;
+working, refusal, failure, and revoked states keep their original expressions.
+
+Idle characters also use `blink`, `look-left`, and `look-right` frames from the
+same scene. Only the eyes change. Independent random timers pause on hover,
+in hidden tabs, and with reduced motion enabled. Hover smiles take priority.
+
+Idle actions wait 1.4–3.2 seconds between sequences; 62% are quick blinks and
+38% are glances in both directions. Sticker wrappers have transparent backgrounds.

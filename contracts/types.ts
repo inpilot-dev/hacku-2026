@@ -353,7 +353,7 @@ export type AuditEvent = {
   "stream_id": string;
   "sequence": number;
   "event_id": string;
-  "type": "mandate_confirmed" | "mandate_revoked" | "quote_created" | "authorization_approved" | "authorization_refused" | "payment_completed" | "payment_refused" | "reservation_cancelled" | "reservation_expired" | "agent_run_updated";
+  "type": "mandate_confirmed" | "mandate_revoked" | "quote_created" | "authorization_approved" | "authorization_refused" | "payment_completed" | "payment_refused" | "reservation_cancelled" | "reservation_expired" | "agent_run_updated" | "card_frozen" | "card_unfrozen";
   "occurred_at": string;
   "actor_id": string;
   "mandate_id": string | null;
@@ -676,4 +676,96 @@ export type CardAuthorization = {
 export type CardAuthorizationList = {
   "card_id": string;
   "authorizations": Array<CardAuthorization>;
+};
+
+export type StoreConnectionStatus = "not_connected" | "awaiting_login" | "connected" | "expired";
+
+export type StoreConnection = {
+  "store_id": string;
+  "name": string;
+  "status": StoreConnectionStatus;
+  "connected_at": string | null;
+  "message": string;
+};
+
+export type StoreList = {
+  "stores": Array<StoreConnection>;
+};
+
+export type StoreLoginTicket = {
+  "ticket": string;
+  "expires_in_s": number;
+};
+
+export type LoginStreamServerMessage = {
+  "type": "viewport";
+  "width": number;
+  "height": number;
+} | {
+  "type": "frame";
+  "data": string;
+  "width": number;
+  "height": number;
+} | {
+  "type": "notice" | "error";
+  "text": string;
+} | {
+  "type": "status";
+  "status": StoreConnectionStatus;
+};
+
+export type LoginStreamClientMessage = {
+  "type": "down" | "up" | "move";
+  "x": number;
+  "y": number;
+} | {
+  "type": "wheel";
+  "x": number;
+  "y": number;
+  "dx": number;
+  "dy": number;
+} | {
+  "type": "text";
+  "text": string;
+} | {
+  "type": "key";
+  "key": "Backspace" | "Tab" | "Enter" | "Escape" | "ArrowLeft" | "ArrowRight" | "Delete";
+};
+
+export type CartSyncRequest = {
+  "mandate_id": string;
+  "quote_id": string;
+};
+
+export type CartSyncLine = {
+  "product_id": string;
+  "sku": string;
+  "title": string;
+  "quoted_quantity": number;
+  "cart_quantity": number;
+  "quoted_unit_price_minor": number;
+  "cart_unit_price_minor": number | null;
+  "status": "ok" | "price_changed" | "quantity_mismatch" | "missing";
+};
+
+export type CartOtherItem = {
+  "sku": string;
+  "title": string;
+  "quantity": number;
+  "unit_price_minor": number;
+  "checked": boolean;
+};
+
+export type CartSyncResult = {
+  "store_id": string;
+  "quote_id": string;
+  "mandate_id": string;
+  "status": "synced" | "mismatch" | "partial" | "not_connected" | "session_expired" | "store_error";
+  "observed_at": string;
+  "lines": Array<CartSyncLine>;
+  "other_items": Array<CartOtherItem>;
+  "cart_subtotal_minor": number | null;
+  "quote_subtotal_minor": number;
+  "checkout_ready": boolean;
+  "message": string;
 };

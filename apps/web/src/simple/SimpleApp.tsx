@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
 import './openai-tokens.css';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Policy, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
+import ReactiveCharacter from '../components/ReactiveCharacter';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
+import CartSyncPanel from './CartSyncPanel';
+import Onboarding, { storeName } from './Onboarding';
 
 /*
  * A single-screen take on the core Mandate story for a Gen Z caregiver:
@@ -15,7 +18,6 @@ import { money } from '../lib/format';
 const TOKEN = 'dev-user-token';
 const STORE_ID = 'wellcome';
 const PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
-const DRAFT_ID = 'draft_demo';
 const MANDATE_KEY = 'mandate-id';
 const PRESETS_KEY = 'mandate-shopping-presets-v1';
 
@@ -76,21 +78,12 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
 
-function nextSundayIso() {
-  const end = new Date(Date.now() + 28 * 864e5);
-  return `${end.toISOString().slice(0, 10)}T23:59:59+08:00`;
-}
-
 function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
-  return <img className="m2-avatar" src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
-}
-
-function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
-  return <button type="button" role="switch" aria-checked={on} aria-label={label} className={`m2-switch${on ? ' on' : ''}`} onClick={onChange}><i /></button>;
+  return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
-  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><img src={`/agents/${name}-${state}.png`} alt="" /></span>;
+  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><ReactiveCharacter name={name} state={state} size={size} /></span>;
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
@@ -100,7 +93,9 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
   switch (event.type) {
     case 'mandate_confirmed': return { who: 'bean', text: 'Allowance switched on', tone: 'good' };
-    case 'mandate_revoked': return { who: 'kip', text: 'Card frozen', tone: 'bad', state: 'revoked' };
+    case 'mandate_revoked': return { who: 'kip', text: 'Allowance permanently revoked', tone: 'bad', state: 'revoked' };
+    case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
+    case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
     case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };
@@ -154,14 +149,11 @@ export default function SimpleApp() {
   const [mandateId, setMandateId] = useState(() => localStorage.getItem(MANDATE_KEY) ?? '');
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
+  const [card, setCard] = useState<VirtualCard | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
-  const [weekly, setWeekly] = useState('800');
-  const [perOrder, setPerOrder] = useState('300');
-  const [askOn, setAskOn] = useState(false);
-  const [askAbove, setAskAbove] = useState('100');
   const [riskReviewOn, setRiskReviewOn] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
 
@@ -205,10 +197,11 @@ export default function SimpleApp() {
 
   const refresh = useCallback(async (id = mandateId) => {
     try { await api.health(); setOnline(true); } catch { setOnline(false); }
-    if (!id) { setMandate(null); setBudget(null); setLoaded(true); return; }
+    if (!id) { setMandate(null); setBudget(null); setCard(null); setLoaded(true); return; }
     try {
       const [m, b] = await Promise.all([api.mandate(TOKEN, id), api.budget(TOKEN, id)]);
       setMandate(m); setBudget(b);
+      try { setCard(await api.card(TOKEN, id)); } catch { setCard(null); }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) { localStorage.removeItem(MANDATE_KEY); setMandateId(''); setMandate(null); setBudget(null); }
     } finally { setLoaded(true); }
@@ -232,72 +225,60 @@ export default function SimpleApp() {
   }, [catalog]);
 
   const active = mandate?.status === 'active';
+  const canSpend = active && card?.status !== 'frozen';
   const period = budget?.applicable_budgets[0];
   const available = period?.available_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const limit = period?.limit_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const spent = (period?.paid_minor ?? 0) + (period?.reserved_minor ?? 0);
   const ratio = limit ? Math.min(1, spent / limit) : 0;
 
-  async function activate() {
-    setError('');
-    const weeklyMinor = Math.round(Number(weekly) * 100);
-    const orderMinor = Math.round(Number(perOrder) * 100);
-    const askMinor = askOn ? Math.round(Number(askAbove) * 100) : null;
-    if (!(weeklyMinor > 0) || !(orderMinor > 0) || (askMinor !== null && !(askMinor > 0))) { setError('Use whole HK$ amounts above zero.'); return; }
-    const policy: Policy = {
-      currency: 'HKD',
-      per_order_limit_minor: orderMinor,
-      period_limits: [{ period: 'calendar_week', limit_minor: weeklyMinor, timezone: 'Asia/Hong_Kong' }],
-      allowed_merchant_ids: [STORE_ID],
-      blocked_categories: ['alcohol'],
-      expires_at: nextSundayIso(),
-      approval_above_minor: askMinor,
-      risk_review: riskReviewOn,
-    };
-    setBusy('activate');
-    try {
-      const draftId = await freshDraftId(weeklyMinor, orderMinor);
-      const result = await api.confirm(TOKEN, { draft_id: draftId, policy });
-      sessionStorage.removeItem('mandate-idempotency-confirm-draft-demo');
-      localStorage.setItem(MANDATE_KEY, result.id);
-      setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
-      note('bean', `Allowance on: ${money(weeklyMinor)}/week, ${money(orderMinor)}/order`, 'good');
-      await refresh(result.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The wallet could not switch this on.');
-    } finally { setBusy(''); }
-  }
-
-  /**
-   * A draft backs exactly one mandate, so every switch-on (including after a freeze) registers its own.
-   * The rules confirmed are the ones set on this screen; the draft only records who may act for whom.
-   * Falls back to the seeded draft when the draft API isn't mounted.
-   */
-  async function freshDraftId(weeklyMinor: number, orderMinor: number): Promise<string> {
-    try {
-      const draft = await api.draft(TOKEN, {
-        text: `Weekly allowance for Mum: ${money(orderMinor)} per order and ${money(weeklyMinor)} per week, only from ${STORE_ID}, no alcohol.`,
-        delegatee_id: 'agent_student',
-      });
-      sessionStorage.removeItem('mandate-idempotency-mandate-draft');
-      return draft.draft_id;
-    } catch (err) {
-      if (err instanceof ApiError && [404, 405].includes(err.status)) return DRAFT_ID;
-      throw err;
-    }
+  /** Onboarding confirmed a new mandate with the wallet; show it. */
+  async function activated(result: Mandate, summary: string) {
+    localStorage.setItem(MANDATE_KEY, result.id);
+    setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
+    note('bean', summary, 'good');
+    await refresh(result.id);
   }
 
   async function freeze() {
     if (!mandate) return;
     setBusy('freeze'); setError('');
     try {
-      const result = await api.revoke(TOKEN, mandate.id);
-      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
-      setMandate(result.mandate); resetShop();
-      note('kip', `Card frozen${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      const result = await api.freezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-freeze-${mandate.id}`);
+      setCard(result.card); resetShop();
+      note('kip', 'Card paused. No new purchases can be made.', 'bad', 'frozen');
       await refresh(mandate.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not freeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function unfreeze() {
+    if (!mandate) return;
+    setBusy('unfreeze'); setError('');
+    try {
+      const result = await api.unfreezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-unfreeze-${mandate.id}`);
+      setCard(result.card);
+      note('kip', 'Card resumed. The existing allowance still applies.', 'good', 'active');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unfreeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function revokeAllowance() {
+    if (!mandate || !window.confirm('Permanently revoke this allowance? Its virtual card will be cancelled and cannot be resumed.')) return;
+    setBusy('revoke'); setError('');
+    try {
+      const result = await api.revoke(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
+      setMandate(result.mandate); resetShop();
+      note('kip', `Allowance revoked${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke the allowance.');
     } finally { setBusy(''); }
   }
 
@@ -361,7 +342,7 @@ export default function SimpleApp() {
 
   async function shopFromText() {
     const text = listText.trim();
-    if (!mandate || !active || !text || busy) return;
+    if (!mandate || !canSpend || !text || busy) return;
     setError(''); setBusy('parse');
     try {
       const parsed = await api.parseShoppingList(TOKEN, { text });
@@ -374,7 +355,7 @@ export default function SimpleApp() {
   }
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
-    if (!mandate || !active) return;
+    if (!mandate || !canSpend) return;
     const spoken = chosen !== 'custom' && 'kind' in chosen;
     const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
@@ -619,7 +600,7 @@ export default function SimpleApp() {
     if (loaded && mandateId) void loadReceipts();
   }, [loaded, mandateId]);
 
-  const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
+  const kipState = !mandate || !active ? 'revoked' : card?.status === 'frozen' ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
   const estimate = (p: Pick) => p.items.reduce((sum, line) => sum + (productById.get(line.product_id)?.unit_price_minor ?? 0) * line.quantity, 0);
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
@@ -645,42 +626,34 @@ export default function SimpleApp() {
             <figure><Sticker name="stella" state="idle" size={76} tilt={-3} /><figcaption><b>Stella</b> keeps the log</figcaption></figure>
           </div>
         </div>
-        <div className="m2-setup-form">
-          <h2>Mum’s rules</h2>
-          <label className="m2-ledger-row"><span>Weekly budget</span><b>HK$<input inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} aria-label="Weekly budget in HK$" /></b></label>
-          <label className="m2-ledger-row"><span>Most per order</span><b>HK$<input inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} aria-label="Maximum per order in HK$" /></b></label>
-          <div className="m2-ledger-row"><span>Ask me first</span><Switch on={askOn} label="Ask me first before bigger orders" onChange={() => setAskOn(!askOn)} /></div>
-          {askOn && <label className="m2-ledger-row m2-ledger-sub"><span>For orders above</span><b>HK$<input inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>}
-          <div className="m2-ledger-row"><span>Review unusual purchases</span><Switch on={riskReviewOn} label="Review unusual purchases" onChange={() => setRiskReviewOn(!riskReviewOn)} /></div>
-          {riskReviewOn && <p className="m2-muted m2-risk-note">Kip can pause first-time or unusually large baskets, new items and sharp price rises. Product listings that try to instruct the agent are always sent for your review.</p>}
-          <div className="m2-ledger-row fixed"><span>Shop</span><b>Wellcome</b></div>
-          <div className="m2-ledger-row fixed"><span>Never buy</span><b>Alcohol</b></div>
-          <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
-          <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
-          {setupOpen && mandate && <button className="m2-link" onClick={() => setSetupOpen(false)}>Back</button>}
-        </div>
+        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} onActivated={activated}
+          onBack={setupOpen && mandate ? () => setSetupOpen(false) : undefined} />
       </section>
     ) : mandate && (
       <main className="m2-grid">
         <section className="m2-col m2-area-card">
-          <div className={`m2-card ${active ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{active ? 'Active' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span></div>
-            <div className="m2-card-amount"><small>{active ? 'Left this week' : 'Spending is off'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
+          <div className={`m2-card ${canSpend ? '' : 'frozen'}`}>
+            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
+            {card && <div className="m2-card-number"><span>CONTROL CARD</span><b>{card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ···· {card.last4}</b><small>the agent never sees reusable card details</small></div>}
+            {active && !card && <p className="m2-card-note">Card details are unavailable for this allowance. Wallet spending rules remain active.</p>}
+            <div className="m2-card-amount"><small>{!active ? 'Spending is off' : card?.status === 'frozen' ? 'Available when resumed' : 'Left this week'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
             <div className="m2-meter" aria-hidden>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < Math.round(ratio * 20) ? 'on' : ''} />)}</div>
             <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a week</span></div>
             <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
           </div>
           <dl className="m2-rules">
             <div><dt>Most per order</dt><dd>{hkd(mandate.policy.per_order_limit_minor)}</dd></div>
-            <div><dt>Shop</dt><dd>Wellcome</dd></div>
+            <div><dt>{mandate.policy.allowed_merchant_ids.length > 1 ? 'Shops' : 'Shop'}</dt><dd>{mandate.policy.allowed_merchant_ids.map(storeName).join(', ')}</dd></div>
             <div><dt>Never buy</dt><dd>Alcohol</dd></div>
             {mandate.policy.approval_above_minor != null && <div><dt>Ask me first above</dt><dd>{hkd(mandate.policy.approval_above_minor)}</dd></div>}
             {mandate.policy.risk_review && <div><dt>Extra protection</dt><dd>Unusual purchases reviewed</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
           </dl>
-          {active
-            ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
+          {active ? card?.status === 'frozen'
+            ? <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}><Snowflake size={18} />{busy === 'unfreeze' ? 'Resuming…' : 'Unfreeze the card'}</button>
+            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
+          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke'}>Permanently revoke allowance</button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
           <a className="m2-receipts-trigger" href="?card"><CreditCard size={18} /><span><b>Virtual card</b><small>Set up, lock or check the card</small></span><ArrowRight size={17} /></a>
           {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
@@ -695,11 +668,12 @@ export default function SimpleApp() {
         </section>
 
         <section className="m2-col m2-area-shop" ref={shopRef}>
-          {!active ? (
+          {!canSpend ? (
             <div className="m2-panel m2-center">
               <Sticker name="kip" state="revoked" size={150} tilt={-4} />
-              <h2>Kip is asleep.</h2>
-              <p className="m2-muted">The card is {mandate.status === 'expired' ? 'expired' : 'frozen'}. Nobody can spend from it, not even Kumi.</p>
+              <h2>{!active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
+              <p className="m2-muted">{!active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
+              {active && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
@@ -766,6 +740,7 @@ export default function SimpleApp() {
                 {phase === 'verdict' && verdict && <div className={`m2-stamp ${verdict.kind}`}>{stamp}</div>}
               </div>
               {phase === 'basket' && <>
+                <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />
                 <button className="m2-cta" onClick={() => void checkout()}>Let Kip pay {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
                 {routeLabel && <p className="m2-route">Kip will use <b>{routeLabel}</b>, the cheapest route it found.</p>}
                 <button className="m2-link" onClick={resetShop}>Start over</button>
