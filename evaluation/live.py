@@ -1,6 +1,6 @@
 """C1: the real wallet vs the unsafe baseline over real HTTP (uvicorn subprocesses on ports 8100-8199).
 
-    services/api/.venv/bin/python -m evaluation.live            (from the repo root)
+    .venv/bin/python -m evaluation.live            (from the repo root)
 
 Setup per server: weekly HK$800, HK$400 already paid, then two HK$300 authorizations
 fired concurrently (asyncio.gather over httpx.AsyncClient). Then, on the wallet only:
@@ -27,7 +27,7 @@ from mandate.payments.drafts import InMemoryDrafts
 from .common import AGENT, PRESPEND, RACE_BASKET, Api, hkd, key, txn
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON = ROOT / "services" / "api" / ".venv" / "bin" / "python"
+PYTHON = sys.executable  # the venv running the evaluation, wherever it lives
 
 
 class AnyEvalDraft(InMemoryDrafts):

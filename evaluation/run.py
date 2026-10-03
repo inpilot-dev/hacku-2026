@@ -1,6 +1,6 @@
 """Run C1 (live HTTP), C2 (20 deterministic scenarios) and the extra §11 items; write results/latest.json; print a summary.
 
-    services/api/.venv/bin/python -m evaluation.run          (from the repo root)
+    .venv/bin/python -m evaluation.run          (from the repo root)
 
 Every number is measured in this run. Nothing is estimated or carried over.
 """
