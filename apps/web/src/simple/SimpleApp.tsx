@@ -70,6 +70,7 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   MANDATE_NOT_ACTIVE: 'The card isn’t active',
   MANDATE_EXPIRED: 'The allowance has expired',
   MANDATE_REVOKED: 'The card is frozen',
+  RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
 
 function nextSundayIso() {
@@ -118,6 +119,7 @@ export default function SimpleApp() {
   const [perOrder, setPerOrder] = useState('300');
   const [askOn, setAskOn] = useState(false);
   const [askAbove, setAskAbove] = useState('100');
+  const [riskReviewOn, setRiskReviewOn] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
 
   const [phase, setPhase] = useState<Phase>('pick');
@@ -189,6 +191,7 @@ export default function SimpleApp() {
       blocked_categories: ['alcohol'],
       expires_at: nextSundayIso(),
       approval_above_minor: askMinor,
+      risk_review: riskReviewOn,
     };
     setBusy('activate');
     try {
@@ -385,6 +388,8 @@ export default function SimpleApp() {
           <label className="m2-ledger-row"><span>Most per order</span><b>HK$<input inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} aria-label="Maximum per order in HK$" /></b></label>
           <div className="m2-ledger-row"><span>Ask me first</span><Switch on={askOn} label="Ask me first before bigger orders" onChange={() => setAskOn(!askOn)} /></div>
           {askOn && <label className="m2-ledger-row m2-ledger-sub"><span>For orders above</span><b>HK$<input inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>}
+          <div className="m2-ledger-row"><span>Review unusual purchases</span><Switch on={riskReviewOn} label="Review unusual purchases" onChange={() => setRiskReviewOn(!riskReviewOn)} /></div>
+          {riskReviewOn && <p className="m2-muted m2-risk-note">Kip can pause first-time or unusually large baskets, new items and sharp price rises. Product listings that try to instruct the agent are always sent for your review.</p>}
           <div className="m2-ledger-row fixed"><span>Shop</span><b>Wellcome</b></div>
           <div className="m2-ledger-row fixed"><span>Never buy</span><b>Alcohol</b></div>
           <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
@@ -407,11 +412,12 @@ export default function SimpleApp() {
             <div><dt>Shop</dt><dd>Wellcome</dd></div>
             <div><dt>Never buy</dt><dd>Alcohol</dd></div>
             {mandate.policy.approval_above_minor != null && <div><dt>Ask me first above</dt><dd>{hkd(mandate.policy.approval_above_minor)}</dd></div>}
+            {mandate.policy.risk_review && <div><dt>Extra protection</dt><dd>Unusual purchases reviewed</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
           </dl>
           {active
             ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
-            : <button className="m2-cta" onClick={() => setSetupOpen(true)}>Start a new allowance<ArrowRight size={18} /></button>}
+            : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
         </section>
 
         <section className="m2-col m2-area-feed">
@@ -488,7 +494,9 @@ export default function SimpleApp() {
               {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at Wellcome.</p>}
               {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" onClick={() => void checkout()}>Check again</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
-                <p className="m2-muted">It’s over your “ask me first” line of {mandate.policy.approval_above_minor != null ? hkd(mandate.policy.approval_above_minor) : 'the limit'}. Approving lets this one order through once.</p>
+                <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
+                {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul>}
+                <p className="m2-muted">Approval covers only this basket and the reasons shown here, once.</p>
                 <div className="m2-row">
                   <button className="m2-cta" onClick={() => void decide(true)} disabled={busy === 'decide'}>Approve once</button>
                   <button className="m2-ghost" onClick={() => void decide(false)} disabled={busy === 'decide'}>Say no</button>

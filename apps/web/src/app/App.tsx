@@ -51,6 +51,7 @@ const initialPolicy = {
   blocked_categories: ['alcohol' as const],
   expires_at: '2026-10-31T23:59:59+08:00',
   approval_above_minor: null,
+  risk_review: false,
 };
 
 type View = 'overview' | 'shopping' | 'wallet' | 'activity';
@@ -1009,6 +1010,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
   const [blockAlcohol, setBlockAlcohol] = useState(initial.blocked_categories.includes('alcohol'));
   const [approvalAbove, setApprovalAbove] = useState(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
   const [velocityEnabled, setVelocityEnabled] = useState(Boolean(initial.velocity_limit));
+  const [riskReview, setRiskReview] = useState(Boolean(initial.risk_review));
   const [maxPurchases, setMaxPurchases] = useState(String(initial.velocity_limit?.max_purchases ?? 3));
   const [windowMinutes, setWindowMinutes] = useState(String(initial.velocity_limit?.window_minutes ?? 60));
   const [basePolicy, setBasePolicy] = useState(initial);
@@ -1028,6 +1030,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
     setBlockAlcohol(initial.blocked_categories.includes('alcohol'));
     setApprovalAbove(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
     setVelocityEnabled(Boolean(initial.velocity_limit));
+    setRiskReview(Boolean(initial.risk_review));
     setMaxPurchases(String(initial.velocity_limit?.max_purchases ?? 3));
     setWindowMinutes(String(initial.velocity_limit?.window_minutes ?? 60));
   }
@@ -1050,6 +1053,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
         setBlockAlcohol(proposed.blocked_categories.includes('alcohol'));
         setApprovalAbove(proposed.approval_above_minor === null ? '' : String(proposed.approval_above_minor / 100));
         setVelocityEnabled(Boolean(proposed.velocity_limit));
+        setRiskReview(Boolean(proposed.risk_review));
         setMaxPurchases(String(proposed.velocity_limit?.max_purchases ?? 3));
         setWindowMinutes(String(proposed.velocity_limit?.window_minutes ?? 60));
       }
@@ -1081,7 +1085,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
     if (!expires || new Date(`${expires}T23:59:59+08:00`) <= new Date()) { setError('Choose an expiry date in the future.'); return; }
     const blockedCategories: Policy['blocked_categories'] = basePolicy.blocked_categories.filter((category) => category !== 'alcohol');
     if (blockAlcohol) blockedCategories.push('alcohol');
-    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null };
+    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null, risk_review: riskReview };
     setError('');
     let confirmDraftId = draftId;
     if (!draftResponse) {
@@ -1113,8 +1117,9 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
       <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
       <label>Require approval above (optional)<span className="money-input"><i>HK$</i><input aria-label="Require approval for purchases above this amount in HKD" type="number" min="0.01" step="0.01" value={approvalAbove} onChange={(event) => setApprovalAbove(event.target.value)} placeholder="No threshold" /></span></label>
       <label className="check-option"><input type="checkbox" checked={velocityEnabled} onChange={(event) => setVelocityEnabled(event.target.checked)} /><span><strong>Limit purchase frequency</strong><small>Count reserved or paid purchases made under this mandate and its descendants.</small></span></label>
+      <label className="check-option"><input type="checkbox" checked={riskReview} onChange={(event) => setRiskReview(event.target.checked)} /><span><strong>Review unusual purchases</strong><small>Pause first purchases, much larger baskets, new items or sharp price rises. Listings that try to instruct the agent are always reviewed.</small></span></label>
       {velocityEnabled && <div className="limit-fields"><label>Purchases in window<input aria-label="Maximum purchases in velocity window" type="number" min="1" max="1000" step="1" value={maxPurchases} onChange={(event) => setMaxPurchases(event.target.value)} /></label><label>Window in minutes<input aria-label="Velocity window in minutes" type="number" min="1" max="10080" step="1" value={windowMinutes} onChange={(event) => setWindowMinutes(event.target.value)} /></label></div>}
-      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span></div>
+      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span><span>Unusual-purchase review: {riskReview ? 'on' : 'off'}</span></div>
       {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for {storeLabel}. This proposal needs a matching store policy before it can be activated.</span></div>}
       <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Confirming activates the exact structured rules shown here.</span></div>
       {error && <div className="form-error" role="alert">{error}</div>}

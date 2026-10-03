@@ -4,7 +4,7 @@
 **Owner:** Noah
 **Baseline inspected:** `main` at `0468327` on 2 October 2026
 **Goal:** an integrated first version on Saturday morning; submission freeze Sunday, 4 October, 13:00 Asia/Hong_Kong
-**Status (3 October 2026, main `608af4f`):** Noah-owned frontend and shared-app integration is connected to the merged wallet, deterministic draft parser, Jev shopping-run API, audit/checkpoint/verifier services and Z3 model. The current one-screen experience links to the full dashboard and Safety Lab. The 390px browser flow, sandbox checkout/refusal/revocation, live audit checkpoint and tamper detection, and both Z3 variants have been exercised. No real funds move. The API enforces observed pickup-fee coverage. A second physical-machine rehearsal is still outstanding; Seungbin PR #12 is a WIP evaluation extension and its model-dependent scenarios are not part of the current `main` integration.
+**Status (3 October 2026, main `3ce69f2`):** Noah-owned frontend and shared-app integration is connected to the merged wallet, deterministic draft parser, Jev shopping-run API, audit/checkpoint/verifier services and Z3 model. The current one-screen experience links to the full dashboard and Safety Lab. The 390px browser flow, sandbox checkout/refusal/revocation, live audit checkpoint and tamper detection, Z3 variants, and opt-in unusual-purchase approval have been exercised. No real funds move. The API enforces observed pickup-fee coverage and rejects agent requests that weaken mandate constraints. A second physical-machine rehearsal is still outstanding; Seungbin PR #12 is an open WIP evaluation extension and its model-dependent scenarios are not part of the current `main` integration.
 
 ## 1. Product and scope
 
@@ -30,7 +30,7 @@ Extensions after integration: conversational draft UX, character animation, frid
 
 The repository contains the React/Vite client, shared FastAPI app, Timmy's wallet, Abdullah's observed Wellcome catalog and draft/shopping-run APIs, and Seungbin's independent audit/verifier/Z3 services. Their routers are mounted by the shared app. External Jev selection still depends on configured credentials and network access; the default one-screen path honestly labels its preset-basket fallback.
 
-| Area | Current state at `608af4f` | Consequence for Noah |
+| Area | Current state at `3ce69f2` | Consequence for Noah |
 |---|---|---|
 | Wallet | Timmy's routes, service, models, signing, SQLite storage and sandbox rail are present | Compose and consume wallet APIs; do not reimplement policy or ledger |
 | Shared app | `mandate.app:app` mounts wallet, catalog, demo, agent, audit and verification routes, health and the built SPA | Keep this as the single entrypoint and preserve JSON errors for unknown API paths |
@@ -40,6 +40,7 @@ The repository contains the React/Vite client, shared FastAPI app, Timmy's walle
 | Audit | Seungbin's chained events, signed checkpoints and independent verifier are mounted and started by `scripts/run-demo.sh` | Create a retained checkpoint before calling history verified; keep unanchored records distinct |
 | Catalog | `GET /catalog` serves the wallet's trusted catalog; `data/catalog/wellcome.json` has captured, timestamped Wellcome evidence | Use the observed snapshot by default, retain the explicit placeholder fallback, and disclose snapshot age/coverage limits |
 | Payment rail | Local simulated adapter; no money moves | Receipts and screens clearly say sandbox simulation |
+| Risk review | Timmy PR #13 is merged; zero-trust agent policy checks and opt-in unusual-purchase review are available | Expose the opt-in rule and exact review reasons; never imply approval bypasses hard limits |
 | Verification/evaluation | Z3 API is mounted; measured HTTP race is bundled from `evaluation/results/latest.json` with source commit/time/delay | Run solver on demand and state its assumptions/bound; label measured data as a recorded evaluation, not a fresh browser race |
 | Rubric | Percentages are asserted in Seungbin's proposal; handbook not inspected here | Obtain the source before using those weights to prioritize or claim compliance |
 
@@ -382,3 +383,14 @@ Validation on the disposable integration tree: `npm run build` passed; all 108 `
 The visible browser flow was rehearsed at 390px against an ephemeral wallet: mandate activation, preset basket fallback when Jev credentials are absent, HK$151.80 sandbox receipt and refreshed HK$648.20 balance. The default one-screen UI exposes the classic dashboard through **How this works → Open the full dashboard**. The full dashboard showed the four real wallet events; checkpoint creation and ordinary verification returned **valid through checkpoint**; tamper-and-verify returned **HASH_MISMATCH** at the edited event; the Z3 endpoint returned an unsafe counterexample and an atomic **no counterexample within bound** result; the measured HTTP panel showed the captured evaluation outcomes and clearly stated its artificial unsafe-baseline delay. No real payment was made.
 
 Updated runbook/recording notes now distinguish the current connected prototype from the older 25.6-second recording, which predates the agent and audit integrations. Remaining Noah-owned item: rehearse reset/start and the same user-visible path on a second physical machine, then refresh the recording if useful. That hardware action cannot be verified from the current machine.
+
+
+## 16. Risk review integration — 3 October 2026
+
+After a fresh fetch, Timmy PR #13 was merged into `main` as `3ce69f2`. It adds zero-trust validation of agent requests against the confirmed mandate and a wallet-owned unusual-purchase review rule. The agent cannot relax the mandate; the wallet remains authoritative. The optional rule can pause qualifying purchases for the owner's one-time review, while hard policy violations remain refusals.
+
+Noah's UI now exposes **Review unusual purchases** in both the one-screen and classic mandate setup. The setting is included in the confirmed policy and shown in the simple wallet summary. An approval-pending screen explains that no funds are reserved or paid, lists the exact reasons, and makes clear that approval applies once to this basket and reason set.
+
+The Vite production build passed after the UI integration and all 140 API tests passed on the merged source. A live browser flow enabled the rule, activated a mandate, quoted the preset basket because Jev was not configured, and showed the first-purchase reason. Nothing was paid while pending. Selecting **Approve once** completed the same sandbox transaction for HK$151.80 and updated the remaining budget to HK$648.20. No real funds moved.
+
+The latest main was `3ce69f2` at this checkpoint. Timmy PR #14 remains an optional open webhook proposal; it is not required for the current flow. Seungbin PR #12 remains WIP. The second physical-machine rehearsal is still outstanding.
