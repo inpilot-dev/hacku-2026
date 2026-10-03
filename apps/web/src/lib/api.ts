@@ -1,38 +1,53 @@
-import type { AttackList, AttackResult, AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList } from '../../../../contracts/types';
+import type { AttackList, AttackResult, AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList, Profile, ProfileInput, Purchase } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryable: boolean;
-  constructor(status: number, message: string, code = 'REQUEST_FAILED', retryable = false) {
+  readonly details: Record<string, unknown>;
+  constructor(status: number, message: string, code = 'REQUEST_FAILED', retryable = false, details: Record<string, unknown> = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.retryable = retryable;
+    this.details = details;
   }
 }
+
+import { newId } from './utils';
 
 const API_ROOT = '/api/v1';
 function sessionKey(operation: string) {
   const storageKey = `mandate-idempotency-${operation}`;
   const saved = sessionStorage.getItem(storageKey);
   if (saved) return saved;
-  const generated = crypto.randomUUID();
+  const generated = newId();
   sessionStorage.setItem(storageKey, generated);
   return generated;
 }
 
+/** SHA-256 hex where Web Crypto is available (secure origins); otherwise a non-cryptographic FNV-1a hash, which is
+ *  enough to tell one request body from another for idempotency keys. */
+async function digestHex(text: string): Promise<string> {
+  if (crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 0x01000193) >>> 0; }
+  return `fnv-${hash.toString(16)}-${text.length}`;
+}
+
 async function semanticSessionKey(operation: string, requestBody: unknown) {
   const serialized = JSON.stringify(requestBody);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
-  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const fingerprint = await digestHex(serialized);
   const storageKey = `mandate-idempotency-${operation}`;
   try {
     const previous = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { fingerprint?: string; key?: string } | null;
     if (previous?.fingerprint === fingerprint && previous.key) return previous.key;
   } catch { /* Replace stale or malformed local idempotency state. */ }
-  const key = crypto.randomUUID();
+  const key = newId();
   sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key }));
   return key;
 }
@@ -47,8 +62,8 @@ export async function request<T>(path: string, token: string, init: RequestInit 
   try { body = raw ? JSON.parse(raw) : null; } catch { body = raw; }
   if (!response.ok) {
     const error = typeof body === 'object' && body !== null && 'error' in body
-      ? (body as { error?: { message?: string; code?: string; retryable?: boolean } }).error : undefined;
-    throw new ApiError(response.status, error?.message ?? `Request failed (${response.status})`, error?.code, error?.retryable);
+      ? (body as { error?: { message?: string; code?: string; retryable?: boolean; details?: Record<string, unknown> } }).error : undefined;
+    throw new ApiError(response.status, error?.message ?? `Request failed (${response.status})`, error?.code, error?.retryable, error?.details ?? {});
   }
   return body as T;
 }
@@ -108,6 +123,14 @@ export const api = {
   storeLoginTicket: (token: string, storeId: string) => request<StoreLoginTicket>(`/stores/${encodeURIComponent(storeId)}/login/ticket`, token, { method: 'POST' }),
   disconnectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connection`, token, { method: 'DELETE' }),
   syncCart: (token: string, input: CartSyncRequest) => request<CartSyncResult>('/carts/sync', token, { method: 'POST', body: JSON.stringify(input) }),
+  profile: (token: string) => request<Profile>('/profile', token),
+  saveProfile: (token: string, input: ProfileInput) => request<Profile>('/profile', token, { method: 'PUT', body: JSON.stringify(input) }),
+  startPurchase: (token: string, text: string) => request<Purchase>('/purchases', token, { method: 'POST', body: JSON.stringify({ text }) }),
+  purchase: (token: string, id: string) => request<Purchase>(`/purchases/${encodeURIComponent(id)}`, token),
+  approvePurchase: (token: string, id: string, totalMinor: number) => request<Purchase>(`/purchases/${encodeURIComponent(id)}/approve`, token, {
+    method: 'POST', body: JSON.stringify({ total_minor: totalMinor }),
+  }),
+  cancelPurchase: (token: string, id: string) => request<Purchase>(`/purchases/${encodeURIComponent(id)}/cancel`, token, { method: 'POST' }),
   attacks: (token: string) => request<AttackList>('/demo/attacks', token),
   runAttack: (token: string, attackId: string) => request<AttackResult>(`/demo/attacks/${encodeURIComponent(attackId)}/runs`, token, { method: 'POST' }),
 };

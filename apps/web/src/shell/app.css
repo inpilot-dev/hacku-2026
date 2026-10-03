@@ -1,0 +1,113 @@
+/* The redesigned app (shadcn/ui on Tailwind v4). Imported only by the app shell, so the classic
+   dashboard, landing page and security lab keep their own styles. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* The palette of the previous app (simple/openai-tokens.css): white page, soft grey surfaces, near-black
+     pill buttons, green for the wallet and success, and one colour per character. */
+  --radius: 1rem;
+  --background: #ffffff;
+  --foreground: #0d0d0d;
+  --card: #f9f9f9;
+  --card-foreground: #0d0d0d;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d0d;
+  --primary: #0d0d0d;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f3;
+  --secondary-foreground: #0d0d0d;
+  --muted: #f3f3f3;
+  --muted-foreground: #5d5d5d;
+  --accent: #ededed;
+  --accent-foreground: #0d0d0d;
+  --destructive: #e02e2a;
+  --success: #00a240;
+  --warning: #e25507;
+  --border: rgb(0 0 0 / 7%);
+  --input: rgb(0 0 0 / 12%);
+  --ring: #afafaf;
+  --brand: #00a240;
+  --brand-soft: #edfaf2;
+  /* Characters: Kumi shops, Kip guards the wallet, Bean checks the rules, Stella keeps the receipts. */
+  --kumi: #a85713; --kumi-soft: #fff7ed; --kumi-line: #f4e4d0;
+  --kip: #237347; --kip-soft: #eff8f2; --kip-line: #d8ebdf;
+  --bean: #6960a5; --bean-soft: #f5f3fc; --bean-line: #e7e0f4;
+  --stella: #ac457c; --stella-soft: #fcf1f6; --stella-line: #f1dce7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0d0d0d;
+    --foreground: #f3f3f3;
+    --card: #181818;
+    --card-foreground: #f3f3f3;
+    --popover: #181818;
+    --popover-foreground: #f3f3f3;
+    --primary: #f3f3f3;
+    --primary-foreground: #0d0d0d;
+    --secondary: #212121;
+    --secondary-foreground: #f3f3f3;
+    --muted: #212121;
+    --muted-foreground: #afafaf;
+    --accent: #2a2a2a;
+    --accent-foreground: #f3f3f3;
+    --destructive: #ff6764;
+    --success: #40c977;
+    --warning: #fb6a22;
+    --border: rgb(255 255 255 / 9%);
+    --input: rgb(255 255 255 / 14%);
+    --ring: #5d5d5d;
+    --brand: #40c977;
+    --brand-soft: #011c0b;
+    --kumi: #ffb37a; --kumi-soft: #2a1b10; --kumi-line: #3d2716;
+    --kip: #7bd8a0; --kip-soft: #10241a; --kip-line: #1b3a2a;
+    --bean: #b9b2f0; --bean-soft: #1d1a2e; --bean-line: #2c2845;
+    --stella: #f0a3c8; --stella-soft: #2a1520; --stella-line: #40202f;
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background font-sans text-foreground antialiased; font-feature-settings: "cv11", "ss01"; }
+  /* Phones: 16px inputs so iOS does not zoom on focus. */
+  input, textarea, select { font-size: 16px; }
+  @media (min-width: 768px) { input, textarea, select { font-size: 14px; } }
+}
+
+@media print {
+  .no-print { display: none !important; }
+}
