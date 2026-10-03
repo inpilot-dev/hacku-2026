@@ -39,7 +39,7 @@ This starts a fresh, disposable local wallet and serves the built web app and AP
 - **Catalog:** the API and UI use a timestamped Wellcome capture with source evidence. It is an observed snapshot, not a live retailer connection. Run `just capture` to create a new capture; review it before committing.
 - **Shopping agent:** natural-language draft and shopping-run routes are not mounted yet. The UI leaves manual catalog shopping available and reports when those APIs are unavailable.
 - **Audit and formal verification:** the UI has the contract-backed views, but Seungbin's audit/checkpoint/verifier/Z3 services are not mounted yet; no passing result is fabricated.
-- **Pickup-price limit:** only free Click & Collect above HK$50 is evidenced. The client blocks smaller Wellcome baskets, but the wallet quote adapter still needs a server-side rule for unsupported subtotals before that restriction is enforced against direct API callers.
+- **Pickup-price limit:** only free Click & Collect above HK$50 is evidenced. The client blocks smaller Wellcome baskets, and `POST /quotes` also refuses them with `422 INVALID_REQUEST` (`details.reason_code = SUBTOTAL_NOT_SUPPORTED`) because no observed fee rule covers that subtotal.
 
 ## Project documents
 

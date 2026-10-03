@@ -485,7 +485,7 @@ class Wallet:
                 raise not_found(str(exc)) from None
             if exc.kind == "unavailable":
                 raise conflict(str(exc)) from None
-            raise invalid(str(exc)) from None
+            raise invalid(str(exc), **exc.details) from None
         expected = req.get("expected_revision")
         if expected is not None and expected != priced["revision"]:
             raise conflict("Catalog revision changed; fetch the catalog again.",

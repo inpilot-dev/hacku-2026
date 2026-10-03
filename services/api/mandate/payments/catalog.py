@@ -29,9 +29,10 @@ DEFAULT_CATALOG = Path(__file__).with_name("fixtures") / "placeholder_catalog.js
 
 
 class CatalogError(Exception):
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, **details):
         super().__init__(message)
         self.kind = kind  # not_found | invalid | unavailable | stale
+        self.details = details
 
 
 class Catalog:
@@ -103,15 +104,29 @@ class Catalog:
         subtotal = sum(line["line_total_minor"] for line in lines)
 
         charges = []
+        covered = False
         for rule in context["fee_rules"]:
             upper = rule.get("max_subtotal_minor")
             if subtotal >= rule["min_subtotal_minor"] and (upper is None or subtotal <= upper):
+                covered = True
                 charges.append({
                     "kind": rule.get("kind", "delivery"),
                     "label": rule["label"],
                     "amount_minor": rule["amount_minor"],
                     "evidence_ids": list(rule["evidence_ids"]),
                 })
+        if not covered:
+            # No observed fee rule covers this subtotal (e.g. Wellcome pickup at HK$50 or less):
+            # the charge is unknown, so the basket cannot be quoted at all.
+            raise CatalogError(
+                "invalid",
+                f"No observed {merchant_id} fee covers a subtotal of {subtotal} minor units "
+                f"for {delivery_context_id}.",
+                reason_code="SUBTOTAL_NOT_SUPPORTED", subtotal_minor=subtotal,
+                supported_ranges=[{"min_subtotal_minor": r["min_subtotal_minor"],
+                                   "max_subtotal_minor": r.get("max_subtotal_minor")}
+                                  for r in context["fee_rules"]],
+            )
         total = subtotal + sum(c["amount_minor"] for c in charges)
 
         evidence = list(merchant.get("evidence_ids", []))
