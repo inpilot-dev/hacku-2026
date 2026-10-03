@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
-import type { Mandate, Policy, StoreConnection, StoreConnectionStatus } from '../../../../contracts/types';
+import type { Mandate, Policy, StoreConnection } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
-import StoreLoginCanvas from './StoreLoginCanvas';
+import StoresPanel from './StoresPanel';
 import './onboarding.css';
 
 /*
@@ -25,46 +25,33 @@ function fourWeeksIso() {
   return `${end.toISOString().slice(0, 10)}T23:59:59+08:00`;
 }
 
-const STATUS_TEXT: Record<StoreConnectionStatus, string> = {
-  not_connected: 'Not connected',
-  awaiting_login: 'Signing in…',
-  connected: 'Connected',
-  expired: 'Signed out',
-};
-
 type Props = {
   token: string;
   online: boolean | null;
   initialRiskReview?: boolean;
+  /** Changing rules: start from the current allowance's policy. */
+  initialPolicy?: Policy | null;
   onActivated: (mandate: Mandate, summary: string) => void | Promise<void>;
   onBack?: () => void;
 };
 
-export default function Onboarding({ token, online, initialRiskReview = false, onActivated, onBack }: Props) {
+const dollars = (minor: number) => String(Math.round(minor / 100));
+
+export default function Onboarding({ token, online, initialRiskReview = false, initialPolicy, onActivated, onBack }: Props) {
+  const start = initialPolicy ?? null;
   const [step, setStep] = useState<'rules' | 'stores'>('rules');
-  const [weekly, setWeekly] = useState('800');
-  const [perOrder, setPerOrder] = useState('300');
-  const [askOn, setAskOn] = useState(false);
-  const [askAbove, setAskAbove] = useState('100');
-  const [riskReviewOn, setRiskReviewOn] = useState(initialRiskReview);
+  const [weekly, setWeekly] = useState(start?.period_limits[0] ? dollars(start.period_limits[0].limit_minor) : '800');
+  const [perOrder, setPerOrder] = useState(start ? dollars(start.per_order_limit_minor) : '300');
+  const [askOn, setAskOn] = useState(start?.approval_above_minor != null);
+  const [askAbove, setAskAbove] = useState(start?.approval_above_minor != null ? dollars(start.approval_above_minor) : '100');
+  const [riskReviewOn, setRiskReviewOn] = useState(start?.risk_review ?? initialRiskReview);
 
   const [stores, setStores] = useState<StoreConnection[] | null>(null);
-  const [allowed, setAllowed] = useState<Record<string, boolean>>({ wellcome: true, marketplace: true });
-  const [signingIn, setSigningIn] = useState<StoreConnection | null>(null);
+  const [allowed, setAllowed] = useState<Record<string, boolean>>(() => start
+    ? Object.fromEntries(start.allowed_merchant_ids.map((id) => [id, true]))
+    : { wellcome: true, marketplace: true });
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-
-  const loadStores = useCallback(async () => {
-    try {
-      setStores((await api.stores(token)).stores);
-    } catch (err) {
-      // Older APIs have no store connections: fall back to the snapshot shop, sandbox only.
-      if (err instanceof ApiError && err.status === 404) setStores([{ store_id: 'wellcome', name: 'Wellcome', status: 'not_connected', connected_at: null, message: 'Real carts are not available on this server.' }]);
-      else setError(err instanceof Error ? err.message : 'Could not load your stores.');
-    }
-  }, [token]);
-
-  useEffect(() => { if (step === 'stores' && !stores) void loadStores(); }, [step, stores, loadStores]);
 
   function rulesValid() {
     const weeklyMinor = Math.round(Number(weekly) * 100);
@@ -72,34 +59,6 @@ export default function Onboarding({ token, online, initialRiskReview = false, o
     const askMinor = askOn ? Math.round(Number(askAbove) * 100) : null;
     if (!(weeklyMinor > 0) || !(orderMinor > 0) || (askMinor !== null && !(askMinor > 0))) { setError('Use whole HK$ amounts above zero.'); return null; }
     return { weeklyMinor, orderMinor, askMinor };
-  }
-
-  async function connect(store: StoreConnection) {
-    setError(''); setBusy(store.store_id);
-    try {
-      setSigningIn(await api.connectStore(token, store.store_id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not open ${store.name}.`);
-    } finally { setBusy(''); }
-  }
-
-  async function disconnect(store: StoreConnection) {
-    setError(''); setBusy(store.store_id);
-    try {
-      const next = await api.disconnectStore(token, store.store_id);
-      setStores((current) => current?.map((s) => (s.store_id === next.store_id ? next : s)) ?? null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not disconnect ${store.name}.`);
-    } finally { setBusy(''); }
-  }
-
-  async function finishSignIn(status: StoreConnectionStatus) {
-    const store = signingIn;
-    setSigningIn(null);
-    if (!store) return;
-    const next = await api.store(token, store.store_id).catch(() => null);
-    if (next) setStores((current) => current?.map((s) => (s.store_id === next.store_id ? next : s)) ?? null);
-    if (status !== 'connected') setError(next?.message ?? `${store.name} sign-in didn’t finish.`);
   }
 
   /** A draft backs exactly one mandate, so every switch-on registers its own; falls back to the seeded draft. */
@@ -163,25 +122,12 @@ export default function Onboarding({ token, online, initialRiskReview = false, o
       <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
       <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next: her stores<ArrowRight size={18} /></button>
       {onBack && <button className="m2-link" onClick={onBack}>Back</button>}
-    </> : signingIn ? (
-      <StoreLoginCanvas token={token} storeId={signingIn.store_id} storeName={signingIn.name}
-        onFinished={(status) => void finishSignIn(status)} onCancel={() => { setSigningIn(null); void loadStores(); }} />
-    ) : <>
+    </> : <>
       <h2>Where Kumi may shop</h2>
       <p className="m2-muted ob-small">Sign in to Mum’s own store accounts so Kumi can put the basket straight into the real cart. Kumi never checks out: Kip still has to approve every purchase against these rules.</p>
-      {!stores ? <p className="m2-muted">Loading stores…</p> : <ul className="ob-stores">
-        {stores.map((store) => <li key={store.store_id}>
-          <label className="ob-store-pick">
-            <input type="checkbox" checked={Boolean(allowed[store.store_id])} onChange={(e) => setAllowed((a) => ({ ...a, [store.store_id]: e.target.checked }))} />
-            <span><b>{store.name}</b><small className={`ob-status ${store.status}`}>{STATUS_TEXT[store.status]}</small></span>
-          </label>
-          {store.status === 'connected'
-            ? <button className="m2-link" onClick={() => void disconnect(store)} disabled={busy === store.store_id}>Disconnect</button>
-            : <button className="ob-connect" onClick={() => void connect(store)} disabled={busy === store.store_id || online === false}>{store.status === 'expired' ? 'Sign in again' : 'Connect'}</button>}
-        </li>)}
-      </ul>}
+      <StoresPanel token={token} online={online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} onStores={setStores} />
       <p className="m2-muted ob-small">{connectedCount ? `Kumi will fill your real cart at ${connectedCount} connected store${connectedCount > 1 ? 's' : ''}.` : 'No store connected yet: Kumi can still price baskets from the store snapshot, but not fill a real cart.'}</p>
-      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
+      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : start ? 'Replace the allowance' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
       <button className="m2-link" onClick={() => setStep('rules')}>Back to rules</button>
     </>}
   </div>;
