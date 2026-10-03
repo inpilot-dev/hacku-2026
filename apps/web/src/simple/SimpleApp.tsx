@@ -195,6 +195,7 @@ export default function SimpleApp() {
   const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
   const [receiptDetailError, setReceiptDetailError] = useState('');
   const receiptsLoaded = useRef(false);
+  const receiptLoadInFlight = useRef(false);
   const shopRef = useRef<HTMLElement>(null);
 
   const note = useCallback((who: Mascot, text: string, tone: LogEntry['tone'], state?: string) => {
@@ -545,7 +546,8 @@ export default function SimpleApp() {
   }
 
   async function loadReceipts(force = false) {
-    if (receiptsLoading || (receiptsLoaded.current && !force)) return;
+    if (receiptLoadInFlight.current || (receiptsLoaded.current && !force)) return;
+    receiptLoadInFlight.current = true;
     setReceiptsLoading(true); setReceiptsError('');
     try {
       const audit = await api.auditExport(TOKEN);
@@ -561,7 +563,7 @@ export default function SimpleApp() {
       setReceipts(ordered); receiptsLoaded.current = true;
     } catch (err) {
       setReceiptsError(err instanceof Error ? err.message : 'Could not load receipts.');
-    } finally { setReceiptsLoading(false); }
+    } finally { receiptLoadInFlight.current = false; setReceiptsLoading(false); }
   }
 
   function showReceipts() {
