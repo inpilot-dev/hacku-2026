@@ -32,6 +32,10 @@
     },
     {
       "name": "verification"
+    },
+    {
+      "name": "stores",
+      "description": "The user's own store accounts and real carts. Proposed."
     }
   ],
   "security": [
@@ -2992,6 +2996,442 @@
           },
           "503": {
             "description": "Local transcription is not installed on the server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores": {
+      "get": {
+        "operationId": "listStores",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Supported stores and the caller's connection to each",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. Never returns the saved store session.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores/{store_id}": {
+      "get": {
+        "operationId": "getStoreConnection",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Connection status",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. While a sign-in is pending this also checks whether the store has logged the user in, and saves the session once it has.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores/{store_id}/connect": {
+      "post": {
+        "operationId": "connectStore",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Open the store's own sign-in page",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. Opens the store's sign-in in an isolated server-side browser context. The user signs in through the login stream; the service never receives their code as data. A second call replaces an unfinished sign-in.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Sign-in opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores/{store_id}/login/ticket": {
+      "post": {
+        "operationId": "createStoreLoginTicket",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Single-use ticket for the sign-in stream",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. Browsers cannot send an Authorization header on a WebSocket, so the stream takes this ticket in its query string. Valid once, for 60 seconds, for this user's pending sign-in at this store. Stream: `GET /stores/{store_id}/login/stream?ticket=` upgraded to a WebSocket. Server messages are LoginStreamServerMessage; client messages are LoginStreamClientMessage. Coordinates are CSS pixels of the announced viewport. Only that sign-in tab is streamed; navigation away from yuu Rewards or the store is sent back to the sign-in. Close code 4401 means the ticket was invalid or used.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreLoginTicket"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No sign-in is pending; call connect first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stores/{store_id}/connection": {
+      "delete": {
+        "operationId": "disconnectStore",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Forget the saved store session",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. Deletes the saved session and closes any pending sign-in.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreConnection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown store.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/carts/sync": {
+      "post": {
+        "operationId": "syncCart",
+        "tags": [
+          "stores"
+        ],
+        "summary": "Fill the user's real store cart with a quote",
+        "description": "Proposed (Abdullah, stores): needs the group's OK. Only for an active mandate that allows the quote's store, and only with a connected store account. Reads the cart, sets each quoted line to its quoted quantity, reads it back and compares line by line. Never checks out. Business outcomes (not connected, signed out, mismatch) are 200 responses with a status; checkout_ready is true only when every line matches the quote and no other selected item is in the cart. cart_subtotal_minor is what the store showed; it never replaces the wallet quote.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CartSyncRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CartSyncResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Mandate or quote not visible to the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Mandate not active (MANDATE_NOT_ACTIVE) or store not allowed by it (MERCHANT_NOT_ALLOWED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed request, or the store has no real-cart support.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6199,6 +6639,447 @@
             "type": "string"
           },
           "model_id": {
+            "type": "string"
+          }
+        }
+      },
+      "StoreConnectionStatus": {
+        "type": "string",
+        "enum": [
+          "not_connected",
+          "awaiting_login",
+          "connected",
+          "expired"
+        ]
+      },
+      "StoreConnection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "store_id",
+          "name",
+          "status",
+          "connected_at",
+          "message"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StoreConnectionStatus"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "StoreList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stores"
+        ],
+        "properties": {
+          "stores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreConnection"
+            }
+          }
+        }
+      },
+      "StoreLoginTicket": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket",
+          "expires_in_s"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string"
+          },
+          "expires_in_s": {
+            "type": "integer"
+          }
+        }
+      },
+      "LoginStreamServerMessage": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "width",
+              "height"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "viewport"
+                ]
+              },
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "data"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "frame"
+                ]
+              },
+              "data": {
+                "type": "string",
+                "description": "Base64 JPEG of the viewport."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "text"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "notice",
+                  "error"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "status"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "status"
+                ]
+              },
+              "status": {
+                "$ref": "#/components/schemas/StoreConnectionStatus"
+              }
+            }
+          }
+        ]
+      },
+      "LoginStreamClientMessage": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "x",
+              "y"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "down",
+                  "up",
+                  "move"
+                ]
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "x",
+              "y",
+              "dx",
+              "dy"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "wheel"
+                ]
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "dx": {
+                "type": "number"
+              },
+              "dy": {
+                "type": "number"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "text"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "key"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "key"
+                ]
+              },
+              "key": {
+                "type": "string",
+                "enum": [
+                  "Backspace",
+                  "Tab",
+                  "Enter",
+                  "Escape",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "Delete"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "CartSyncRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mandate_id",
+          "quote_id"
+        ],
+        "properties": {
+          "mandate_id": {
+            "type": "string"
+          },
+          "quote_id": {
+            "type": "string"
+          }
+        }
+      },
+      "CartSyncLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "product_id",
+          "sku",
+          "title",
+          "quoted_quantity",
+          "cart_quantity",
+          "quoted_unit_price_minor",
+          "cart_unit_price_minor",
+          "status"
+        ],
+        "properties": {
+          "product_id": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "quoted_quantity": {
+            "type": "integer"
+          },
+          "cart_quantity": {
+            "type": "integer"
+          },
+          "quoted_unit_price_minor": {
+            "type": "integer"
+          },
+          "cart_unit_price_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "price_changed",
+              "quantity_mismatch",
+              "missing"
+            ]
+          }
+        }
+      },
+      "CartOtherItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sku",
+          "title",
+          "quantity",
+          "unit_price_minor",
+          "checked"
+        ],
+        "properties": {
+          "sku": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit_price_minor": {
+            "type": "integer"
+          },
+          "checked": {
+            "type": "boolean",
+            "description": "Selected for checkout at the store."
+          }
+        }
+      },
+      "CartSyncResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "store_id",
+          "quote_id",
+          "mandate_id",
+          "status",
+          "observed_at",
+          "lines",
+          "other_items",
+          "cart_subtotal_minor",
+          "quote_subtotal_minor",
+          "checkout_ready",
+          "message"
+        ],
+        "properties": {
+          "store_id": {
+            "type": "string"
+          },
+          "quote_id": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "synced",
+              "mismatch",
+              "partial",
+              "not_connected",
+              "session_expired",
+              "store_error"
+            ]
+          },
+          "observed_at": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartSyncLine"
+            }
+          },
+          "other_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CartOtherItem"
+            }
+          },
+          "cart_subtotal_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote_subtotal_minor": {
+            "type": "integer"
+          },
+          "checkout_ready": {
+            "type": "boolean"
+          },
+          "message": {
             "type": "string"
           }
         }
