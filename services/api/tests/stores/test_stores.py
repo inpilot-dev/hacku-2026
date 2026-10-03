@@ -112,7 +112,7 @@ class FakeBrowser:
         if not self.login_done:
             return None
         if self.scam:
-            raise ScamSiteError(self.scam)
+            raise ScamSiteError(self.scam.reason, self.scam)
         return {"cookies": [{"name": "LOGIN_FLAG", "value": "secret", "domain": store.domain}],
                 "local_storage": {"commData": "{}", "accountInfo": "personal"}}
 
@@ -122,7 +122,7 @@ class FakeBrowser:
     @contextmanager
     def session(self, store, state):
         if self.scam:
-            raise ScamSiteError(self.scam)
+            raise ScamSiteError(self.scam.reason, self.scam)
         self.sessions.append(state)
         yield FakeCart(self.shop)
 
@@ -349,18 +349,52 @@ class FixedClassifier:
 
 
 def test_steel_browser_classifies_the_page_it_is_on():
+    store = STORES["wellcome"]
     legit = FixedClassifier(Verdict("https://www.wellcome.com.hk/en", False, 0.02, "jev-test"))
-    SteelStoreBrowser(classifier=legit)._check_site(PageCdp("https://www.wellcome.com.hk/en"), "s")
+    SteelStoreBrowser(classifier=legit)._check_site(PageCdp("https://www.wellcome.com.hk/en"), "s", store)
     assert legit.pages == [Page("https://www.wellcome.com.hk/en", "Wellcome", "Fresh fruit")]
 
+    # A page on the shop's own host can still be refused by Jev.
+    scam_on_shop = Verdict("https://www.wellcome.com.hk/en", True, 0.93, "jev-test")
     with pytest.raises(ScamSiteError) as caught:
-        SteelStoreBrowser(classifier=FixedClassifier(SCAM))._check_site(PageCdp(SCAM.url), "s")
-    assert caught.value.verdict is SCAM
+        SteelStoreBrowser(classifier=FixedClassifier(scam_on_shop))._check_site(
+            PageCdp(scam_on_shop.url), "s", store)
+    assert caught.value.verdict is scam_on_shop
 
     # A page Jev could not classify is not treated as safe.
     down = FixedClassifier(error=SiteCheckError("Could not reach Jev"))
     with pytest.raises(StoreBrowserError, match="Could not check"):
-        SteelStoreBrowser(classifier=down)._check_site(PageCdp(SCAM.url), "s")
+        SteelStoreBrowser(classifier=down)._check_site(PageCdp("https://www.wellcome.com.hk/en"), "s", store)
+
+
+@pytest.mark.parametrize("url", [
+    "https://we1come-hk.shop/en",
+    "https://www.wellcome.com.hk.evil.example/en",  # passed the old `startswith(origin)` check
+    "https://www.wellcome.com.hk@evil.example/en",
+    "http://www.wellcome.com.hk/en",
+    "https://www.wellcome.com.hk:8443/en",
+    "https://www.marketplacehk.com/en",  # another store's site
+    "about:blank",
+    "",
+])
+def test_off_site_pages_are_refused_before_jev_can_vouch_for_them(url):
+    # Even a page whose text convinces Jev it is legitimate cannot pass the host check.
+    fooled = FixedClassifier(Verdict(url, False, 0.01, "jev-test"))
+    with pytest.raises(ScamSiteError, match="not Wellcome's own site") as caught:
+        SteelStoreBrowser(classifier=fooled)._check_site(PageCdp(url), "s", STORES["wellcome"])
+    assert caught.value.verdict is None and fooled.pages == []
+
+
+def test_store_owns_only_its_exact_host_and_cookie_domain():
+    store = STORES["wellcome"]
+    assert store.owns_url("https://www.wellcome.com.hk/en/cart")
+    assert store.owns_url("https://WWW.Wellcome.com.hk/en")
+    assert not store.owns_url("https://wellcome.com.hk/en")  # not the origin host the shop serves from
+    assert not store.owns_url("https://www.wellcome.com.hk.evil.example/")
+    for domain in ("wellcome.com.hk", ".wellcome.com.hk", "www.wellcome.com.hk", ".WWW.wellcome.com.hk"):
+        assert store.owns_cookie(domain)
+    for domain in ("notwellcome.com.hk", ".evilwellcome.com.hk", "wellcome.com.hk.evil.example", "com.hk"):
+        assert not store.owns_cookie(domain)
 
 
 def test_repeat_sync_does_not_double(env):
