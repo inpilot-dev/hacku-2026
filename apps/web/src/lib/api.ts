@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -66,6 +66,7 @@ export const api = {
   unfreezeCard: (token: string, id: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(id)}/card/unfreeze`, token, {
     method: 'POST', headers: { 'Idempotency-Key': sessionKey(`unfreeze-${id}`) }, body: JSON.stringify({ reason: 'Resumed from family dashboard' }),
   }),
+  cardAuthorizations: (token: string, id: string) => request<CardAuthorizationList>(`/mandates/${encodeURIComponent(id)}/card/authorizations`, token),
   draft: async (token: string, input: DraftRequest) => request<DraftResponse>('/mandates/draft', token, {
     method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('mandate-draft', input) }, body: JSON.stringify(input),
   }),
