@@ -11,6 +11,7 @@ import { categoryLabel, money, periodWord } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import HistoryControls from '../components/HistoryControls';
 import Basket from '../components/Basket';
+import KumiStage from '../components/KumiStage';
 import { Bubble, PageHeader, present, Sticker, Working } from '../components/chat';
 import PresetEditor from '../components/PresetEditor';
 import StoreAccounts from '../components/StoreAccounts';
@@ -63,6 +64,10 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
     <PageHeader title="Groceries" who="kumi" state={g.verdict?.kind === 'paid' ? 'happy' : g.verdict?.kind === 'refused' ? 'sad' : 'idle'}
       description={<>{account.active ? `${money(account.available)} left this ${per}` : 'Allowance not active'} · {m.policy.allowed_merchant_ids.length} store{m.policy.allowed_merchant_ids.length > 1 ? 's' : ''}</>}
       action={<Button variant="ghost" size="sm" onClick={onOpenWallet}>Allowance</Button>} />
+
+    <KumiStage activity={g.phase === 'packing' || g.busy === 'parse' ? 'searching' : g.error ? 'error' : g.quote ? 'found' : 'idle'}
+      title={g.quote ? 'Your basket is ready to review' : undefined}
+      detail={g.quote ? 'This is a priced basket. Store cart confirmation is separate.' : undefined} />
 
     {g.catalogError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{g.catalogError}</span><Button variant="outline" size="sm" onClick={() => void g.loadCatalog()}>Retry</Button></AlertDescription></Alert>}
     {g.catalogLoading && <p className="mb-4 text-sm text-muted-foreground" role="status">Loading products…</p>}

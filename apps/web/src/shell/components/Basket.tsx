@@ -15,6 +15,7 @@ import { TOKEN, useAccount } from '../data/account';
 import { reasonTitle, riskCheck, type Groceries } from '../data/useGroceries';
 import { storeName } from './AllowanceSetup';
 import ProductVisual from './ProductVisual';
+import KumiStage from './KumiStage';
 import { Sticker, Working } from './chat';
 import './store-login.css';
 
@@ -173,6 +174,7 @@ function CartSync({ quote }: { quote: Quote }) {
 
   const needsSignIn = result?.status === 'not_connected' || result?.status === 'session_expired';
   return <div className="space-y-2">
+    {(busy || result?.checkout_ready || error) && <KumiStage activity={busy ? 'packing' : error ? 'error' : 'added'} />}
     {!result || needsSignIn ? <>
       <Button variant="outline" size="sm" onClick={() => void (needsSignIn ? connect() : sync())} disabled={busy}>
         <ShoppingCart />{busy ? `Filling your ${name} cart…` : needsSignIn ? `Sign in to ${name}` : `Put it in my ${name} cart`}</Button>

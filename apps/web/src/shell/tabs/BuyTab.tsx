@@ -11,6 +11,7 @@ import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Bubble, Linkified, PageHeader, shortUrl, Working } from '../components/chat';
 import ProductVisual from '../components/ProductVisual';
+import KumiStage from '../components/KumiStage';
 import HistoryControls from '../components/HistoryControls';
 import { isWorking, usePurchases } from '../data/usePurchases';
 
@@ -58,6 +59,10 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
     <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment' || (!isWorking(x) && x.candidates.some((c) => c.matches))) ? 'happy' : 'idle'}
       description="Find a match. Review the total before paying."
       action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={() => { p.clear(); setOlder(0); }}>New conversation</Button> : undefined} />
+
+    <KumiStage key={latest?.id ?? 'welcome'} activity={latest && isWorking(latest) ? (latest.status === 'paying' ? 'idle' : 'searching') : latest?.status === 'failed' ? 'error' : latest?.candidates.some((c) => c.matches) ? 'found' : 'idle'}
+      title={latest?.status === 'awaiting_approval' ? 'Over to Kip for your approval' : latest?.status === 'paying' ? 'Kip is handling the payment' : undefined}
+      detail={latest?.status === 'awaiting_approval' || latest?.status === 'paying' ? 'Your wallet guardian takes it from here.' : undefined} />
 
     {p.purchases.length === 0 && <div className="shop-welcome mb-6 space-y-5">
       <Bubble from="kumi">What are you looking for? Tell me your budget and any must-haves.</Bubble>
