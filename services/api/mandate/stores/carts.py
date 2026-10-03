@@ -29,7 +29,7 @@ from mandate.payments.service import Wallet
 
 from .connections import StoreConnections
 from .registry import STORES
-from .steel import StoreBrowserError
+from .steel import ScamSiteError, StoreBrowserError
 
 
 @dataclass(frozen=True)
@@ -119,6 +119,8 @@ class CartSync:
                                            "Nothing was added."}
                     failure = self._write(cart, parse_cart(before), wanted)
                     after = parse_cart(cart.cart())
+            except ScamSiteError as exc:
+                return {**result, "status": "store_error", "message": f"{exc} Nothing was added."}
             except StoreBrowserError as exc:
                 return {**result, "status": "store_error",
                         "message": f"{exc} Some items may have been added; open the cart to check."}

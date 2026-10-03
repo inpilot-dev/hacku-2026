@@ -16,7 +16,8 @@ from mandate.stores.carts import CartSync, parse_cart
 from mandate.stores.connections import LOGIN_TIMEOUT_S, StoreConnections
 from mandate.stores.registry import STORES
 from mandate.stores.routes import build_store_router
-from mandate.stores.steel import StoreBrowserError
+from mandate.sitecheck import Page, SiteCheckError, Verdict
+from mandate.stores.steel import ScamSiteError, SteelStoreBrowser, StoreBrowserError
 from mandate.stores.stream import VIEWPORT, allowed_url, input_commands, resized
 from starlette.websockets import WebSocketDisconnect
 
@@ -100,6 +101,7 @@ class FakeBrowser:
         self.login_done = False
         self.open_windows: list[str] = []
         self.sessions: list[dict] = []
+        self.scam: Verdict | None = None  # the page Jev would call a scam
 
     def begin_login(self, store):
         window = f"win-{len(self.open_windows)}"
@@ -109,6 +111,8 @@ class FakeBrowser:
     def poll_login(self, window, store):
         if not self.login_done:
             return None
+        if self.scam:
+            raise ScamSiteError(self.scam)
         return {"cookies": [{"name": "LOGIN_FLAG", "value": "secret", "domain": store.domain}],
                 "local_storage": {"commData": "{}", "accountInfo": "personal"}}
 
@@ -117,6 +121,8 @@ class FakeBrowser:
 
     @contextmanager
     def session(self, store, state):
+        if self.scam:
+            raise ScamSiteError(self.scam)
         self.sessions.append(state)
         yield FakeCart(self.shop)
 
@@ -205,6 +211,19 @@ def test_sign_in_flow_saves_session_privately_and_never_returns_it(env):
 
     assert client.delete("/api/v1/stores/wellcome/connection", headers=USER).json()["status"] == "not_connected"
     assert not saved.exists()
+
+
+SCAM = Verdict("https://we1come-hk.shop/en", True, 0.93, "jev-test")
+
+
+def test_sign_in_on_a_scam_page_is_stopped_and_nothing_is_saved(env):
+    client, browser, tmp, *_ = env
+    client.post("/api/v1/stores/wellcome/connect", headers=USER)
+    browser.login_done, browser.scam = True, SCAM
+    view = client.get("/api/v1/stores/wellcome", headers=USER).json()
+    assert view["status"] == "not_connected" and "scam" in view["message"] and SCAM.url in view["message"]
+    assert browser.open_windows == []
+    assert client.get("/api/v1/stores/wellcome", headers=USER).json()["status"] == "not_connected"
 
 
 def test_sign_in_times_out_and_closes_the_window(env):
@@ -299,6 +318,49 @@ def test_sync_sets_quoted_quantities_and_flags_shop_price(env):
     assert result["status"] == "mismatch" and not result["checkout_ready"]
     assert result["cart_subtotal_minor"] == 2 * 3800 + 450 and result["quote_subtotal_minor"] == 2 * 3800 + 400
     assert "never checks out" in result["message"]
+
+
+def test_sync_on_a_scam_page_adds_nothing(env):
+    client, browser, _, _, confirm, quote, connect = env
+    connect()
+    browser.scam = SCAM
+    result = sync(client, confirm(), quote([(MILK, 2)]))
+    assert result["status"] == "store_error" and "Nothing was added" in result["message"]
+    assert browser.shop.lines == {} and browser.sessions == []
+
+
+class PageCdp:
+    def __init__(self, url):
+        self.url = url
+
+    def evaluate(self, session, expression):
+        return json.dumps({"url": self.url, "title": "Wellcome", "text": "Fresh fruit"})
+
+
+class FixedClassifier:
+    def __init__(self, verdict=None, error=None):
+        self.verdict, self.error, self.pages = verdict, error, []
+
+    def classify(self, page: Page) -> Verdict:
+        self.pages.append(page)
+        if self.error:
+            raise self.error
+        return self.verdict
+
+
+def test_steel_browser_classifies_the_page_it_is_on():
+    legit = FixedClassifier(Verdict("https://www.wellcome.com.hk/en", False, 0.02, "jev-test"))
+    SteelStoreBrowser(classifier=legit)._check_site(PageCdp("https://www.wellcome.com.hk/en"), "s")
+    assert legit.pages == [Page("https://www.wellcome.com.hk/en", "Wellcome", "Fresh fruit")]
+
+    with pytest.raises(ScamSiteError) as caught:
+        SteelStoreBrowser(classifier=FixedClassifier(SCAM))._check_site(PageCdp(SCAM.url), "s")
+    assert caught.value.verdict is SCAM
+
+    # A page Jev could not classify is not treated as safe.
+    down = FixedClassifier(error=SiteCheckError("Could not reach Jev"))
+    with pytest.raises(StoreBrowserError, match="Could not check"):
+        SteelStoreBrowser(classifier=down)._check_site(PageCdp(SCAM.url), "s")
 
 
 def test_repeat_sync_does_not_double(env):
