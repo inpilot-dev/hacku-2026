@@ -14,7 +14,7 @@ import './onboarding.css';
 
 const DRAFT_ID = 'draft_demo';
 const DELEGATEE_ID = 'agent_student';
-const KNOWN_STORES: Record<string, string> = { wellcome: 'Wellcome' };
+const KNOWN_STORES: Record<string, string> = { wellcome: 'Wellcome', marketplace: 'Market Place' };
 
 export function storeName(id: string) {
   return KNOWN_STORES[id] ?? id;
@@ -49,7 +49,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, o
   const [riskReviewOn, setRiskReviewOn] = useState(initialRiskReview);
 
   const [stores, setStores] = useState<StoreConnection[] | null>(null);
-  const [allowed, setAllowed] = useState<Record<string, boolean>>({ wellcome: true });
+  const [allowed, setAllowed] = useState<Record<string, boolean>>({ wellcome: true, marketplace: true });
   const [signingIn, setSigningIn] = useState<StoreConnection | null>(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');

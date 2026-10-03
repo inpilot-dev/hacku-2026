@@ -127,3 +127,41 @@ def test_empty_category_aborts(tmp_path):
     run = make_run(tmp_path, fake_fetcher(TRUE_PRICES, {wellcome.category_url("100020"): empty}))
     with pytest.raises(CaptureError, match="No priced listings"):
         run.build({"100020": "pantry"})
+
+
+def test_market_place_capture_uses_its_own_site_and_ids(tmp_path):
+    fetched: list[str] = []
+    inner = fake_fetcher(TRUE_PRICES)
+
+    def fetch(url):
+        fetched.append(url)
+        return inner(url)
+
+    run = Run(tmp_path, tmp_path / "data" / "catalog", fetcher=fetch, now=datetime(2026, 10, 3, 0, 30, tzinfo=HKT),
+              delay_s=0, prefix="marketplace")
+    catalog = run.build({"100020": "pantry"}, shop=wellcome.MARKETPLACE)
+    assert all(url.startswith("https://www.marketplacehk.com/") for url in fetched)
+    assert {p["merchant_id"] for p in catalog["products"]} == {"marketplace"}
+    assert "marketplace_101345302" in {p["id"] for p in catalog["products"]}
+    assert list(catalog["merchants"]) == ["marketplace"]
+    assert catalog["delivery_contexts"][0]["id"] == "ctx_marketplace_click_collect"
+    assert all(e["source_url"].startswith("https://www.marketplacehk.com/") for e in catalog["evidence"])
+    assert all(e["capture_path"].startswith("data/catalog/evidence/marketplace-") for e in catalog["evidence"])
+
+
+def test_combined_catalog_quotes_both_shops_and_refuses_duplicate_ids(tmp_path):
+    from catalog_capture.combine import CombineError, combine
+
+    def build(shop):
+        run = Run(tmp_path, tmp_path / "data" / "catalog", fetcher=fake_fetcher(TRUE_PRICES),
+                  now=datetime(2026, 10, 3, 0, 30, tzinfo=HKT), delay_s=0, prefix=shop.merchant_id)
+        return run.build({"100020": "pantry"}, shop=shop)
+
+    w, m = build(wellcome.WELLCOME), build(wellcome.MARKETPLACE)
+    joined = Catalog(combine([w, m]))
+    for shop in (wellcome.WELLCOME, wellcome.MARKETPLACE):
+        quote = joined.price(shop.merchant_id, [{"product_id": f"{shop.merchant_id}_101345302", "quantity": 1}],
+                             shop.pickup_context_id)
+        assert quote["merchant_id"] == shop.merchant_id and quote["total_minor"] == 8990
+    with pytest.raises(CombineError, match="wellcome"):
+        combine([w, w])

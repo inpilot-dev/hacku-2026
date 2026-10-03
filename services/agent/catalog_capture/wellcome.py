@@ -1,7 +1,9 @@
-"""Parse Wellcome.com.hk server-rendered pages into observed listings.
+"""Parse Wellcome.com.hk (and Market Place) server-rendered pages into observed listings.
 
 Wellcome renders category pages on the server (Nuxt SSR), so a plain HTTP GET
-returns the product cards with their prices. Nothing here runs a browser or a
+returns the product cards with their prices. Market Place (marketplacehk.com) is
+the same DFI "superweb" build: identical category IDs, card markup, product
+JSON-LD and fee wording (checked 2026-10-03), so a `Shop` selects the site. Nothing here runs a browser or a
 model: prices are read from fixed page elements and cross-checked against the
 product page's schema.org JSON-LD before a catalog is written.
 """
@@ -15,7 +17,20 @@ from dataclasses import dataclass
 
 from .product_data import looks_alcoholic  # noqa: F401  (re-exported for the static capture)
 
-BASE_URL = "https://www.wellcome.com.hk"
+
+@dataclass(frozen=True)
+class Shop:
+    merchant_id: str
+    name: str
+    base_url: str
+    pickup_context_id: str
+
+
+WELLCOME = Shop("wellcome", "Wellcome", "https://www.wellcome.com.hk", "ctx_wellcome_click_collect")
+MARKETPLACE = Shop("marketplace", "Market Place", "https://www.marketplacehk.com", "ctx_marketplace_click_collect")
+SHOPS = {shop.merchant_id: shop for shop in (WELLCOME, MARKETPLACE)}
+
+BASE_URL = WELLCOME.base_url
 
 # Curated mapping of Wellcome top-level categories to contract categories.
 # Only categories whose contents map to one contract category are listed.
@@ -33,8 +48,8 @@ FREE_PICKUP_TEXT = "Enjoy our free Click & collect service on orders over HK$50.
 FREE_DELIVERY_TEXT = "Enjoy free delivery to your door on orders over HK$500."
 
 
-def category_url(category_id: str) -> str:
-    return f"{BASE_URL}/en/category/{category_id}/1.html"
+def category_url(category_id: str, base_url: str = BASE_URL) -> str:
+    return f"{base_url}/en/category/{category_id}/1.html"
 
 
 @dataclass(frozen=True)
@@ -66,7 +81,7 @@ def category_title(page: str) -> str:
     return _text(match.group(1))
 
 
-def parse_category(page: str) -> list[Listing]:
+def parse_category(page: str, base_url: str = BASE_URL) -> list[Listing]:
     """Return one Listing per product card. Cards without a readable price are skipped."""
     starts = [m.start() for m in re.finditer(r'<div class="ware-wrapper"', page)]
     listings: dict[str, Listing] = {}
@@ -88,7 +103,7 @@ def parse_category(page: str) -> list[Listing]:
         listings.setdefault(sku, Listing(
             sku=sku,
             title=_text(title.group(1)),
-            product_url=BASE_URL + link.group(1),
+            product_url=base_url + link.group(1),
             price_minor=_minor(current.group(1), current.group(2)),
             was_price_minor=_minor(was.group(1)) if was else None,
             available="addCart" in card and not SOLD_OUT.search(_text(card)),
