@@ -92,3 +92,14 @@ html{scroll-behavior:smooth}
   .lp-verdicts li{flex-direction:column;align-items:flex-start;gap:2px}
   .lp-problem,.lp-section{padding-top:calc(var(--spacing)*14)}.lp-problem{margin-top:calc(var(--spacing)*14)}
 }
+
+/* Phone polish: 44px nav button (transparent border, same look), AA contrast for small grey text,
+   and safe areas for viewport-fit=cover. */
+@media(max-width:480px){
+  :root{--color-text-tertiary:var(--color-text-secondary)}
+  .lp-nav-cta{border-block:6px solid transparent;margin-block:-6px;background-clip:padding-box}
+  .lp-verdicts .ask b{color:var(--orange-600)}
+}
+@media(max-width:480px),(pointer:coarse){
+  .lp{padding-left:max(calc(var(--spacing)*4),env(safe-area-inset-left));padding-right:max(calc(var(--spacing)*4),env(safe-area-inset-right))}
+}

@@ -274,3 +274,54 @@ a.m2-cta{text-decoration:none}
 .m2-vcard-foot small{font-size:9px;letter-spacing:.08em;color:rgb(255 255 255/.55)}
 .m2-vcard-foot b{margin-left:auto;font-size:var(--font-heading-xs-size);font-weight:var(--font-weight-bold);font-style:italic;letter-spacing:-.02em;text-transform:none}
 .m2-vcard-meta{margin:-4px 0 0;font-size:var(--font-text-sm-size);color:var(--color-text-tertiary)}
+
+/* Phone polish. Touch targets reach 44px without changing what you see: a transparent border widens the tap
+   area and a matching negative margin keeps the layout. Inputs are 16px so iOS Safari doesn't zoom on focus,
+   small grey text meets WCAG AA (tertiary grey was 3.1:1), and action labels stay on one line. */
+@media(max-width:480px){
+  :root{--color-text-tertiary:var(--color-text-secondary)}
+  .m2 input,.m2 textarea,.m2 select{font-size:16px}
+  .m2-profile-trigger{border:5px solid transparent;margin:-5px;background-clip:padding-box}
+  .ob-connect{border-block:6px solid transparent;margin-block:-6px;background-clip:padding-box}
+  .ob-seg button{border-block:8px solid transparent;margin-block:-8px;background-clip:padding-box}
+  .m2-ledger-row input{border-block:5px solid transparent;margin-block:-5px;background-clip:padding-box}
+  .m2-switch{box-sizing:content-box;border:7px solid transparent;margin:-7px;background-clip:padding-box}
+  .m2-switch:focus-visible{outline-offset:-5px}
+  .m2-icon-button{box-sizing:content-box;border:2px solid transparent;margin:-2px;background-clip:padding-box}
+  .ob-store-pick{min-height:44px}
+  .m2-error button{min-width:44px;min-height:44px;margin-block:-11px}
+  .m2-back{min-height:44px;margin-block:-10px}
+  .m2-search,.m2-field input,.m2-editor-item input{min-height:44px}
+  .m2-qty button{width:36px;height:36px}
+  .m2-latest-receipt small{color:#7d5f3c}
+  .m2-paper-brand span{color:var(--color-text-secondary)}
+  /* Preset editor: the item name gets its own row instead of 79px at 320. */
+  .m2-editor-items{gap:14px}
+  .m2-editor-item{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 44px}
+  .m2-editor-item>input:first-child{grid-column:1/-1}
+  .m2-modal-head h2{font-size:var(--font-heading-xl-size)}
+  .m2-row .m2-cta,.m2-row .m2-ghost{white-space:nowrap}
+  /* "Never buy" chips: 36px pills with a 4px transparent border make 44px targets that just touch, row to row. */
+  .ob .ob-chips{gap:8px}
+  .ob .ob-chips button{padding:10px 14px;border-block:4px solid transparent;margin-block:-4px;background-clip:padding-box}
+}
+/* Narrow phones (320–389): Speak becomes a round mic button so "Ask Kumi to pack it" fits on one line,
+   Approve once / Say no stack, the card footer shrinks so the network name isn't cut off, and panels and
+   sheets give up 4px a side so "Put it in my Wellcome cart" and the editor buttons stay on one line. */
+@media(max-width:389px){
+  .m2-dock .m2-mic{align-self:stretch;width:52px;padding:0;gap:0;font-size:0;justify-content:center}
+  .m2-row{grid-template-columns:1fr}
+  .m2-vcard-foot{gap:10px;font-size:11px;letter-spacing:0}
+  .m2-vcard-foot b{font-size:15px}
+  .m2-panel{padding:16px}
+  .cs-go{padding-inline:12px}
+  .m2-shelf .m2-cta{padding-inline:14px;font-size:var(--font-text-sm-size)}
+  .m2-modal-backdrop{padding-inline:8px}
+  .m2-modal{padding-inline:16px}
+}
+/* viewport-fit=cover: keep content, the pinned pay button and sheets clear of the notch and home indicator. */
+@media(max-width:480px),(pointer:coarse){
+  .m2{padding-left:max(calc(var(--spacing)*4),env(safe-area-inset-left));padding-right:max(calc(var(--spacing)*4),env(safe-area-inset-right))}
+  .m2-checkout>.m2-cta{bottom:calc(12px + env(safe-area-inset-bottom))}
+}
+@media(max-width:560px){.m2-modal-backdrop{padding-bottom:max(12px,env(safe-area-inset-bottom))}}
