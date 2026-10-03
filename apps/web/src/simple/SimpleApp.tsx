@@ -25,6 +25,7 @@ const TOKEN = 'dev-user-token';
 const STORE_ID = 'wellcome';
 const PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
 const MANDATE_KEY = 'mandate-id';
+const PENDING_CHECKOUT_KEY = 'mandate-pending-checkout-v1';
 const PRESETS_KEY = 'mandate-shopping-presets-v1';
 
 type Mascot = 'kumi' | 'kip' | 'bean' | 'stella';
@@ -160,6 +161,7 @@ export default function SimpleApp() {
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [card, setCard] = useState<VirtualCard | null>(null);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -230,6 +232,41 @@ export default function SimpleApp() {
   }, [mandateId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!loaded || !mandateId) return;
+    let pending: { mandateId: string; quoteId: string; transactionId: string };
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(PENDING_CHECKOUT_KEY) ?? 'null');
+      if (!stored || stored.mandateId !== mandateId || typeof stored.quoteId !== 'string' || typeof stored.transactionId !== 'string') return;
+      pending = stored;
+    } catch { return; }
+    let cancelled = false;
+    setRecoveryBlocked(true);
+    setBusy('checkout-restore');
+    void (async () => {
+      try {
+        const restoredQuote = await api.quoteById(TOKEN, pending.quoteId);
+        if (cancelled) return;
+        setRecoveryBlocked(false);
+        setQuote(restoredQuote); setPhase('verdict');
+        sessionStorage.setItem(`mandate-tx-${restoredQuote.id}`, pending.transactionId);
+        try {
+          const receipt = await api.paymentByTransaction(TOKEN, pending.transactionId);
+          if (cancelled) return;
+          setVerdict({ kind: 'paid', receipt, replayed: true });
+          setReceipts((current) => [{ receipt, quote: restoredQuote, occurredAt: receipt.paid_at }, ...current.filter((record) => record.receipt.transaction_id !== receipt.transaction_id)]);
+          sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+          note('kip', 'Restored the confirmed receipt for your previous checkout. No new payment was submitted.', 'good');
+        } catch {
+          if (!cancelled) setVerdict({ kind: 'uncertain', message: 'Restored an unfinished checkout. Its payment status is unknown. Check status using the saved transaction before shopping again.' });
+        }
+      } catch {
+        if (!cancelled) setError('An unfinished checkout could not be restored. Check its transaction in the full dashboard before making another purchase.');
+      } finally { if (!cancelled) setBusy(''); }
+    })();
+    return () => { cancelled = true; };
+  }, [loaded, mandateId, note]);
+
   useEffect(() => { api.catalog(TOKEN).then(setCatalog).catch(() => setCatalog(null)); }, []);
 
   const products = useMemo(() => catalog?.products.filter((p) => p.merchant_id === STORE_ID && p.available) ?? [], [catalog]);
@@ -241,7 +278,7 @@ export default function SimpleApp() {
   }, [catalog]);
 
   const active = mandate?.status === 'active';
-  const canSpend = active && card?.status !== 'frozen';
+  const canSpend = active && card?.status !== 'frozen' && !recoveryBlocked && busy !== 'checkout-restore';
   const period = budget?.applicable_budgets[0];
   const available = period?.available_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const limit = period?.limit_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
@@ -443,21 +480,26 @@ export default function SimpleApp() {
     const key = `mandate-tx-${quote.id}`;
     const transactionId = sessionStorage.getItem(key) ?? crypto.randomUUID();
     sessionStorage.setItem(key, transactionId);
+    sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ mandateId: mandate.id, quoteId: quote.id, transactionId }));
     await new Promise((resolve) => window.setTimeout(resolve, 900)); // let Kip's check read as a moment, not a flicker
     try {
       const result = await api.demoPurchase(TOKEN, { mandate_id: mandate.id, quote_id: quote.id, transaction_id: transactionId, payment_route_id: routeId, approval_id: approvalId ?? null });
       const auth = result.authorization;
       if (auth.status === 'requires_review' && auth.approval_request) {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request });
         note('kip', `Your approval is needed for ${money(quote.total_minor)}: ${auth.message}. Nothing is paid while this waits.`, 'info');
       } else if (auth.status !== 'approved') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'refused', message: auth.message, violations: auth.violations });
         note('kip', `Purchase blocked. ${[...new Set([auth.message, ...auth.violations.map((v) => v.message)])].join(' ')} Nothing was paid.`, 'bad');
       } else if (result.payment?.status === 'completed') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
         rememberReceipt(result.payment.receipt);
         note('kip', `Sandbox payment confirmed: ${money(result.payment.receipt.amount_minor)}. Receipt ${result.payment.receipt.id}. No real retailer payment was submitted.`, 'good');
       } else if (result.payment?.status === 'refused') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
         note('kip', `Payment refused: ${result.payment.message}. Nothing was paid.`, 'bad');
       } else {
@@ -465,23 +507,43 @@ export default function SimpleApp() {
         setVerdict({ kind: 'uncertain', message: 'The wallet approved it but hasn’t confirmed payment yet.' });
       }
     } catch (err) {
-      if (err instanceof ApiError && [401, 403, 404, 422, 503].includes(err.status)) {
-        setVerdict({ kind: 'refused', message: `${err.message} No payment was made.`, violations: [] });
-      } else {
-        try {
-          const receipt = await api.paymentByTransaction(TOKEN, transactionId);
-          setVerdict({ kind: 'paid', receipt, replayed: true });
-          rememberReceipt(receipt);
-          note('kip', `Recovered the confirmed sandbox receipt ${receipt.id}. No second payment was submitted.`, 'good');
-        } catch {
-          note('kip', 'Connection lost during checkout. Payment status is unknown; the same transaction will be reused when checking again.', 'info');
-          setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
-        }
+      // A transport/HTTP error is not proof that the wallet did not capture payment.
+      note('kip', `Checkout response unavailable${err instanceof Error ? `: ${err.message}` : ''}. Checking the saved transaction.`, 'info');
+      try {
+        const receipt = await api.paymentByTransaction(TOKEN, transactionId);
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+        setVerdict({ kind: 'paid', receipt, replayed: true });
+        rememberReceipt(receipt);
+        note('kip', `Recovered the confirmed sandbox receipt ${receipt.id}. No second payment was submitted.`, 'good');
+      } catch {
+        setVerdict({ kind: 'uncertain', message: 'Payment status is unknown. Check status to look up the saved transaction; this does not submit another payment. A missing receipt is not proof of failure.' });
       }
     }
     receiptsLoaded.current = false;
     setPhase('verdict');
     void refresh(mandate.id);
+  }
+
+  async function checkPaymentStatus() {
+    if (!quote || verdict?.kind !== 'uncertain' || busy) return;
+    const transactionId = sessionStorage.getItem(`mandate-tx-${quote.id}`);
+    if (!transactionId) { setError('The transaction reference is missing. Resolve the purchase in the full dashboard before shopping again.'); return; }
+    setBusy('payment-status'); setError('');
+    try {
+      const receipt = await api.paymentByTransaction(TOKEN, transactionId);
+      sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+      setVerdict({ kind: 'paid', receipt, replayed: true });
+      rememberReceipt(receipt);
+      receiptsLoaded.current = false;
+      note('kip', `Payment confirmed from receipt ${receipt.id}. This status check did not submit a payment.`, 'good');
+      void refresh();
+    } catch (err) {
+      const message = err instanceof ApiError && err.status === 404
+        ? 'No completed receipt is available yet. Payment status remains unknown. No payment was submitted by this check.'
+        : 'Could not retrieve payment status. No payment was submitted by this check.';
+      setVerdict({ kind: 'uncertain', message });
+      note('kip', message, 'info');
+    } finally { setBusy(''); }
   }
 
   async function decide(approve: boolean) {
@@ -668,7 +730,7 @@ export default function SimpleApp() {
       <div className="m2-brand">Mandate</div>
       <div className="m2-top-right">
         <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
-        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
+        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} disabled={recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
       </div>
     </header>
 
@@ -703,9 +765,9 @@ export default function SimpleApp() {
           </dl>
           {active ? card?.status === 'frozen'
             ? <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}><Snowflake size={18} />{busy === 'unfreeze' ? 'Resuming…' : 'Unfreeze the card'}</button>
-            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
+            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze' || recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
-          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke'}>Permanently revoke allowance</button>}
+          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke' || recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'}>Permanently revoke allowance</button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
           <a className="m2-receipts-trigger" href="?card"><CreditCard size={18} /><span><b>Virtual card</b><small>Set up, freeze or check the card</small></span><ArrowRight size={17} /></a>
           {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
@@ -727,9 +789,9 @@ export default function SimpleApp() {
           {!canSpend ? (
             <div className="m2-panel m2-center">
               <Sticker name="kip" state="revoked" size={150} tilt={-4} />
-              <h2>{!active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
-              <p className="m2-muted">{!active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
-              {active && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
+              <h2>{recoveryBlocked || busy === 'checkout-restore' ? 'Checking your previous checkout.' : !active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
+              <p className="m2-muted">{recoveryBlocked || busy === 'checkout-restore' ? 'Your previous payment must be resolved before a new purchase. Reload to retry the lookup, or check its saved transaction in the full dashboard. No new payment has been submitted.' : !active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
+              {active && !recoveryBlocked && busy !== 'checkout-restore' && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
@@ -805,7 +867,7 @@ export default function SimpleApp() {
               {phase === 'verdict' && verdict?.kind === 'refused' && <>
                 {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
               </>}
-              {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" onClick={() => void checkout()}>Check again</button></>}
+              {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" disabled={Boolean(busy)} onClick={() => void checkPaymentStatus()}>{busy === 'payment-status' ? 'Checking status…' : 'Check payment status'}</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
                 {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul>}
@@ -816,7 +878,7 @@ export default function SimpleApp() {
                 </div>
               </>}
               {phase === 'verdict' && verdict?.kind === 'paid' && <button className="m2-cta" onClick={() => viewReceipt({ receipt: verdict.receipt, quote, occurredAt: verdict.receipt.paid_at })}><ReceiptText size={18} />Open digital receipt</button>}
-              {phase === 'verdict' && verdict?.kind !== 'review' && <button className="m2-ghost" onClick={resetShop}>Shop again</button>}
+              {phase === 'verdict' && verdict?.kind !== 'review' && verdict?.kind !== 'uncertain' && <button className="m2-ghost" onClick={resetShop}>Shop again</button>}
             </div>
           ) : null}
           </div>
