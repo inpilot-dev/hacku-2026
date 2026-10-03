@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-02T21:37:36+08:00",
-  "git_commit": "4262e1f",
+  "generated_at": "2026-10-03T12:19:21+08:00",
+  "git_commit": "a3e0704",
   "python": "3.13.14",
   "catalog": "placeholder (services/api/mandate/payments/fixtures/placeholder_catalog.json), NOT observed data",
   "live_http": {
@@ -35,7 +35,7 @@
         "refusals": [
           {
             "code": "PERIOD_BUDGET_EXCEEDED",
-            "rule_id": "m_e3e49e708a4f46d9ae07b87bd4d9d0a5/v1/period:calendar_week"
+            "rule_id": "m_13f139acf3cb4624b568d7e309770e65/v1/period:calendar_week"
           }
         ],
         "completed_payments": 1,
@@ -49,9 +49,9 @@
     ],
     "retry": {
       "receipt_ids": [
-        "rcpt_c21dc50c41ea4d958976b7ac194adcbf",
-        "rcpt_c21dc50c41ea4d958976b7ac194adcbf",
-        "rcpt_c21dc50c41ea4d958976b7ac194adcbf"
+        "rcpt_17c534321da94b9995103b9bb5bdcacd",
+        "rcpt_17c534321da94b9995103b9bb5bdcacd",
+        "rcpt_17c534321da94b9995103b9bb5bdcacd"
       ],
       "same_receipt": true,
       "replayed_flags": [
@@ -65,12 +65,12 @@
     "revoke": {
       "approved_before_revoke": "approved",
       "cancelled_reservation_ids": [
-        "res_6ffa25deae474de3bf78e5c0f40b98fb"
+        "res_d3044b67de584e8b9f4fd7fecf968d36"
       ],
       "payment_after_revoke": "refused",
       "refusal": {
         "code": "MANDATE_REVOKED",
-        "rule_id": "m_283e630da0174381983f7d06c32df5ff/v2/status"
+        "rule_id": "m_a2299e13157346f6a002afc4c9f9ed9c/v2/status"
       },
       "earlier_payment_still_paid": true,
       "week_after": {
@@ -117,13 +117,13 @@
         "where": "in-process FastAPI TestClient + SQLite on this machine, no network, no model",
         "authorize": {
           "n": 27,
-          "p50": 1.83,
-          "p95": 3.13
+          "p50": 2.19,
+          "p95": 3.4
         },
         "pay": {
           "n": 20,
-          "p50": 1.71,
-          "p95": 1.98
+          "p50": 1.99,
+          "p95": 2.95
         }
       }
     },
@@ -148,7 +148,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_08234f4c3ed34bf0a41a0dea40e25166"
+            "receipt_id": "rcpt_aa4e0ae82c1a48a9b23806c3db43c46c"
           }
         ]
       },
@@ -172,7 +172,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 23530,
-            "receipt_id": "rcpt_28e0bd339f6b42a38979ee2af4d79e8b"
+            "receipt_id": "rcpt_2a2c13123a98400b86276dbc26f52de7"
           }
         ]
       },
@@ -196,7 +196,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_8dc151677124436883db2421b41e1df2"
+            "receipt_id": "rcpt_bd619a4d0720425292d2ff48602c235e"
           }
         ]
       },
@@ -436,7 +436,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_7c91e04d602042e88b16efa2332cef3c"
+            "receipt_id": "rcpt_20c0d00905244694a150943684ca7242"
           }
         ]
       },
@@ -470,24 +470,16 @@
         "category": "concurrency",
         "setup": "HK$400 left, 2x HK$300 concurrent on one mandate",
         "expected": [
-          "completed",
-          "refused:PERIOD_BUDGET_EXCEEDED"
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
         ],
         "observed": [
-          "completed",
-          "refused:PERIOD_BUDGET_EXCEEDED"
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
         ],
         "passed": true,
         "error": null,
         "attempts": [
-          {
-            "legit": true,
-            "expected": "completed",
-            "outcome": "completed",
-            "completed": true,
-            "amount_minor": 30000,
-            "receipt_id": "rcpt_aa8cb9c658f94f6ea93c5cecfbb92a3f"
-          },
           {
             "legit": false,
             "expected": "refused:PERIOD_BUDGET_EXCEEDED",
@@ -495,6 +487,14 @@
             "completed": false,
             "amount_minor": null,
             "receipt_id": null
+          },
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_0b56df26d79843dbb5187034f9957c0a"
           }
         ]
       },
@@ -528,7 +528,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 30000,
-            "receipt_id": "rcpt_31c67d2a83eb41ad8a75a415b12d53d4"
+            "receipt_id": "rcpt_f5210a5171db46259de98825c889ea00"
           }
         ]
       },
@@ -552,7 +552,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_3e35033a3f1340e298b9f969971793c4"
+            "receipt_id": "rcpt_a419358b4b1246458f36cb3e38785736"
           }
         ]
       },
@@ -576,7 +576,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_291d202ab7444db0a1d917c9b3075fec"
+            "receipt_id": "rcpt_79ae7fe9b59444ca94ceabcfb966f348"
           }
         ]
       },
