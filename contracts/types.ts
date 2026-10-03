@@ -262,6 +262,7 @@ export type AuthorizationApproved = {
   "budgets": Array<BudgetPeriod>;
   "payment_route"?: PaymentRouteSummary | null;
   "payment_credential"?: PaymentCredential | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type AuthorizationRefused = {
@@ -277,6 +278,7 @@ export type AuthorizationRefused = {
   "violations": Array<RuleViolation>;
   "budgets": Array<BudgetPeriod>;
   "approval_request"?: ApprovalRequest | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type AuthorizationDecision = AuthorizationApproved | AuthorizationRefused;
@@ -468,6 +470,7 @@ export type DemoAuthorizationApproved = {
   "claims": AuthorizationClaims;
   "budgets": Array<BudgetPeriod>;
   "payment_route"?: PaymentRouteSummary | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type VelocityLimit = {
@@ -826,4 +829,15 @@ export type AttackResult = {
   "sandbox": AttackSandbox;
   "ledger": AttackLedger | null;
   "steps": Array<AttackStep>;
+};
+
+export type RiskSignal = {
+  "check": string;
+  "points": number;
+};
+
+export type RiskAssessment = {
+  "score": number;
+  "threshold": number;
+  "signals": Array<RiskSignal>;
 };

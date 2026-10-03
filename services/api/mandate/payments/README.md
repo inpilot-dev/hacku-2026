@@ -98,8 +98,10 @@ bank BIN sponsor) can replace it without touching the ledger.
 - **Velocity.** `policy.velocity_limit = {max_purchases, window_minutes}` counts reserved and paid purchases in the
   mandate's subtree.
 - **Risk review.** `risk.py` holds simple, explainable checks that escalate instead of refuse. With
-  `policy.risk_review` on: first purchase on the mandate, first order from a new shop, basket at least 3x the usual, never-bought items, and a price
-  at least 25% over the last price paid. Always on: product listing text aimed at the agent (prompt injection). Each
+  `policy.risk_review` on, a points scorecard: basket well above the owner's usual (median, shrunk toward a
+  prior while history is short), near the order cap, new shop, never-bought items, a price at least 25% over the last
+  paid, orders split under the approval threshold, a burst, budget burned early, an odd hour. A score of 50 or more
+  waits for the owner with every contributing signal as a reason; decisions carry `risk_assessment`. Always on: product listing text aimed at the agent (prompt injection). Each
   adds a `RISK_REVIEW_REQUIRED` reason with its own rule id, so an approval waives only the reasons the owner read.
 
 See `contracts/README.md` section 11 for the API shapes.

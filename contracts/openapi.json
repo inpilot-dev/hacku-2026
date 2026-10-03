@@ -4243,7 +4243,7 @@
           "risk_review": {
             "type": "boolean",
             "default": false,
-            "description": "Optional; when true, purchases that fit every hard rule but look unusual (first purchase on this mandate, first order from a new shop, a basket at least 3x the usual size, items never bought before, a unit price at least 25% above the last price paid) return requires_review with RISK_REVIEW_REQUIRED reasons. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+            "description": "Optional; when true, purchases that fit every hard rule but look unusual are scored: signals such as a basket well above the owner's usual (median paid basket, shrunk toward a quarter of the order cap while history is short), a basket near the order cap, a new shop, never-bought items, a unit price at least 25% above the last price paid, orders split just under the approval threshold, a burst of purchases, a budget used up early in the period and an unusual hour each add points. A total at or above the threshold returns requires_review with each signal as a RISK_REVIEW_REQUIRED reason; decisions carry risk_assessment. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
           }
         },
         "required": [
@@ -5335,6 +5335,17 @@
               }
             ],
             "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "risk_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when the mandate (or an ancestor) has risk_review on and any signal scored. Proposed v0.3 addition (wallet, Timmy)."
           }
         },
         "required": [
@@ -5421,6 +5432,17 @@
               }
             ],
             "description": "Present when status is requires_review, or when a review ended in a refusal. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "risk_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when the mandate (or an ancestor) has risk_review on and any signal scored. Proposed v0.3 addition (wallet, Timmy)."
           }
         },
         "required": [
@@ -6392,6 +6414,17 @@
               }
             ],
             "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "risk_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present when the mandate (or an ancestor) has risk_review on and any signal scored. Proposed v0.3 addition (wallet, Timmy)."
           }
         },
         "description": "Approved decision with internal authorization token and payment credential omitted."
@@ -8210,6 +8243,50 @@
             }
           }
         }
+      },
+      "RiskSignal": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "type": "string",
+            "description": "Signal name, e.g. large_basket, near_cap, new_merchant, new_items, price_jump:<product>, split_order, burst, budget_burn:<period>, odd_hour."
+          },
+          "points": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "check",
+          "points"
+        ]
+      },
+      "RiskAssessment": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Risk scorecard for a mandate with risk_review on. Signals add points; a score at or above threshold makes the decision requires_review with each signal as a RISK_REVIEW_REQUIRED reason. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it.",
+        "properties": {
+          "score": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "threshold": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "signals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RiskSignal"
+            }
+          }
+        },
+        "required": [
+          "score",
+          "threshold",
+          "signals"
+        ]
       }
     }
   }

@@ -56,10 +56,11 @@ def with_catalog(h, change) -> None:
 
 @pytest.fixture
 def regular(h):
-    """A mandate with risk review on and three ordinary milk runs behind it."""
+    """A mandate with risk review on and three ordinary milk runs behind it, a day apart."""
     m = h.confirm(RISKY)
     for _ in range(3):
         buy_with_approval(h, m["id"], MILK)
+        h.clock.advance(days=1)
     return m
 
 
@@ -69,12 +70,22 @@ def test_risk_review_is_off_unless_the_mandate_asks_for_it(h):
     assert h.authorize(m["id"], h.quote()["id"]).json()["status"] == "approved"
 
 
-def test_first_purchase_on_a_new_mandate_waits_for_the_owner(h):
+def test_small_first_purchase_goes_straight_through(h):
+    m = h.confirm(RISKY)
+    assert h.authorize(m["id"], h.quote(MILK)["id"]).json()["status"] == "approved"  # HK$66.50 of a HK$300 cap
+
+
+def test_first_purchase_near_the_cap_waits_for_the_owner(h):
     m = h.confirm(RISKY)
     q, txn = h.quote(), str(uuid.uuid4())
     body = h.authorize(m["id"], q["id"], txn).json()
     assert body["status"] == "requires_review"
-    assert risk_reasons(body) == {"risk:first_purchase": "This is the first purchase under this mandate (HK$297.00)."}
+    # No history yet: judged against the prior of a quarter of the HK$300 cap.
+    assert risk_reasons(body) == {
+        "risk:large_basket": "This basket is HK$297.00, 4.0x the expected HK$75.00.",
+        "risk:near_cap": "It uses 99% of the HK$300.00 per-order limit."}
+    assert body["risk_assessment"] == {"score": 70, "threshold": 50, "signals": [
+        {"check": "large_basket", "points": 50}, {"check": "near_cap", "points": 20}]}
     assert body["approval_request"]["reasons"] == body["violations"]
     assert h.budget(m["id"])[0]["reserved_minor"] == 0
 
@@ -82,8 +93,12 @@ def test_first_purchase_on_a_new_mandate_waits_for_the_owner(h):
     auth = h.authorize(m["id"], q["id"], txn).json()
     assert auth["status"] == "approved"
     assert h.pay(auth).json()["status"] == "completed"
-    # The next purchase is no longer the first, and one purchase is too little history to call anything unusual.
-    assert h.authorize(m["id"], h.quote()["id"]).json()["status"] == "approved"
+
+
+def test_owner_history_from_earlier_mandates_counts(h, regular):
+    # A fresh mandate is not a fresh owner: three earlier milk runs set the usual, so a mid-size basket is fine.
+    m = h.confirm(RISKY)
+    assert h.authorize(m["id"], h.quote(basket(("p_a_milk", 3)))["id"]).json()["status"] == "approved"
 
 
 def test_ordinary_purchase_after_some_history_goes_straight_through(h, regular):
@@ -91,30 +106,90 @@ def test_ordinary_purchase_after_some_history_goes_straight_through(h, regular):
 
 
 def test_basket_much_bigger_than_usual(h, regular):
-    # Two bags of rice and eggs = HK$240.90 with delivery, over 3x the usual HK$66.50.
+    # Two bags of rice and eggs = HK$240.90 with delivery; the usual is HK$66.50 shrunk toward the HK$75 prior.
     body = h.authorize(regular["id"], h.quote(basket(("p_a_rice", 2), ("p_a_eggs", 1)))["id"]).json()
     assert body["status"] == "requires_review"
     reasons = risk_reasons(body)
-    assert reasons["risk:large_basket"] == "This basket is HK$240.90, 3.6x the usual HK$66.50."
+    assert reasons["risk:large_basket"] == "This basket is HK$240.90, 3.4x the usual HK$70.75."
     assert reasons["risk:new_items"] == "Never bought before: Jasmine rice 5kg, Eggs x10."
+    assert body["risk_assessment"]["score"] == 50
     large = next(v for v in body["violations"] if v["rule_id"].endswith("risk:large_basket"))
-    assert (large["actual_minor"], large["limit_minor"]) == (24090, 6650)
+    assert (large["actual_minor"], large["limit_minor"]) == (24090, 7075)
 
 
-def test_item_never_bought_before(h, regular):
+def test_one_weak_signal_is_scored_but_does_not_interrupt(h, regular):
     body = h.authorize(regular["id"], h.quote(basket(("p_a_apples", 1)))["id"]).json()
-    assert body["status"] == "requires_review"
-    assert risk_reasons(body) == {"risk:new_items": "Never bought before: Apples 1kg."}
+    assert body["status"] == "approved"
+    assert body["risk_assessment"] == {"score": 15, "threshold": 50, "signals": [{"check": "new_items", "points": 15}]}
 
 
-def test_first_order_from_a_new_shop(h):
+def test_first_order_from_a_new_shop_alone_goes_through(h):
     m = h.confirm(RISKY)
     buy_with_approval(h, m["id"], MILK)
-    body = h.authorize(m["id"], h.quote(basket(("p_b_bread", 3), merchant="demo_store_b",
+    body = h.authorize(m["id"], h.quote(basket(("p_b_bread", 1), merchant="demo_store_b",
                                                ctx="ctx_b_standard"))["id"]).json()
+    assert body["status"] == "approved"
+    assert {"check": "new_merchant", "points": 25} in body["risk_assessment"]["signals"]
+
+
+APPLES_X2 = basket(("p_a_apples", 2))  # HK$57.80 + HK$30 delivery = HK$87.80
+
+
+def test_orders_split_to_stay_under_the_approval_limit(h):
+    m = h.confirm({**RISKY, "approval_above_minor": 10000})
+    h.buy(m["id"], APPLES_X2)
+    h.clock.advance(hours=2)
+    body = h.authorize(m["id"], h.quote(APPLES_X2)["id"]).json()
     assert body["status"] == "requires_review"
-    assert risk_reasons(body) == {
-        "risk:new_merchant": "First order from demo_store_b; earlier orders were all from other shops."}
+    assert risk_reasons(body) == {"risk:split_order": (
+        "2 orders just under the HK$100.00 approval limit in 24 hours (HK$175.60 together), which looks like "
+        "one order split to skip approval.")}
+
+
+def test_a_day_later_it_is_not_a_split(h):
+    m = h.confirm({**RISKY, "approval_above_minor": 10000})
+    h.buy(m["id"], APPLES_X2)
+    h.clock.advance(hours=25)
+    assert h.authorize(m["id"], h.quote(APPLES_X2)["id"]).json()["status"] == "approved"
+
+
+def test_burst_of_purchases_adds_points(h):
+    m = h.confirm(RISKY)
+    for _ in range(3):
+        h.buy(m["id"], MILK)
+    body = h.authorize(m["id"], h.quote(MILK)["id"]).json()
+    assert {"check": "burst", "points": 25} in body["risk_assessment"]["signals"]
+
+
+def _scored(**kw):
+    m = {"id": "m_1", "version": 1, "policy": {**RISKY, **kw.pop("policy", {})}}
+    quote = {"total_minor": 6650, "merchant_id": "demo_store_a",
+             "items": [{"product_id": "p_a_milk", "title": "Fresh milk 2L", "unit_price_minor": 3650}]}
+    return risk.assess(m, quote, listings={}, habits=True, **kw)
+
+
+DAYTIME = [risk.PastPurchase("demo_store_a", 6650, {"p_a_milk": 3650}, parse(f"2026-10-0{d}T11:00:00+08:00"))
+           for d in (1, 2, 3)]
+
+
+def test_odd_hour_against_daytime_habits():
+    late = _scored(history=DAYTIME, now=parse("2026-10-07T03:10:00+08:00"))
+    assert late.signals == [{"check": "odd_hour", "points": 15}]
+    assert late.reasons == []  # weak on its own
+    assert _scored(history=DAYTIME, now=parse("2026-10-07T15:10:00+08:00")).signals == []
+
+
+def test_budget_burned_early_in_the_week():
+    week = {"period": "calendar_week", "starts_at": "2026-10-05T00:00:00+08:00",
+            "ends_at": "2026-10-12T00:00:00+08:00", "limit_minor": 10000, "paid_minor": 2000, "reserved_minor": 0}
+    early = _scored(history=DAYTIME, budgets=[week], now=parse("2026-10-06T12:00:00+08:00"))
+    assert early.signals == [{"check": "budget_burn:calendar_week", "points": 25}]
+    assert _scored(history=DAYTIME, budgets=[week], now=parse("2026-10-10T12:00:00+08:00")).signals == []
+
+
+def test_usual_basket_shrinks_toward_the_prior():
+    assert risk.usual_basket([], 30000) == 7500
+    assert risk.usual_basket(DAYTIME, 30000) == (3 * 6650 + 3 * 7500) // 6
 
 
 def test_price_jump_against_the_last_price_paid(h):
@@ -143,7 +218,7 @@ def test_hard_rules_still_refuse_and_are_never_offered_for_approval(h, regular):
 
 def test_approval_waives_only_the_reasons_the_owner_saw():
     m = {"id": "m_1", "version": 1}
-    seen = risk._flag(m, "first_purchase", "first")
+    seen = risk._flag(m, "no_history_large", "big")
     unseen = risk._flag(m, "large_basket", "large")
     chain = [{**m, "status": "active", "expires_at": "2026-10-31T23:59:59+08:00", "policy": POLICY}]
     quote = {"id": "q", "total_minor": 100, "charges": [], "items": [], "merchant_id": "demo_store_a",
@@ -158,15 +233,15 @@ def test_approval_waives_only_the_reasons_the_owner_saw():
 
 def test_reason_that_appears_after_the_approval_refuses_instead_of_slipping_through(h):
     m = h.confirm(RISKY)
-    q, txn = h.quote(MILK), str(uuid.uuid4())
-    approve(h, h.authorize(m["id"], q["id"], txn).json())  # the owner saw "first purchase" only
-    # Meanwhile milk gets cheaper and is bought under another mandate, so the approved quote now looks like a jump.
-    with_catalog(h, lambda p: p["p_a_milk"].update(unit_price_minor=2900))
-    h.buy(h.confirm()["id"], MILK)
+    q, txn = h.quote(), str(uuid.uuid4())
+    approve(h, h.authorize(m["id"], q["id"], txn).json())  # the owner saw "big basket, no history" only
+    # Meanwhile rice gets cheaper and is bought under another mandate, so the approved quote now looks like a jump.
+    with_catalog(h, lambda p: p["p_a_rice"].update(unit_price_minor=7000))
+    h.buy(h.confirm()["id"], RICE_X3)
     body = h.authorize(m["id"], q["id"], txn).json()
     assert body["status"] == "refused"
     assert [v["code"] for v in body["violations"]] == ["RISK_REVIEW_REQUIRED"]
-    assert body["message"] == ("New since the approval: Fresh milk 2L costs HK$36.50, up 26% from HK$29.00 last "
+    assert body["message"] == ("New since the approval: Jasmine rice 5kg costs HK$89.00, up 27% from HK$70.00 last "
                                "time. Start a new purchase so it can be reviewed.")
 
 

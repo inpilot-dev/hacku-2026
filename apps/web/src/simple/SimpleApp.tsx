@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, PaymentOptionsResponse, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, PaymentOptionsResponse, Product, Quote, Receipt, RiskAssessment, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { categoryLabel, money, periodWord } from '../lib/format';
 import { holderName, possessive, saveHolderName } from './holder';
@@ -36,7 +36,7 @@ type ReceiptRecord = { receipt: Receipt; quote: Quote | null; occurredAt: string
 type Verdict =
   | { kind: 'paid'; receipt: Receipt; replayed: boolean }
   | { kind: 'refused'; message: string; violations: RuleViolation[] }
-  | { kind: 'review'; message: string; violations: RuleViolation[]; approval: ApprovalRequest }
+  | { kind: 'review'; message: string; violations: RuleViolation[]; approval: ApprovalRequest; risk?: RiskAssessment | null }
   | { kind: 'uncertain'; message: string };
 type Phase = 'pick' | 'packing' | 'basket' | 'paying' | 'verdict';
 type LogEntry = { id: string; at: string; who: Mascot; text: string; tone: 'good' | 'bad' | 'info'; state?: string };
@@ -84,6 +84,37 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   MANDATE_REVOKED: 'The card is frozen',
   RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
+
+// Risk signals by check name (the part of the rule id after "risk:"), matching services/api/mandate/payments/risk.py.
+const RISK_SIGNALS: Record<string, string> = {
+  large_basket: 'Bigger than usual',
+  near_cap: 'Close to the order limit',
+  new_merchant: 'New shop',
+  new_items: 'Never bought before',
+  price_jump: 'Price jumped',
+  split_order: 'Looks like a split order',
+  burst: 'Many orders at once',
+  budget_burn: 'Budget going fast',
+  odd_hour: 'Unusual time',
+  listing_text: 'Listing talks to the agent',
+};
+
+const riskCheck = (v: RuleViolation) => v.code === 'RISK_REVIEW_REQUIRED' ? v.rule_id.split('/risk:')[1] ?? null : null;
+const reasonTitle = (v: RuleViolation) => {
+  const check = riskCheck(v);
+  const signal = check ? RISK_SIGNALS[check.split(':')[0]] : undefined;
+  return signal ?? REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase();
+};
+
+function RiskMeter({ risk }: { risk: RiskAssessment }) {
+  const scale = Math.max(100, risk.score, risk.threshold);
+  return (
+    <div className="m2-risk" role="img" aria-label={`Risk score ${risk.score}; purchases at ${risk.threshold} or more wait for you`}>
+      <div className="m2-risk-head"><b>Risk score {risk.score}</b><small>reviews from {risk.threshold}</small></div>
+      <div className="m2-risk-bar"><i style={{ width: `${(risk.score / scale) * 100}%` }} /><em style={{ left: `${(risk.threshold / scale) * 100}%` }} /></div>
+    </div>
+  );
+}
 
 function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
   return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
@@ -491,7 +522,7 @@ export default function SimpleApp() {
       const auth = result.authorization;
       if (auth.status === 'requires_review' && auth.approval_request) {
         sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
-        setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request });
+        setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request, risk: auth.risk_assessment });
         note('kip', `Your approval is needed for ${money(quote.total_minor)}: ${auth.message}. Nothing is paid while this waits.`, 'info');
       } else if (auth.status !== 'approved') {
         sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
@@ -869,12 +900,13 @@ export default function SimpleApp() {
               </>}
               {phase === 'paying' && <div className="m2-dots center"><i /><i /><i /></div>}
               {phase === 'verdict' && verdict?.kind === 'refused' && <>
-                {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
+                {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{reasonTitle(v)}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
               </>}
               {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" disabled={Boolean(busy)} onClick={() => void checkPaymentStatus()}>{busy === 'payment-status' ? 'Checking status…' : 'Check payment status'}</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
-                {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul>}
+                {verdict.risk && verdict.risk.score > 0 && <RiskMeter risk={verdict.risk} />}
+                {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{reasonTitle(v)}{(() => { const pts = verdict.risk?.signals.find((sg) => sg.check === riskCheck(v))?.points; return pts ? <span className="m2-risk-pts">+{pts}</span> : null; })()}</b><small>{v.message}</small></li>)}</ul>}
                 <p className="m2-muted">Approval covers only this basket and the reasons shown here, once. Expires {new Date(verdict.approval.expires_at).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong' })} HKT. The wallet checks expiry when you decide.</p>
                 <div className="m2-row">
                   <button className="m2-cta" onClick={() => void decide(true)} disabled={busy === 'decide'}>Approve once</button>
