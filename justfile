@@ -12,7 +12,7 @@ help:
 # Install Python (.venv) and npm dependencies
 install:
     uv venv .venv -q --allow-existing
-    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/mcp-wallet/requirements.txt -r services/agent/requirements.txt "mcp>=1.10,<2"
+    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/api/requirements-verification.txt -r services/mcp-wallet/requirements.txt -r services/agent/requirements.txt "mcp>=1.10,<2"
     cd apps/web && npm ci
 
 # Run backend (:8000) and frontend (Vite dev server) together; Ctrl-C stops both
@@ -22,11 +22,16 @@ dev:
     trap 'kill 0' EXIT
     (cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/wellcome.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000) &
     (cd apps/web && npm run dev) &
+    ./scripts/start-verifier.sh {{venv_python}} .data/audit/keys .data/verifier &
     wait
 
 # Run only the backend
 backend:
     cd services/api && MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000
+
+# Run only the independent audit verifier (:8201); `dev` and `demo` start it for you
+verifier:
+    ./scripts/start-verifier.sh {{venv_python}} .data/audit/keys .data/verifier
 
 # Run only the frontend
 frontend:
