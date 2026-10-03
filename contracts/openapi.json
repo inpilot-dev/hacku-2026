@@ -3137,7 +3137,7 @@
           "risk_review": {
             "type": "boolean",
             "default": false,
-            "description": "Optional; when true, purchases that fit every hard rule but look unusual (first purchase on this mandate, a basket at least 3x the usual size, items never bought before, a unit price at least 25% above the last price paid) return requires_review with RISK_REVIEW_REQUIRED reasons. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+            "description": "Optional; when true, purchases that fit every hard rule but look unusual (first purchase on this mandate, first order from a new shop, a basket at least 3x the usual size, items never bought before, a unit price at least 25% above the last price paid) return requires_review with RISK_REVIEW_REQUIRED reasons. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
           }
         },
         "required": [

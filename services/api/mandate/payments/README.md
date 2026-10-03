@@ -72,7 +72,7 @@ Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, 
 - **Velocity.** `policy.velocity_limit = {max_purchases, window_minutes}` counts reserved and paid purchases in the
   mandate's subtree.
 - **Risk review.** `risk.py` holds simple, explainable checks that escalate instead of refuse. With
-  `policy.risk_review` on: first purchase on the mandate, basket at least 3x the usual, never-bought items, and a price
+  `policy.risk_review` on: first purchase on the mandate, first order from a new shop, basket at least 3x the usual, never-bought items, and a price
   at least 25% over the last price paid. Always on: product listing text aimed at the agent (prompt injection). Each
   adds a `RISK_REVIEW_REQUIRED` reason with its own rule id, so an approval waives only the reasons the owner read.
 

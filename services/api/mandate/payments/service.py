@@ -347,10 +347,10 @@ class Wallet:
         """Review reasons for purchases that fit the rules but look unusual for this owner (risk.py)."""
         leaf = chain[0]
         history = [
-            risk.PastPurchase(row[0], {i["product_id"]: i["unit_price_minor"]
-                                       for i in json.loads(row[1])["items"]})
+            risk.PastPurchase(row[0], row[1], {i["product_id"]: i["unit_price_minor"]
+                                               for i in json.loads(row[2])["items"]})
             for row in conn.execute(
-                "SELECT r.amount_minor, q.body_json FROM reservations r JOIN quotes q ON q.id = r.quote_id "
+                "SELECT r.merchant_id, r.amount_minor, q.body_json FROM reservations r JOIN quotes q ON q.id = r.quote_id "
                 "JOIN mandates m ON m.id = r.mandate_id WHERE m.owner_id = ? AND r.status = 'paid' "
                 "ORDER BY r.created_at", (leaf["owner_id"],))
         ]
