@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Carrot, Cherry, Mic, Snowflake, Square, Wine } from 'lucide-react';
+import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
 import './openai-tokens.css';
 import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
@@ -18,10 +18,13 @@ const TOKEN = 'dev-user-token';
 const STORE_ID = 'wellcome';
 const PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
 const MANDATE_KEY = 'mandate-id';
+const PRESETS_KEY = 'mandate-shopping-presets-v1';
 
 type Mascot = 'kumi' | 'kip' | 'bean' | 'stella';
 type Line = { product_id: string; quantity: number };
-type Pick = { id: string; icon: LucideIcon; title: string; subtitle: string; tone: 'green' | 'orange' | 'pink'; items: Line[]; list: string[] };
+type Pick = { id: string; icon: LucideIcon; title: string; subtitle: string; tone: 'green' | 'orange' | 'pink'; items: Line[]; list: string[]; intent?: ShoppingItem[]; edited?: boolean };
+type SavedPreset = { title: string; items: ShoppingItem[] };
+type ReceiptRecord = { receipt: Receipt; quote: Quote | null; occurredAt: string };
 type Verdict =
   | { kind: 'paid'; receipt: Receipt; replayed: boolean }
   | { kind: 'refused'; message: string; violations: RuleViolation[] }
@@ -74,8 +77,8 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
 
-function Avatar({ name, state, size = 64, bob = false }: { name: Mascot; state: string; size?: number; bob?: boolean }) {
-  return <img className={`m2-avatar${bob ? ' m2-bob' : ''}`} src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
+function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
+  return <img className="m2-avatar" src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
@@ -83,6 +86,7 @@ function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: s
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
+const merchantName = (id: string) => id === 'wellcome' ? 'Wellcome' : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
@@ -111,6 +115,27 @@ function audioFormat(mimeType: string): TranscriptionRequest['format'] {
   if (mimeType.includes('webm')) return 'webm';
   if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a';
   return 'ogg';
+}
+
+function savedPresets(): Record<string, SavedPreset> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result: Record<string, SavedPreset> = {};
+    for (const [id, raw] of Object.entries(value)) {
+      if ((!PICKS.some((pick) => pick.id === id) && !/^custom-[\w-]{1,80}$/.test(id)) || !raw || typeof raw !== 'object') continue;
+      const candidate = raw as Partial<SavedPreset>;
+      if (typeof candidate.title !== 'string' || !candidate.title.trim() || !Array.isArray(candidate.items)) continue;
+      const items = candidate.items.flatMap((raw): ShoppingItem[] => {
+        if (!raw || typeof raw !== 'object') return [];
+        const item = raw as Partial<ShoppingItem>;
+        if (typeof item.name !== 'string' || !item.name.trim() || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 20) return [];
+        return [{ name: item.name.trim().slice(0, 100), quantity: Number(item.quantity), unit: typeof item.unit === 'string' ? item.unit.trim().slice(0, 24) || null : null }];
+      }).slice(0, 20);
+      if (items.length) result[id] = { title: candidate.title.trim().slice(0, 60), items };
+    }
+    return result;
+  } catch { return {}; }
 }
 
 type Spoken = { kind: 'list'; items: ShoppingItem[] };
@@ -145,6 +170,21 @@ export default function SimpleApp() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [serverLog, setServerLog] = useState<LogEntry[] | null>(null);
   const [showFine, setShowFine] = useState(false);
+  const [presets, setPresets] = useState<Record<string, SavedPreset>>(savedPresets);
+  const [editingPreset, setEditingPreset] = useState<Pick | null>(null);
+  const [editorTitle, setEditorTitle] = useState('');
+  const [editorItems, setEditorItems] = useState<ShoppingItem[]>([]);
+  const [presetError, setPresetError] = useState('');
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const [receiptsError, setReceiptsError] = useState('');
+  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+  const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
+  const [receiptDetailError, setReceiptDetailError] = useState('');
+  const receiptDetailRequestId = useRef(0);
+  const receiptsLoaded = useRef(false);
+  const receiptLoadInFlight = useRef(false);
   const shopRef = useRef<HTMLElement>(null);
 
   const note = useCallback((who: Mascot, text: string, tone: LogEntry['tone'], state?: string) => {
@@ -283,6 +323,7 @@ export default function SimpleApp() {
   async function shop(chosen: Pick | 'custom' | Spoken) {
     if (!mandate || !active) return;
     const spoken = chosen !== 'custom' && 'kind' in chosen;
+    const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
@@ -292,10 +333,10 @@ export default function SimpleApp() {
     try {
       let result: Quote | null = null;
       if (chosen !== 'custom') {
-        const packed = await packWithAgent(spoken ? chosen.items : chosen.list.map((name) => ({ name, quantity: 1 })));
+        const packed = await packWithAgent(spoken ? chosen.items : chosen.intent ?? chosen.list.map((name) => ({ name, quantity: 1 })));
         result = packed.quote;
-        if (!result && spoken) {
-          setError(packed.message || 'The shopping agent isn’t connected, so Kumi can’t read a list right now.');
+        if (!result && (spoken || editedPreset)) {
+          setError(packed.message || (editedPreset ? 'The shopping agent isn’t connected. Your edited list was not replaced with the old preset.' : 'The shopping agent isn’t connected, so Kumi can’t read a list right now.'));
           if (packed.message) note('kumi', packed.message, 'bad');
           setPhase('pick');
           return;
@@ -342,6 +383,7 @@ export default function SimpleApp() {
         note('kip', `Kip blocked ${money(quote.total_minor)}`, 'bad');
       } else if (result.payment?.status === 'completed') {
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
+        rememberReceipt(result.payment.receipt);
         note('kip', `Kip paid ${money(result.payment.receipt.amount_minor)}`, 'good');
       } else if (result.payment?.status === 'refused') {
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
@@ -356,11 +398,13 @@ export default function SimpleApp() {
         try {
           const receipt = await api.paymentByTransaction(TOKEN, transactionId);
           setVerdict({ kind: 'paid', receipt, replayed: true });
+          rememberReceipt(receipt);
         } catch {
           setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
         }
       }
     }
+    receiptsLoaded.current = false;
     setPhase('verdict');
     shopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     void refresh(mandate.id);
@@ -389,6 +433,138 @@ export default function SimpleApp() {
   const filtered = products.filter((p) => p.title.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 24);
   const feed = serverLog && serverLog.length ? serverLog : log;
   const showSetup = loaded && (!mandate || setupOpen);
+  const visiblePicks = useMemo(() => PICKS.map((base) => {
+    const saved = presets[base.id];
+    return saved ? { ...base, title: saved.title, subtitle: saved.items.map((item) => `${item.quantity > 1 ? `${item.quantity} ` : ''}${item.name}${item.unit ? ` ${item.unit}` : ''}`).join(', '), list: saved.items.map((item) => item.name), intent: saved.items, edited: true } : base;
+  }).concat(Object.entries(presets).filter(([id]) => id.startsWith('custom-')).map(([id, saved]) => ({
+    id, icon: Carrot, title: saved.title, subtitle: saved.items.map((item) => `${item.quantity > 1 ? `${item.quantity} ` : ''}${item.name}${item.unit ? ` ${item.unit}` : ''}`).join(', '), tone: 'green' as const,
+    items: [], list: saved.items.map((item) => item.name), intent: saved.items, edited: true,
+  }))), [presets]);
+  const selectedReceiptRecord = receipts.find((entry) => entry.receipt.id === selectedReceipt) ?? null;
+
+  function editPreset(pickToEdit: Pick) {
+    setPresetError('');
+    const saved = presets[pickToEdit.id];
+    setEditingPreset(pickToEdit);
+    setEditorTitle(saved?.title ?? pickToEdit.title);
+    setEditorItems(saved?.items.map((item) => ({ ...item })) ?? pickToEdit.list.map((raw) => {
+      const match = raw.match(/^\s*(\d+)\s+(.+)$/);
+      return match ? { name: match[2], quantity: Number(match[1]) } : { name: raw, quantity: 1 };
+    }));
+  }
+
+  function savePreset() {
+    if (!editingPreset) return;
+    const title = editorTitle.trim();
+    const items = editorItems.map((item) => ({ name: item.name.trim(), quantity: Number(item.quantity), unit: item.unit?.trim() || null })).filter((item) => item.name);
+    if (!title) { setPresetError('Give this preset a name.'); return; }
+    if (!items.length || items.length > 20) { setPresetError('Add between 1 and 20 items.'); return; }
+    if (items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) { setPresetError('Each quantity must be between 1 and 20.'); return; }
+    const next = { ...presets, [editingPreset.id]: { title: title.slice(0, 60), items } };
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not save on this device. Check available storage and try again.'); return; }
+    setPresets(next); setEditingPreset(null);
+  }
+
+  function resetPreset(id: string) {
+    const next = { ...presets };
+    delete next[id];
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not reset this preset on this device.'); return; }
+    setPresets(next);
+    const original = PICKS.find((item) => item.id === id);
+    if (!original) { setEditingPreset(null); return; }
+    setEditorTitle(original?.title ?? '');
+    setEditorItems(original?.list.map((raw) => { const match = raw.match(/^\s*(\d+)\s+(.+)$/); return match ? { name: match[2], quantity: Number(match[1]) } : { name: raw, quantity: 1 }; }) ?? []);
+  }
+
+  function duplicatePreset() {
+    if (!editingPreset) return;
+    const title = editorTitle.trim();
+    const items = editorItems.map((item) => ({ name: item.name.trim(), quantity: Number(item.quantity), unit: item.unit?.trim() || null })).filter((item) => item.name);
+    if (!title || !items.length || items.length > 20 || items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) {
+      setPresetError('Add a name and 1–20 items with quantities from 1 to 20 before making a copy.'); return;
+    }
+    const id = `custom-${crypto.randomUUID()}`;
+    const copy = { title: `${title} copy`.slice(0, 60), items };
+    const next = { ...presets, [id]: copy };
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not duplicate this preset on this device.'); return; }
+    setPresets(next); setEditingPreset(null);
+  }
+
+  async function loadReceipts(force = false) {
+    if (receiptLoadInFlight.current || (receiptsLoaded.current && !force)) return;
+    receiptLoadInFlight.current = true;
+    setReceiptsLoading(true); setReceiptsError('');
+    try {
+      const audit = await api.auditExport(TOKEN);
+      const paymentEvents = audit.events.filter((event) => event.type === 'payment_completed' && event.transaction_id);
+      const transactionEvents = [...new Map(paymentEvents.map((event) => [event.transaction_id!, event])).values()];
+      const records = await Promise.all(transactionEvents.map(async (event): Promise<ReceiptRecord | null> => {
+        const payloadReceipt = event.payload.receipt as Receipt | undefined;
+        if (payloadReceipt?.status === 'paid' && payloadReceipt.transaction_id === event.transaction_id) return { receipt: payloadReceipt, quote: null, occurredAt: event.occurred_at };
+        try { return { receipt: await api.paymentByTransaction(TOKEN, event.transaction_id!), quote: null, occurredAt: event.occurred_at }; }
+        catch { return null; }
+      }));
+      const ordered = records.filter((record): record is ReceiptRecord => record !== null).sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt));
+      setReceipts(ordered); receiptsLoaded.current = true;
+    } catch (err) {
+      setReceiptsError(err instanceof Error ? err.message : 'Could not load receipts.');
+    } finally { receiptLoadInFlight.current = false; setReceiptsLoading(false); }
+  }
+
+  function showReceipts() {
+    setReceiptsOpen(true); setSelectedReceipt(null); setReceiptDetailError(''); void loadReceipts();
+  }
+
+  function viewReceipt(record: ReceiptRecord) {
+    setReceiptsOpen(true); setReceiptsError('');
+    void loadReceipts();
+    void openReceipt(record);
+  }
+
+  function rememberReceipt(receipt: Receipt) {
+    const record: ReceiptRecord = { receipt, quote, occurredAt: receipt.paid_at };
+    setReceipts((current) => [record, ...current.filter((entry) => entry.receipt.transaction_id !== receipt.transaction_id)].sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt)));
+  }
+
+  async function openReceipt(record: ReceiptRecord) {
+    const requestId = ++receiptDetailRequestId.current;
+    setSelectedReceipt(record.receipt.id); setReceiptDetailError('');
+    if (record.quote) { setReceiptDetailLoading(false); return; }
+    setReceiptDetailLoading(true);
+    try {
+      const quote = await api.quoteById(TOKEN, record.receipt.quote_id);
+      if (requestId === receiptDetailRequestId.current) setReceipts((current) => current.map((entry) => entry.receipt.id === record.receipt.id ? { ...entry, quote } : entry));
+    } catch (err) {
+      if (requestId === receiptDetailRequestId.current) setReceiptDetailError(err instanceof Error ? err.message : 'Item details are unavailable right now.');
+    } finally { if (requestId === receiptDetailRequestId.current) setReceiptDetailLoading(false); }
+  }
+
+  useEffect(() => {
+    if (!editingPreset && !receiptsOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    const focusables = dialog ? [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')] : [];
+    focusables[0]?.focus();
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setEditingPreset(null); setReceiptsOpen(false); setSelectedReceipt(null); }
+      if (event.key === 'Tab' && focusables.length) {
+        const first = focusables[0]; const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => { window.removeEventListener('keydown', handleKeys); document.body.style.overflow = oldOverflow; previous?.focus(); };
+  }, [editingPreset, receiptsOpen, selectedReceipt]);
+
+  useEffect(() => {
+    if (loaded && mandateId) void loadReceipts();
+  }, [loaded, mandateId]);
 
   const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
@@ -404,7 +580,7 @@ export default function SimpleApp() {
 
     {error && <div className="m2-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">Dismiss</button></div>}
 
-    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} bob /></div> : showSetup ? (
+    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} /></div> : showSetup ? (
       <section className="m2-setup">
         <div className="m2-setup-copy">
           <p className="m2-kicker">For the person who does Mum’s shopping</p>
@@ -440,6 +616,8 @@ export default function SimpleApp() {
           {active
             ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
+          <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
+          {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
         </section>
 
         <section className="m2-col m2-area-feed">
@@ -460,6 +638,11 @@ export default function SimpleApp() {
           ) : phase === 'pick' ? (
             <div className="m2-panel">
               <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>What does Mum need this week?</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
+              <div className="m2-shopping-scene" role="img" aria-label="Kumi with rice, milk and fruit for the weekly shop">
+                <div className="m2-scene-copy"><span>THE WEEKLY SHOP</span><b>Little things,<br />taken care of.</b><small>Tell Kumi what Mum needs.</small></div>
+                <div className="m2-scene-groceries" aria-hidden="true"><span className="rice">🍚<small>Rice</small></span><span className="milk">🥛<small>Milk</small></span><span className="fruit">🍎<small>Fruit</small></span></div>
+                <img src="/agents/kumi-happy.png" alt="" width="92" height="92" />
+              </div>
               <div className="m2-ask">
                 <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
                 <div className="m2-ask-actions">
@@ -471,11 +654,14 @@ export default function SimpleApp() {
               </div>
               <p className="m2-muted m2-or">or start from a preset</p>
               <div className="m2-picks">
-                {PICKS.map((p) => { const Icon = p.icon; return <button key={p.id} className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
-                  <span className="m2-tile"><Icon size={24} strokeWidth={2.2} /></span>
-                  <span className="m2-pick-text"><b>{p.title}</b><small>{p.subtitle}</small></span>
-                  <span className="m2-pick-price">{products.length ? `~${hkd(estimate(p))}` : ''}</span>
-                </button>; })}
+                {visiblePicks.map((p) => { const Icon = p.icon; return <div key={p.id} className="m2-pick-row">
+                  <button className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
+                    <span className="m2-tile"><Icon size={24} strokeWidth={2.2} /></span>
+                    <span className="m2-pick-text"><b>{p.title}</b><small>{p.subtitle}</small></span>
+                    <span className="m2-pick-price">{products.length && !p.edited ? `~${hkd(estimate(p))}` : p.edited ? 'Personal' : ''}</span>
+                  </button>
+                  <button type="button" className="m2-edit-pick" onClick={() => editPreset(p)} aria-label={`Edit ${p.title}`}><Pencil size={16} /><span>Edit</span></button>
+                </div>; })}
               </div>
               <button className="m2-link" onClick={() => setShowCustom((v) => !v)}>{showCustom ? 'Hide the shelf' : 'Or pick items yourself'}</button>
               {showCustom && <div className="m2-shelf">
@@ -541,6 +727,50 @@ export default function SimpleApp() {
         </section>
       </main>
     )}
+
+    {editingPreset && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingPreset(null); }}>
+      <section className="m2-modal m2-preset-modal" role="dialog" aria-modal="true" aria-labelledby="preset-editor-title">
+        <header className="m2-modal-head"><div><p className="m2-kicker">Make it yours</p><h2 id="preset-editor-title">Edit shopping preset</h2></div><button className="m2-icon-button" onClick={() => setEditingPreset(null)} aria-label="Close editor"><X size={20} /></button></header>
+        <label className="m2-field">Preset name<input value={editorTitle} maxLength={60} onChange={(event) => setEditorTitle(event.target.value)} /></label>
+        <div className="m2-editor-items-head"><b>Shopping list</b><small>Saved on this device</small></div>
+        <div className="m2-editor-items">{editorItems.map((item, index) => <div className="m2-editor-item" key={index}>
+          <input aria-label={`Item ${index + 1}`} value={item.name} maxLength={100} placeholder="e.g. jasmine rice" onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))} />
+          <label><span>Qty</span><input aria-label={`Quantity for item ${index + 1}`} type="number" min="1" max="20" value={item.quantity || ''} onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value === '' ? 0 : Number(event.target.value) } : row))} /></label>
+          <input aria-label={`Unit for item ${index + 1} (optional)`} value={item.unit ?? ''} maxLength={24} placeholder="Unit" onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit: event.target.value } : row))} />
+          <button className="m2-icon-button danger" onClick={() => setEditorItems((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label={`Remove ${item.name || `item ${index + 1}`}`}><Trash2 size={17} /></button>
+        </div>)}</div>
+        <button className="m2-add-item" onClick={() => { if (editorItems.length < 20) setEditorItems((current) => [...current, { name: '', quantity: 1 }]); }} disabled={editorItems.length >= 20}>+ Add an item</button>
+        {presetError && <p className="m2-modal-error" role="alert">{presetError}</p>}
+        <div className="m2-modal-actions">
+          <button className="m2-ghost" onClick={() => resetPreset(editingPreset.id)}>{PICKS.some((item) => item.id === editingPreset.id) ? <><RotateCcw size={16} />Reset default</> : <><Trash2 size={16} />Delete copy</>}</button>
+          <button className="m2-ghost" onClick={duplicatePreset}>Make a copy</button>
+          <button className="m2-cta" onClick={savePreset}>Save preset</button>
+        </div>
+        <p className="m2-modal-note">When you shop, Kumi receives this edited list. If Kumi is unavailable, the original preset will not be substituted.</p>
+      </section>
+    </div>}
+
+    {receiptsOpen && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceiptsOpen(false); }}>
+      <section className="m2-modal m2-receipts-modal" role="dialog" aria-modal="true" aria-labelledby="receipts-title">
+        <header className="m2-modal-head"><div><p className="m2-kicker">Your purchase history</p><h2 id="receipts-title">{selectedReceiptRecord ? 'Receipt' : 'Receipts'}</h2></div><button className="m2-icon-button" onClick={() => { setReceiptsOpen(false); setSelectedReceipt(null); }} aria-label="Close receipts"><X size={20} /></button></header>
+        {selectedReceiptRecord ? <>
+          <button className="m2-back-link" onClick={() => setSelectedReceipt(null)}>← All receipts</button>
+          <article className="m2-paper-receipt" id="printable-receipt">
+            <div className="m2-paper-brand">{merchantName(selectedReceiptRecord.receipt.merchant_id).toUpperCase()} <span>MANDATE · SANDBOX</span></div>
+            <p className="m2-paper-date">{new Date(selectedReceiptRecord.receipt.paid_at || selectedReceiptRecord.occurredAt).toLocaleString('en-HK', { dateStyle: 'long', timeStyle: 'short' })}</p>
+            {receiptDetailLoading ? <p className="m2-muted">Loading item details…</p> : selectedReceiptRecord.quote ? <ul>{selectedReceiptRecord.quote.items.map((item) => <li key={item.product_id}><span>{item.quantity}× {item.title}</span><b>{money(item.line_total_minor)}</b></li>)}{selectedReceiptRecord.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`}><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}</ul> : <p className="m2-muted">{receiptDetailError || 'Item details are no longer available for this purchase.'}{receiptDetailError && <button className="m2-back-link" onClick={() => void openReceipt(selectedReceiptRecord)}>Try again</button>}</p>}
+            <div className="m2-paper-total"><span>Paid</span><b>{money(selectedReceiptRecord.receipt.amount_minor)}</b></div>
+            <dl><dt>Payment route</dt><dd>{selectedReceiptRecord.receipt.payment_route?.label ?? 'Sandbox wallet'}</dd><dt>Receipt ID</dt><dd>{selectedReceiptRecord.receipt.id}</dd><dt>Transaction</dt><dd>{selectedReceiptRecord.receipt.transaction_id}</dd></dl>
+          </article>
+          <button className="m2-cta m2-print-button" onClick={() => window.print()}><Printer size={17} />Print / Save PDF</button>
+        </> : <>
+          {receiptsLoading ? <div className="m2-receipt-loading"><Avatar name="stella" state="idle" size={64} /><p>Finding your receipts…</p></div> : receiptsError ? <div className="m2-receipts-state"><p role="alert">{receiptsError}</p><button className="m2-ghost" onClick={() => void loadReceipts(true)}>Try again</button></div> : receipts.length ? <div className="m2-receipt-list">{receipts.map((record) => <button className="m2-receipt-row" key={record.receipt.transaction_id} onClick={() => void openReceipt(record)}>
+            <span className="m2-receipt-icon"><ReceiptText size={19} /></span><span className="m2-receipt-row-text"><b>{merchantName(record.receipt.merchant_id)} groceries</b><small>{new Date(record.receipt.paid_at || record.occurredAt).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b className="m2-receipt-row-amount">{money(record.receipt.amount_minor)}</b><ArrowRight size={17} />
+          </button>)}</div> : <div className="m2-receipts-state"><Sticker name="stella" state="idle" size={104} tilt={-5} /><h3>No paid receipts yet</h3><p>Completed sandbox purchases will appear here. Refused orders are not receipts.</p></div>}
+          {!receiptsLoading && receipts.length > 0 && <button className="m2-refresh-receipts" onClick={() => void loadReceipts(true)}>Refresh history</button>}
+        </>}
+      </section>
+    </div>}
 
     <footer className="m2-foot">
       <button className="m2-link" onClick={() => setShowFine((v) => !v)}>How this works</button>
