@@ -12,6 +12,7 @@ the contract response.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -20,6 +21,7 @@ from typing import Callable
 from mandate.storage.db import Database
 
 from . import policy as rules
+from .approval_notify import ApprovalNotifier, NoNotifier, opened_event
 from .audit_shim import append_event, sha256_hex, stream_for_owner
 from .auth import Actor
 from .catalog import Catalog, CatalogError
@@ -29,6 +31,8 @@ from .errors import ApiError, conflict, invalid, not_found
 from .rails import PaymentRail, RailDeclined, default_rails, rail_info
 from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
+
+log = logging.getLogger(__name__)
 
 PAYLOAD_VERSION = 1
 
@@ -51,6 +55,7 @@ class Wallet:
         authorization_ttl_s: int = 120,
         quote_ttl_s: int = 600,
         approval_ttl_s: int = 900,
+        notifier: ApprovalNotifier | None = None,
     ):
         self.db = db
         self.signer = signer
@@ -65,6 +70,7 @@ class Wallet:
         self.authorization_ttl = timedelta(seconds=authorization_ttl_s)
         self.quote_ttl = timedelta(seconds=quote_ttl_s)
         self.approval_ttl = timedelta(seconds=approval_ttl_s)
+        self.notifier = notifier or NoNotifier()
 
     # ------------------------------------------------------------------ helpers
 
@@ -519,6 +525,8 @@ class Wallet:
     # ----------------------------------------------------------- authorization
 
     def authorize(self, actor: Actor, key: str, req: dict) -> tuple[int, dict]:
+        opened: list[tuple[dict, str, datetime]] = []  # set only when this call opens an approval request
+
         def op(conn, now):
             prior = conn.execute("SELECT * FROM auth_decisions WHERE transaction_id = ?",
                                  (req["transaction_id"],)).fetchone()
@@ -715,12 +723,15 @@ class Wallet:
                                          "mandate_version", "quote_id", "merchant_id", "basket_hash", "amount_minor",
                                          "reasons_json", "status", "created_at", "expires_at")),
                 )
+                opened.append((approval_out, leaf["owner_id"], now))
             elif approval is not None and body["status"] == "refused":
                 conn.execute("UPDATE approval_requests SET status = 'used' WHERE id = ? AND status = 'approved'",
                              (approval["id"],))
             return 200, body
 
         status, body, _ = self._idempotent(actor, "authorizePurchase", key, req, op)
+        for approval_out, owner_id, now in opened:
+            self._notify_approval_opened(approval_out, owner_id, now)
         if body.get("status") == "approved":
             # Tokens are never stored; Ed25519 re-signing of the same claims yields the same token.
             body = {**body, "authorization_token": self.signer.sign(body["claims"])}
@@ -966,6 +977,13 @@ class Wallet:
         if row is None or not self._visible_approval(actor, row):
             raise not_found("Approval request")
         return self._approval_out(row)
+
+    def _notify_approval_opened(self, approval: dict, owner_id: str, now: datetime) -> None:
+        """After commit. Notification is optional, so it can never change the authorization result."""
+        try:
+            self.notifier.approval_opened(opened_event(self.signer, approval, owner_id, now))
+        except Exception:
+            log.exception("Could not notify about approval %s", approval["id"])
 
     def decide_approval(self, actor: Actor, key: str, approval_id: str, approve: bool, req: dict) -> tuple[int, dict]:
         """The mandate's owner answers a pending request. Agents can never reach this."""

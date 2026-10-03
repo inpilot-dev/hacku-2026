@@ -17,6 +17,8 @@ from fastapi import FastAPI
 
 from mandate.storage.db import Database
 
+from .approval_decision_routes import build_approval_decision_router
+from .approval_notify import notifier_from_env
 from .catalog import Catalog
 from .drafts import InMemoryDrafts
 from .errors import install_error_handlers
@@ -32,11 +34,13 @@ def create_app(data_dir: str | Path | None = None, **wallet_kwargs) -> tuple[Fas
     db.migrate()
     signer = Signer.from_key_dir(os.environ.get("MANDATE_WALLET_KEY_DIR") or data_dir / "keys")
     wallet_kwargs.setdefault("draft_lookup", InMemoryDrafts())
+    wallet_kwargs.setdefault("notifier", notifier_from_env())
     wallet = Wallet(db, signer, Catalog.load(), **wallet_kwargs)
 
     app = FastAPI(title="Mandate wallet (dev)", version="0.1.0")
     install_error_handlers(app)
     app.include_router(build_router(wallet), prefix="/api/v1")
+    app.include_router(build_approval_decision_router(wallet), prefix="/api/v1")
     return app, wallet
 
 

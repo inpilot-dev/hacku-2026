@@ -25,6 +25,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from .clock import parse
 
 AUDIENCE = "mandate-payment-sandbox"
+# Approval decision tokens (approval_notify.py) use their own audience, so one can never pass as a
+# purchase authorization, and an authorization can never decide an approval.
+APPROVAL_AUDIENCE = "mandate-approval-decision"
 ALGORITHM = "EdDSA"
 ISSUER = "mandate-wallet"
 
@@ -68,26 +71,26 @@ class Signer:
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
         ).decode()
 
-    def sign(self, claims: dict) -> str:
+    def sign(self, claims: dict, *, audience: str = AUDIENCE) -> str:
         """Sign contract claims (AuthorizationClaims) plus registered JWT claims."""
         payload = dict(claims)
         payload.update(
             iss=ISSUER,
-            aud=AUDIENCE,
+            aud=audience,
             jti=claims["token_id"],
             iat=int(parse(claims["issued_at"]).timestamp()),
             exp=int(parse(claims["expires_at"]).timestamp()),
         )
         return jwt.encode(payload, self._private_key, algorithm=ALGORITHM, headers={"kid": self.key_id})
 
-    def verify(self, token: str, now: datetime, *, check_expiry: bool = True) -> dict:
+    def verify(self, token: str, now: datetime, *, check_expiry: bool = True, audience: str = AUDIENCE) -> dict:
         """Return verified claims. Raises TokenInvalid or TokenExpired."""
         try:
             payload = jwt.decode(
                 token,
                 self.public_key,
                 algorithms=[ALGORITHM],
-                audience=AUDIENCE,
+                audience=audience,
                 issuer=ISSUER,
                 options={"verify_exp": False, "verify_iat": False, "verify_nbf": False, "require": ["aud", "exp", "iat", "jti", "iss"]},
             )

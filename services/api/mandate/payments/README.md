@@ -73,3 +73,24 @@ Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, 
   mandate's subtree.
 
 See `contracts/README.md` section 11 for the API shapes.
+
+## Approval webhook (optional, off by default)
+
+This lets something outside the app, such as the planned voice-call service, answer an approval. Without
+configuration nothing changes, and the owner answers in the app.
+
+- **Turn it on** with `MANDATE_APPROVAL_WEBHOOK_URL`. `MANDATE_APPROVAL_WEBHOOK_SECRET` is optional and is sent as
+  `Authorization: Bearer <secret>`.
+- **What is sent.** When a purchase opens a new approval request, the wallet POSTs
+  `{"type": "approval.opened", "approval": <ApprovalRequest>, "owner_id", "decision_token"}` once. The POST happens
+  after commit, on a background thread. Retries of the same purchase don't send it again.
+- **If it fails.** A failed or slow receiver is logged and ignored. The authorization result never depends on it, and
+  the approval stays pending in the app.
+- **The decision token** is an Ed25519 JWS with its own audience (`mandate-approval-decision`). It names one approval
+  and expires with it.
+  - `GET /approval-decision` returns that approval and its quote, so the receiver can read the basket back.
+  - `POST /approval-decision/approve|deny` (with `Idempotency-Key` and an optional `note`) decides that approval
+    as its owner.
+  - The token can't reach any other approval. It is refused as a payment authorization, and user or agent tokens
+    are refused here.
+  - These routes are not in `contracts/openapi.json`. The app keeps using `/approvals/{id}/approve|deny`.
