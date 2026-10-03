@@ -61,6 +61,26 @@ month") use the owner's spend this month from `reward_ledger`, so the ranking ca
 
 Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, simulated: true, ref}`.
 
+## Virtual cards
+
+`issuing.py` is a sandbox card issuer behind a `CardIssuer` interface, so a real issuer (Stripe Issuing, Marqeta, a
+bank BIN sponsor) can replace it without touching the ledger.
+
+- **Mandate card.** Confirming a mandate issues one virtual Mastercard (sandbox BIN 222300, Luhn-valid, valid thru
+  the mandate's expiry) with controls copied from the policy: per-order limit, HKD, allowed shops and blocked MCCs
+  (7995 gambling, 6051 quasi-cash, 4829 money transfer, plus 5921 liquor when `alcohol` is blocked). It is never
+  presented to a shop; the agent never holds a reusable card number. A child mandate's card hangs under its parent's.
+- **Single-use cards.** On the two card rails, each reservation gets its own card under the mandate card, locked to
+  that shop, amount and expiry. `payment_credential.last4` is its real last4. Pay presents it to the issuer, which
+  checks number, expiry, CVV, status up the card chain, shop, MCC and amount, then burns it. Cancel, expiry and
+  revoke cancel cards.
+- **Freeze.** `POST /mandates/{id}/card/freeze` and `/unfreeze` (owner only) is the reversible kill switch: new
+  purchases refuse with `CARD_FROZEN`, a pending payment refuses and releases its hold, and the issuer declines
+  with response code 62. Revoke still cancels for good.
+- **Card data.** The PAN is AES-256-GCM encrypted at rest (key in `<key dir>/card_vault.key`) and found by an HMAC
+  fingerprint; the CVV is derived from a card verification key and never stored; only the last4 leaves `issuing.py`.
+  `GET /mandates/{id}/card/authorizations` lists every approved and declined attempt with ISO 8583 codes.
+
 ## Approvals, refunds, velocity and risk review
 
 - **Approval that expires.** A purchase over `approval_above_minor` (or with an unknown category) returns

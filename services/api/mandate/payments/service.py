@@ -27,6 +27,7 @@ from .catalog import Catalog, CatalogError
 from .clock import SystemClock, iso, parse, period_bounds
 from .drafts import DraftLookup, InMemoryDrafts
 from .errors import ApiError, conflict, invalid, not_found
+from .issuing import CardIssuer, SandboxCardIssuer
 from .rails import PaymentRail, RailDeclined, default_rails, rail_info
 from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
@@ -51,6 +52,7 @@ class Wallet:
         clock=None,
         draft_lookup: DraftLookup | None = None,
         rails: dict[str, PaymentRail] | None = None,
+        issuer: CardIssuer | None = None,
         routes: RouteBook | None = None,
         authorization_ttl_s: int = 120,
         quote_ttl_s: int = 600,
@@ -61,7 +63,8 @@ class Wallet:
         self.catalog = catalog
         self.clock = clock or SystemClock()
         self.draft_lookup = draft_lookup or InMemoryDrafts()
-        self.rails = rails or default_rails()
+        self.issuer = issuer or SandboxCardIssuer.ephemeral()
+        self.rails = rails or default_rails(self.issuer)
         self.routes = routes or RouteBook.load()
         missing = [name for name in self.routes.rail_names if name not in self.rails]
         if missing:
@@ -123,6 +126,29 @@ class Wallet:
 
     def _rail_for(self, conn, reservation_id: str) -> PaymentRail:
         return self.rails[self._route_row(conn, reservation_id)["rail"]]
+
+    # cards
+
+    @staticmethod
+    def _card_audit(card: dict) -> dict:
+        """What audit payloads record about a card: never the number or security code."""
+        return {"card_id": card["card_id"], "usage": card["usage"], "network": card["network"],
+                "last4": card["last4"], "simulated": True}
+
+    def _ensure_cards(self, conn, chain: list[dict], now: datetime) -> None:
+        """Mandates confirmed before the card issuer existed get their card on first use, root first."""
+        for m in reversed(chain):
+            if self.issuer.mandate_card(conn, m["id"]) is None:
+                self.issuer.issue_mandate_card(conn, m, now)
+
+    def _frozen_card_violation(self, conn, chain: list[dict]) -> dict | None:
+        for m in chain:
+            card = self.issuer.mandate_card(conn, m["id"])
+            if card is not None and card["status"] == "frozen":
+                whose = "" if m is chain[0] else f" (it funds mandate {chain[0]['id']})"
+                return rules.violation("CARD_FROZEN", m, "card",
+                                       f"Card •••• {card['last4']} is frozen{whose}; unfreeze it to pay.")
+        return None
 
     # mandates
 
@@ -438,9 +464,11 @@ class Wallet:
             )
             # Every rail opens an account bounded by the mandate: per-order limit and expiry.
             accounts = [rail_info(rail, self._rail(rail.issue, conn, m, now)) for rail in self.rails.values()]
+            # The mandate's virtual card: the card account every single-use card is issued from.
+            card = self.issuer.issue_mandate_card(conn, m, now)
             self._event(conn, actor.actor_id, "mandate_confirmed", {
                 "draft_id": req["draft_id"], "delegatee_id": m["delegatee_id"], "parent_mandate_id": parent_id,
-                "version": 1, "policy": pol, "rails": accounts,
+                "version": 1, "policy": pol, "rails": accounts, "card": self._card_audit(card),
             }, actor=actor, now=now, mandate_id=m["id"])
             return 201, self._mandate_out(m, now)
 
@@ -474,6 +502,7 @@ class Wallet:
             for revoked_id in ids:
                 for rail in self.rails.values():
                     self._rail(rail.close, conn, revoked_id, now)
+                self.issuer.cancel_mandate_card(conn, revoked_id, now)
             cancelled = []
             for row in conn.execute(
                 f"SELECT * FROM reservations WHERE mandate_id IN ({placeholders}) AND status = 'reserved' "
@@ -581,6 +610,10 @@ class Wallet:
             ev = rules.evaluate(chain, quote, budgets, now,
                                 recent_purchases=self._recent_purchases(conn, chain, now),
                                 risk=self._risk_reasons(conn, chain, quote), waived=waived)
+            self._ensure_cards(conn, chain, now)
+            frozen = self._frozen_card_violation(conn, chain)
+            if frozen:
+                ev.hard.append(frozen)
             decision_id = _id("dec")
             base = {
                 "decision_id": decision_id,
@@ -834,6 +867,18 @@ class Wallet:
             if leaf["version"] != r["mandate_version"]:
                 return refuse("MANDATE_VERSION_CHANGED", "version",
                               "The mandate changed after this purchase was authorized.", True)
+            frozen = self._frozen_card_violation(conn, self._chain(conn, leaf))
+            if frozen:
+                # The checkout presents the card and the issuer declines it; the decline stays on the card's record.
+                held = conn.execute("SELECT credential_id FROM rail_payments WHERE reservation_id = ?",
+                                    (r["id"],)).fetchone()
+                card = (self.issuer.card(conn, held["credential_id"]) if held else None) \
+                    or self.issuer.mandate_card(conn, leaf["id"])
+                self.issuer.record_decline(conn, card["card_id"], "card_frozen", merchant_id=r["merchant_id"],
+                                           amount_minor=r["amount_minor"], currency="HKD", now=now,
+                                           reservation_id=r["id"])
+                mandate = next(m for m in self._chain(conn, leaf) if m["id"] == frozen["mandate_id"])
+                return refuse("CARD_FROZEN", "card", frozen["message"], True, mandate)
 
             qrow = conn.execute("SELECT * FROM quotes WHERE id = ?", (r["quote_id"],)).fetchone()
             quote = json.loads(qrow["body_json"])
@@ -1099,3 +1144,65 @@ class Wallet:
 
         status, body, _ = self._idempotent(actor, "refundPayment", key, {"transaction_id": transaction_id, **req}, op)
         return status, body
+
+    # ------------------------------------------------------------------- cards
+
+    def _card_mandate(self, conn, actor: Actor, mandate_id: str, *, owner_only: bool) -> tuple[dict, dict]:
+        m = self._load_mandate(conn, mandate_id)
+        visible = m is not None and (m["owner_id"] == actor.actor_id if owner_only else self._can_see_mandate(actor, m))
+        if not visible:
+            raise not_found("Mandate")
+        card = self.issuer.mandate_card(conn, mandate_id)
+        if card is None:
+            raise not_found("Card")
+        return m, card
+
+    @staticmethod
+    def _card_out(card: dict) -> dict:
+        out = {k: card[k] for k in ("card_id", "mandate_id", "parent_card_id", "usage", "network", "last4",
+                                    "exp_month", "exp_year", "status", "controls", "issued_at",
+                                    "status_changed_at")}
+        return {**out, "payment_mode": "sandbox"}
+
+    def _card_view(self, conn, card: dict) -> dict:
+        out = self._card_out(card)
+        counts = dict(conn.execute(
+            "SELECT status, COUNT(*) FROM virtual_cards WHERE parent_card_id = ? AND usage = 'single_use' "
+            "GROUP BY status", (card["card_id"],)).fetchall())
+        out["single_use_cards"] = {s: counts.get(s, 0) for s in ("active", "used", "cancelled")}
+        return out
+
+    def get_card(self, actor: Actor, mandate_id: str) -> dict:
+        with self.db.read() as conn:
+            _, card = self._card_mandate(conn, actor, mandate_id, owner_only=False)
+            return self._card_view(conn, card)
+
+    def _set_card_frozen(self, actor: Actor, key: str, mandate_id: str, req: dict, freeze: bool) -> tuple[int, dict]:
+        def op(conn, now):
+            m, card = self._card_mandate(conn, actor, mandate_id, owner_only=True)
+            if card["status"] == "cancelled" or m["status"] == "revoked":
+                raise conflict("This card was cancelled when its mandate was revoked.")
+            if card["status"] == ("frozen" if freeze else "active"):
+                raise conflict(f"This card is already {'frozen' if freeze else 'active'}.")
+            self.issuer.set_status(conn, card["card_id"], "frozen" if freeze else "active", now)
+            card = self.issuer.card(conn, card["card_id"])
+            seq = self._event(conn, m["owner_id"], "card_frozen" if freeze else "card_unfrozen", {
+                "card": self._card_audit(card), "reason": req.get("reason"),
+            }, actor=actor, now=now, mandate_id=mandate_id)
+            return 200, {"card": self._card_view(conn, card), "event_sequence": seq}
+
+        operation = "freezeCard" if freeze else "unfreezeCard"
+        status, body, _ = self._idempotent(actor, operation, key, {"mandate_id": mandate_id, **req}, op)
+        return status, body
+
+    def freeze_card(self, actor: Actor, key: str, mandate_id: str, req: dict) -> tuple[int, dict]:
+        """Owner only. Reversible: every card under it declines and the wallet refuses new purchases."""
+        return self._set_card_frozen(actor, key, mandate_id, req, True)
+
+    def unfreeze_card(self, actor: Actor, key: str, mandate_id: str, req: dict) -> tuple[int, dict]:
+        return self._set_card_frozen(actor, key, mandate_id, req, False)
+
+    def card_authorizations(self, actor: Actor, mandate_id: str) -> dict:
+        with self.db.read() as conn:
+            _, card = self._card_mandate(conn, actor, mandate_id, owner_only=False)
+            return {"card_id": card["card_id"], "authorizations": self.issuer.authorizations(conn, [mandate_id])}

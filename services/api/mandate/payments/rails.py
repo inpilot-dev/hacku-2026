@@ -14,6 +14,11 @@ successful presentment: a second capture, a different merchant or a larger
 amount is declined by the rail itself, as a second line of defence behind the
 ledger.
 
+On the card rails the credential is a real-format virtual card from the card
+issuer (issuing.py): a Luhn-valid number under the mandate's card, and capture
+is a card authorization the issuer runs against that card's controls. The FPS
+rail has no card.
+
 No real rail is connected. All three rails are local simulations shaped like
 the products they name (HKT's Tap & Go Single Use Card, a scoped card network
 token, an FPS eDDA debit): no money moves, receipts say
@@ -31,6 +36,7 @@ import uuid
 from typing import Protocol
 
 from .clock import iso
+from .issuing import CardIssuanceError, CardIssuer
 
 
 class RailDeclined(Exception):
@@ -59,12 +65,16 @@ class SimulatedSingleUseRail:
     simulated = True
 
     def __init__(self, name: str, *, network: str | None, prefix: str, holds_funds_at_rail: bool,
-                 max_amount_minor: int | None = None):
+                 max_amount_minor: int | None = None, issuer: CardIssuer | None = None,
+                 card_network: str | None = None):
         self.name = name
         self.network = network
         self.prefix = prefix
         self.holds_funds_at_rail = holds_funds_at_rail
         self.max_amount_minor = max_amount_minor
+        # With an issuer, each credential is a single-use virtual card on ``card_network``.
+        self.issuer = issuer
+        self.card_network = card_network
 
     # accounts
 
@@ -101,12 +111,24 @@ class SimulatedSingleUseRail:
             raise RailDeclined("Rail account has expired.")
         if reservation["amount_minor"] > acct["limit_minor"]:
             raise RailDeclined("Amount is over the rail account limit.")
-        digits = str(uuid.uuid4().int)
+        if self.issuer is not None:
+            try:
+                card = self.issuer.issue_single_use_card(
+                    conn, mandate_id=reservation["mandate_id"], reservation_id=reservation["id"],
+                    merchant_id=reservation["merchant_id"], amount_minor=reservation["amount_minor"], currency="HKD",
+                    expires_at=reservation["expires_at"], network=self.card_network, now=now)
+            except CardIssuanceError as exc:
+                raise RailDeclined(str(exc)) from None
+            credential_id, last4 = card["card_id"], card["last4"]
+        else:
+            digits = str(uuid.uuid4().int)
+            credential_id = f"{self.prefix}_{uuid.uuid4().hex}"
+            last4 = digits[-4:] if self.network not in (None, "fps") else None
         credential = {
-            "credential_id": f"{self.prefix}_{uuid.uuid4().hex}",
+            "credential_id": credential_id,
             "rail": self.name,
             "network": self.network,
-            "last4": digits[-4:] if self.network not in (None, "fps") else None,
+            "last4": last4,
             "merchant_id": reservation["merchant_id"],
             "amount_minor": reservation["amount_minor"],
             "currency": "HKD",
@@ -141,6 +163,11 @@ class SimulatedSingleUseRail:
         acct = conn.execute("SELECT status FROM rail_accounts WHERE ref = ?", (row["account_ref"],)).fetchone()
         if acct is None or acct["status"] != "active":
             raise RailDeclined("Rail account is closed.")
+        if self.issuer is not None:
+            auth = self.issuer.present(conn, credential_id, merchant_id=merchant_id, amount_minor=amount_minor,
+                                       currency=row["currency"], now=now, reservation_id=row["reservation_id"])
+            if not auth["approved"]:
+                raise RailDeclined(f"Card issuer declined ({auth['response_code']}): {auth['message']}")
         cur = conn.execute("UPDATE rail_payments SET status = 'captured', captured_minor = ?, updated_at = ? "
                            "WHERE credential_id = ? AND status = 'held'", (amount_minor, iso(now), credential_id))
         if cur.rowcount != 1:
@@ -162,6 +189,8 @@ class SimulatedSingleUseRail:
                            "WHERE reservation_id = ? AND status = 'held'", (iso(now), reservation["id"]))
         if cur.rowcount != 1:
             raise RailDeclined(f"No open credential for reservation {reservation['id']}.")
+        if self.issuer is not None:
+            self.issuer.cancel_card(conn, self._row(conn, reservation)["credential_id"], now)
 
     def refund(self, conn, reservation: dict, amount_minor: int, now) -> str:
         row = self._row(conn, reservation)
@@ -172,15 +201,17 @@ class SimulatedSingleUseRail:
         return f"{self.prefix}rf_{uuid.uuid4().hex}"
 
 
-def TapAndGoSingleUseCardSimulator() -> SimulatedSingleUseRail:
+def TapAndGoSingleUseCardSimulator(issuer: CardIssuer | None = None) -> SimulatedSingleUseRail:
     """HKT Tap & Go Single Use Card: virtual prepaid Mastercard, one payment per card, HK$2,000 maximum."""
     return SimulatedSingleUseRail("tap_and_go_single_use_card", network="mastercard", prefix="tngsuc",
-                                  holds_funds_at_rail=True, max_amount_minor=200000)
+                                  holds_funds_at_rail=True, max_amount_minor=200000, issuer=issuer,
+                                  card_network="mastercard")
 
 
-def CardNetworkTokenSimulator() -> SimulatedSingleUseRail:
+def CardNetworkTokenSimulator(issuer: CardIssuer | None = None) -> SimulatedSingleUseRail:
     """A card tokenised per purchase (the Mastercard agent-token / Visa network-token pattern)."""
-    return SimulatedSingleUseRail("card_network_token", network="card", prefix="ntok", holds_funds_at_rail=True)
+    return SimulatedSingleUseRail("card_network_token", network="card", prefix="ntok", holds_funds_at_rail=True,
+                                  issuer=issuer, card_network="visa")
 
 
 def FpsEddaSimulator() -> SimulatedSingleUseRail:
@@ -188,8 +219,8 @@ def FpsEddaSimulator() -> SimulatedSingleUseRail:
     return SimulatedSingleUseRail("fps_edda", network="fps", prefix="fps", holds_funds_at_rail=False)
 
 
-def default_rails() -> dict[str, SimulatedSingleUseRail]:
-    rails = (TapAndGoSingleUseCardSimulator(), CardNetworkTokenSimulator(), FpsEddaSimulator())
+def default_rails(issuer: CardIssuer | None = None) -> dict[str, SimulatedSingleUseRail]:
+    rails = (TapAndGoSingleUseCardSimulator(issuer), CardNetworkTokenSimulator(issuer), FpsEddaSimulator())
     return {r.name: r for r in rails}
 
 
