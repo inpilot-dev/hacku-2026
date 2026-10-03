@@ -403,3 +403,8 @@ A fresh `git fetch origin` found no commits beyond `e346205`; local `main` match
 This Mac does not have the `just` executable. The documented direct setup fallback was run instead: Python requirements installed with `uv`, `npm ci` completed with no reported vulnerabilities, and the Vite production build passed. The full repository test recipe also passed: API 157, MCP wallet 5, and agent 30 tests. The only warnings were the existing Starlette/httpx TestClient deprecation notices.
 
 The integrated source under this checkpoint is `e346205`. The existing reactivation regression test also passes: after freezing an allowance, the UI obtains a new draft and can activate a distinct allowance. The only remaining Noah definition-of-done item requiring a different device is the backup-machine start/reset and user-visible demo rehearsal.
+
+
+## 18. Local speech-to-list rehearsal — 3 October 2026
+
+A generated speech sample (“Two litres of milk and three apples”) was sent through the running single-origin demo's authenticated `/shopping-list/transcribe` and `/shopping-list/parse` endpoints. Local `faster-whisper/small.en` returned “2 liters of milk and 3 apples.” With no OpenRouter key configured, the parser identified its fixed-rule fallback and returned quantities 2 and 3. Both endpoints returned HTTP 200. This checks the local transcription and transparent parser fallback; it does not verify browser microphone permissions or a configured external-model/agent basket run.

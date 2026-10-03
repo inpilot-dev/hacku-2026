@@ -87,7 +87,7 @@ The latest UI accepts a typed list or a short microphone recording. Audio transc
 
 A first purchase from a shop not present in the owner's purchase history can now trigger wallet review alongside the other unusual-purchase reasons. The exact returned reasons are shown together in the review screen; approval applies only once to that basket and reason set.
 
-After syncing these team changes, the frontend production build passed and all 157 API tests passed. Microphone capture and external model-provider round trips were not part of this local validation.
+After syncing these team changes, the frontend production build passed and all 157 API tests passed. Microphone capture and external model-provider round trips were not part of this local validation. A generated speech sample was subsequently exercised through the local transcription API: faster-whisper recognized “Two litres of milk and three apples” and the no-key fixed-rule parser returned two items with quantities 2 and 3. The authenticated transcription and parse endpoints both returned HTTP 200. This does not verify browser microphone permission UX or Jev packing.
 
 
 ## Fresh setup rehearsal — 3 October 2026
