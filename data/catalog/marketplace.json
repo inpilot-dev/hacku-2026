@@ -1,0 +1,2001 @@
+{
+  "_note": "Observed marketplacehk.com snapshot captured 2026-10-03T18:13:04+08:00 by services/agent/catalog_capture.",
+  "merchants": {
+    "marketplace": {
+      "revision": "marketplace-20261003T181304",
+      "data_mode": "observed_snapshot",
+      "evidence_ids": [
+        "ev_marketplace_identity_20261003T181304"
+      ]
+    }
+  },
+  "products": [
+    {
+      "id": "marketplace_101345302",
+      "merchant_id": "marketplace",
+      "title": "Golden Elephant Premium Jasmine Rice 8KG",
+      "description": "Golden Elephant Premium Jasmine Rice 8KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 8990,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101345302_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101327889",
+      "merchant_id": "marketplace",
+      "title": "Golden Phoenix Thailand Hom Mali Rice 5KG",
+      "description": "Golden Phoenix Thailand Hom Mali Rice 5KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101327889_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101324109",
+      "merchant_id": "marketplace",
+      "title": "Golden Phoenix Hom Mali Rice 10KG",
+      "description": "Golden Phoenix Hom Mali Rice 10KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 17800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101324109_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101342732",
+      "merchant_id": "marketplace",
+      "title": "Cherry Blossom Japonica Pearl Rice 8KG",
+      "description": "Cherry Blossom Japonica Pearl Rice 8KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 8290,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101342732_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101351322",
+      "merchant_id": "marketplace",
+      "title": "Fuku Instant Rice Noodle 5 X 65GM (Random Packaging)",
+      "description": "Fuku Instant Rice Noodle 5 X 65GM (Random Packaging)",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101351322_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101322566",
+      "merchant_id": "marketplace",
+      "title": "Demae Sesame Oil Noodle 91GM",
+      "description": "Demae Sesame Oil Noodle 91GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101322566_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101843334",
+      "merchant_id": "marketplace",
+      "title": "Indomie Mi Goreng (Transparent Bag ) Noodle 5x85g",
+      "description": "Indomie Mi Goreng (Transparent Bag ) Noodle 5x85g",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1250,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101843334_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101837277",
+      "merchant_id": "marketplace",
+      "title": "Meadows Extra Virgin Olive Oil 1LT",
+      "description": "Meadows Extra Virgin Olive Oil 1LT",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 10800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101837277_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101350005",
+      "merchant_id": "marketplace",
+      "title": "Nissin Cup Noodle Spicy Seafood 75GM",
+      "description": "Nissin Cup Noodle Spicy Seafood 75GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101350005_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101322993",
+      "merchant_id": "marketplace",
+      "title": "Golden Elephant Premium Jasmine Rice 5KG",
+      "description": "Golden Elephant Premium Jasmine Rice 5KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7290,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101322993_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101340728",
+      "merchant_id": "marketplace",
+      "title": "Lion & Globe Canola Oil 3 X 900ML (Random Packaging)",
+      "description": "Lion & Globe Canola Oil 3 X 900ML (Random Packaging)",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7990,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101340728_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101330936",
+      "merchant_id": "marketplace",
+      "title": "Demae Black Garlic Oil Tonkotsu Noodle 97GM",
+      "description": "Demae Black Garlic Oil Tonkotsu Noodle 97GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101330936_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101343828",
+      "merchant_id": "marketplace",
+      "title": "Lucky Brand Premium Fragrant Rice 8KG",
+      "description": "Lucky Brand Premium Fragrant Rice 8KG",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101343828_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101339843",
+      "merchant_id": "marketplace",
+      "title": "Nissin Cup Noodle Seafood 72GM",
+      "description": "Nissin Cup Noodle Seafood 72GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101339843_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101350757",
+      "merchant_id": "marketplace",
+      "title": "Fuku Instant Noodle 5 X 90GM (Random Packaging)",
+      "description": "Fuku Instant Noodle 5 X 90GM (Random Packaging)",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101350757_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101354717",
+      "merchant_id": "marketplace",
+      "title": "Demae Tonkotsu Noodle 98GM",
+      "description": "Demae Tonkotsu Noodle 98GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101354717_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101837276",
+      "merchant_id": "marketplace",
+      "title": "Meadows Olive Oil 1LT",
+      "description": "Meadows Olive Oil 1LT",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101837276_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101326919",
+      "merchant_id": "marketplace",
+      "title": "Nissin Donbei Kitsune Udon 95GM (Random Packaging)",
+      "description": "Nissin Donbei Kitsune Udon 95GM (Random Packaging)",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1200,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101326919_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101381820",
+      "merchant_id": "marketplace",
+      "title": "Demae Hokkaido Wheat Flour Sesame Oil Noodles 5x91GM",
+      "description": "Demae Hokkaido Wheat Flour Sesame Oil Noodles 5x91GM",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101381820_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101360763",
+      "merchant_id": "marketplace",
+      "title": "Knife Pure Peanut Oil 5LT",
+      "description": "Knife Pure Peanut Oil 5LT",
+      "category": "pantry",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 16890,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101360763_20261003T181304",
+        "ev_marketplace_cat_100020_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101332659",
+      "merchant_id": "marketplace",
+      "title": "Jumbo Gold Kiwifruit 1EA",
+      "description": "Jumbo Gold Kiwifruit 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101332659_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101376957",
+      "merchant_id": "marketplace",
+      "title": "Large Envy Apple 1EA",
+      "description": "Large Envy Apple 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1350,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101376957_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101374428",
+      "merchant_id": "marketplace",
+      "title": "Blueberry 125GM",
+      "description": "Blueberry 125GM",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101374428_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101378087",
+      "merchant_id": "marketplace",
+      "title": "Broccoli 1EA",
+      "description": "Broccoli 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 890,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101378087_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113291949",
+      "merchant_id": "marketplace",
+      "title": "Jumbo Blueberry Tube 200GM (Package & Brand may vary)",
+      "description": "Jumbo Blueberry Tube 200GM (Package & Brand may vary)",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 3000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113291949_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101373851",
+      "merchant_id": "marketplace",
+      "title": "Lemon 1EA",
+      "description": "Lemon 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 750,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101373851_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101378358",
+      "merchant_id": "marketplace",
+      "title": "Australia Jumbo Orange 1EA",
+      "description": "Australia Jumbo Orange 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 950,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101378358_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101377513",
+      "merchant_id": "marketplace",
+      "title": "Vietnam Dragon Fruit 1EA",
+      "description": "Vietnam Dragon Fruit 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 750,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101377513_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101869136",
+      "merchant_id": "marketplace",
+      "title": "Korea Shine Muscat Grape 450GM 1PK",
+      "description": "Korea Shine Muscat Grape 450GM 1PK",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 4600,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101869136_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101367951",
+      "merchant_id": "marketplace",
+      "title": "Australia Mandarin 1PC",
+      "description": "Australia Mandarin 1PC",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 600,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101367951_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_102127176",
+      "merchant_id": "marketplace",
+      "title": "China Fuji Apple 1EA",
+      "description": "China Fuji Apple 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 650,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_102127176_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101373047",
+      "merchant_id": "marketplace",
+      "title": "Jumbo Avocado 1PC",
+      "description": "Jumbo Avocado 1PC",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2600,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101373047_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101377503",
+      "merchant_id": "marketplace",
+      "title": "Jade Cabbage 1PC",
+      "description": "Jade Cabbage 1PC",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 990,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101377503_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101376148",
+      "merchant_id": "marketplace",
+      "title": "Hamimelon 1EA (Approximately Weight: 1.5KG)",
+      "description": "Hamimelon 1EA (Approximately Weight: 1.5KG)",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2700,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101376148_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101373345",
+      "merchant_id": "marketplace",
+      "title": "Jumbo Kiwifruit 1EA",
+      "description": "Jumbo Kiwifruit 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101373345_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101375509",
+      "merchant_id": "marketplace",
+      "title": "Onion 1KG",
+      "description": "Onion 1KG",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101375509_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101373950",
+      "merchant_id": "marketplace",
+      "title": "Top Fragrant Pear 1PC",
+      "description": "Top Fragrant Pear 1PC",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101373950_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101373980",
+      "merchant_id": "marketplace",
+      "title": "Celery 1EA",
+      "description": "Celery 1EA",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1490,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101373980_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101370929",
+      "merchant_id": "marketplace",
+      "title": "Orange 2.6LB",
+      "description": "Orange 2.6LB",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2090,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101370929_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101365694",
+      "merchant_id": "marketplace",
+      "title": "Japan Kintoki Sweet Potato 500GM",
+      "description": "Japan Kintoki Sweet Potato 500GM",
+      "category": "produce",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101365694_20261003T181304",
+        "ev_marketplace_cat_100011_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101343395",
+      "merchant_id": "marketplace",
+      "title": "Vita Cold Brew No Sugar Jasmine Tea Drink 6 X 250ML (Random Package Delivery)",
+      "description": "Vita Cold Brew No Sugar Jasmine Tea Drink 6 X 250ML (Random Package Delivery)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1400,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101343395_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101335431",
+      "merchant_id": "marketplace",
+      "title": "Hokkaido Specially Select 3.6 Milk 200ML (Random Packaging)",
+      "description": "Hokkaido Specially Select 3.6 Milk 200ML (Random Packaging)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1400,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101335431_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101333524",
+      "merchant_id": "marketplace",
+      "title": "Bonaqua Mineralized Water Case 24 X 770ML",
+      "description": "Bonaqua Mineralized Water Case 24 X 770ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7200,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101333524_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_103011856",
+      "merchant_id": "marketplace",
+      "title": "Coca Cola No Sugar Taste Can Case 24X330ML(Random Packaging)",
+      "description": "Coca Cola No Sugar Taste Can Case 24X330ML(Random Packaging)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 8000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_103011856_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101354473",
+      "merchant_id": "marketplace",
+      "title": "Vita Distilled Water Case 24X700ML",
+      "description": "Vita Distilled Water Case 24X700ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 5800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101354473_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101343041",
+      "merchant_id": "marketplace",
+      "title": "Vita Cold Brew No Sugar Oolong Tea 6 X 250ML (Random Package Delivery)",
+      "description": "Vita Cold Brew No Sugar Oolong Tea 6 X 250ML (Random Package Delivery)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1400,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101343041_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101355093",
+      "merchant_id": "marketplace",
+      "title": "Meadows Full Cream Fresh Milk 1LT",
+      "description": "Meadows Full Cream Fresh Milk 1LT",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 4000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101355093_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101328184",
+      "merchant_id": "marketplace",
+      "title": "Meiji Premium Quality Milk 946ML",
+      "description": "Meiji Premium Quality Milk 946ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101328184_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101359293",
+      "merchant_id": "marketplace",
+      "title": "Sensa Cools Herbal Green Tea 350ML",
+      "description": "Sensa Cools Herbal Green Tea 350ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 890,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101359293_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101337787",
+      "merchant_id": "marketplace",
+      "title": "Vita Ya Shi Xiang Lemon Tea 6 X 250ML",
+      "description": "Vita Ya Shi Xiang Lemon Tea 6 X 250ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101337787_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_103011866",
+      "merchant_id": "marketplace",
+      "title": "Schweppes Soda Water Can Case 24X330ML",
+      "description": "Schweppes Soda Water Can Case 24X330ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 8000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_103011866_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113726041",
+      "merchant_id": "marketplace",
+      "title": "Vita Zero Sugar Lemon Tea 6 x 250ML",
+      "description": "Vita Zero Sugar Lemon Tea 6 x 250ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113726041_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101342859",
+      "merchant_id": "marketplace",
+      "title": "Coca Cola Original Taste Can 8 X 330ML(Random Packaging)",
+      "description": "Coca Cola Original Taste Can 8 X 330ML(Random Packaging)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 3500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101342859_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101333566",
+      "merchant_id": "marketplace",
+      "title": "Vita Cold Brew No Sugar Tie Guan Yin Tea Drink 6 X 250ML (Random Package Delivery)",
+      "description": "Vita Cold Brew No Sugar Tie Guan Yin Tea Drink 6 X 250ML (Random Package Delivery)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1400,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101333566_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101329578",
+      "merchant_id": "marketplace",
+      "title": "Vita Da Hong Pao Finger Lime Lemon Tea 6 X 250ML (Random Packaging)",
+      "description": "Vita Da Hong Pao Finger Lime Lemon Tea 6 X 250ML (Random Packaging)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 1300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101329578_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101359285",
+      "merchant_id": "marketplace",
+      "title": "Sensa Cools Herbal Lemon Drink 350ML",
+      "description": "Sensa Cools Herbal Lemon Drink 350ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 890,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101359285_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113465194",
+      "merchant_id": "marketplace",
+      "title": "Vita Apple Green Tea Full Case 24 X 250ML",
+      "description": "Vita Apple Green Tea Full Case 24 X 250ML",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 4400,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113465194_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101329244",
+      "merchant_id": "marketplace",
+      "title": "VIITA Low Sugar Chocolate Milk Beverage 250ml x 6 pack",
+      "description": "VIITA Low Sugar Chocolate Milk Beverage 250ml x 6 pack",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 4700,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101329244_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113465244",
+      "merchant_id": "marketplace",
+      "title": "Vita Cold Brew No Sugar Oolong Tea Case 24 X 250ML (Random Package Delivery)",
+      "description": "Vita Cold Brew No Sugar Oolong Tea Case 24 X 250ML (Random Package Delivery)",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 5000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113465244_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113551679",
+      "merchant_id": "marketplace",
+      "title": "Meadows Mineral Water Case 4 X 5.5LT",
+      "description": "Meadows Mineral Water Case 4 X 5.5LT",
+      "category": "beverage_non_alcoholic",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7600,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113551679_20261003T181304",
+        "ev_marketplace_cat_100002_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113277654",
+      "merchant_id": "marketplace",
+      "title": "G.H.Mumm Champagne Case 6X750ML",
+      "description": "G.H.Mumm Champagne Case 6X750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 136800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113277654_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101331980",
+      "merchant_id": "marketplace",
+      "title": "禾富巴斯灰牌系列切粒子紅酒 750ML",
+      "description": "禾富巴斯灰牌系列切粒子紅酒 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 18800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101331980_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101352421",
+      "merchant_id": "marketplace",
+      "title": "San Miguel Light King Can Beer 4 X 500ML",
+      "description": "San Miguel Light King Can Beer 4 X 500ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 3900,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101352421_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101350611",
+      "merchant_id": "marketplace",
+      "title": "Kronenbourg 1664 Blanc Wheat Beer 4x500ML (Random Package Delivery)",
+      "description": "Kronenbourg 1664 Blanc Wheat Beer 4x500ML (Random Package Delivery)",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7200,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101350611_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101322282",
+      "merchant_id": "marketplace",
+      "title": "Hoegaarden Biere Blanche Can Beer 4x500ML (Random Packaging)",
+      "description": "Hoegaarden Biere Blanche Can Beer 4x500ML (Random Packaging)",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 7100,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101322282_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101340194",
+      "merchant_id": "marketplace",
+      "title": "Lescalle Bordeaux Superieur 750ML",
+      "description": "Lescalle Bordeaux Superieur 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 18300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101340194_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101325696",
+      "merchant_id": "marketplace",
+      "title": "Tsing Tao Draft Beer 4 X 500ML",
+      "description": "Tsing Tao Draft Beer 4 X 500ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 2600,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101325696_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_113557329",
+      "merchant_id": "marketplace",
+      "title": "Bruck Can Lager Case 24 X 330 ML",
+      "description": "Bruck Can Lager Case 24 X 330 ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 5900,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_113557329_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101326603",
+      "merchant_id": "marketplace",
+      "title": "Blue Girl Imported Premium Beer 4x500ML",
+      "description": "Blue Girl Imported Premium Beer 4x500ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 5100,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101326603_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101359788",
+      "merchant_id": "marketplace",
+      "title": "Shannon Ridge Cabernet Sauvignon 750ML",
+      "description": "Shannon Ridge Cabernet Sauvignon 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 14200,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101359788_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101344667",
+      "merchant_id": "marketplace",
+      "title": "Budweiser King Can Beer 4 X 500ML(Random Packaging )",
+      "description": "Budweiser King Can Beer 4 X 500ML(Random Packaging )",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 3500,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101344667_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101361534",
+      "merchant_id": "marketplace",
+      "title": "Grant Burge GB19 Series Semillon Sauvignon Blanc 750ML",
+      "description": "Grant Burge GB19 Series Semillon Sauvignon Blanc 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101361534_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101360365",
+      "merchant_id": "marketplace",
+      "title": "Japan's Prime Brew Kirin Ichiban beer 4x500ML (Random Package Delivery)",
+      "description": "Japan's Prime Brew Kirin Ichiban beer 4x500ML (Random Package Delivery)",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 3800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101360365_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101333235",
+      "merchant_id": "marketplace",
+      "title": "San Miguel Light Pale Pilsen King Can Beer Case 24 X 500ML (Random Package Delivery)",
+      "description": "San Miguel Light Pale Pilsen King Can Beer Case 24 X 500ML (Random Package Delivery)",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 18900,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101333235_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101330882",
+      "merchant_id": "marketplace",
+      "title": "禾富巴斯灰牌系列赤霞珠切粒子 750ML",
+      "description": "禾富巴斯灰牌系列赤霞珠切粒子 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 18800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101330882_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_102993646",
+      "merchant_id": "marketplace",
+      "title": "Mud House Marlborough Sauvignon Blanc Case 6 X 750ML",
+      "description": "Mud House Marlborough Sauvignon Blanc Case 6 X 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 34700,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_102993646_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_102993606",
+      "merchant_id": "marketplace",
+      "title": "Oyster Bay Marlborough Sauvignon Blanc Case 6 X 750ML",
+      "description": "Oyster Bay Marlborough Sauvignon Blanc Case 6 X 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 45000,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_102993606_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101361495",
+      "merchant_id": "marketplace",
+      "title": "Grant Burge GB32 Chardonnay 750ML",
+      "description": "Grant Burge GB32 Chardonnay 750ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 9800,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101361495_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101339388",
+      "merchant_id": "marketplace",
+      "title": "Asahi Nama Jokki King Can 4 x 485ML",
+      "description": "Asahi Nama Jokki King Can 4 x 485ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 6900,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101339388_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    },
+    {
+      "id": "marketplace_101324752",
+      "merchant_id": "marketplace",
+      "title": "Stella Artois Belgium Can Beer 4x500ML",
+      "description": "Stella Artois Belgium Can Beer 4x500ML",
+      "category": "alcohol",
+      "category_status": "curated",
+      "unit_label": "pack",
+      "unit_price_minor": 6300,
+      "currency": "HKD",
+      "available": true,
+      "evidence_ids": [
+        "ev_marketplace_101324752_20261003T181304",
+        "ev_marketplace_cat_100001_20261003T181304"
+      ]
+    }
+  ],
+  "delivery_contexts": [
+    {
+      "id": "ctx_marketplace_click_collect",
+      "merchant_id": "marketplace",
+      "fee_rules": [
+        {
+          "label": "Click & Collect pickup (free on orders over HK$50)",
+          "min_subtotal_minor": 5001,
+          "max_subtotal_minor": null,
+          "amount_minor": 0,
+          "evidence_ids": [
+            "ev_marketplace_pickup_fee_20261003T181304"
+          ]
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev_marketplace_identity_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en",
+      "observed_at": "2026-10-03T18:13:09+08:00",
+      "kind": "merchant_identity",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/home.html.gz",
+      "conditions": "Market Place online shop home page (www.marketplacehk.com), English, guest session."
+    },
+    {
+      "id": "ev_marketplace_cat_100020_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Curated mapping: Market Place category 'Rice, Oil & Noodles' (100020) -> pantry. Applies to listings shown on page 1 of this category."
+    },
+    {
+      "id": "ev_marketplace_101345302_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Golden%20Elephant%20Premium%20Jasmine%20Rice%208KG/i/101345302.html. Struck-through previous price shown: HK$112.90. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101327889_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Golden%20Phoenix%20Thailand%20Hom%20Mali%20Rice%205KG/i/101327889.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101324109_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Golden%20Phoenix%20Hom%20Mali%20Rice%2010KG/i/101324109.html. Struck-through previous price shown: HK$194.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101342732_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Cherry%20Blossom%20Japonica%20Pearl%20Rice%208KG/i/101342732.html. Struck-through previous price shown: HK$112.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101351322_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Fuku%20Instant%20Rice%20Noodle%20%205%20X%2065GM%20(Random%20Packaging)/i/101351322.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101322566_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Demae%20Sesame%20Oil%20Noodle%2091GM/i/101322566.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101843334_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Indomie%20Mi%20Goreng%20(Transparent%20Bag%20)%20Noodle%205x85g/i/101843334.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101837277_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Meadows%20Extra%20Virgin%20Olive%20Oil%201LT/i/101837277.html. Struck-through previous price shown: HK$215.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101350005_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Nissin%20Cup%20Noodle%20Spicy%20Seafood%20%2075GM/i/101350005.html. Struck-through previous price shown: HK$9.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101322993_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Golden%20Elephant%20Premium%20Jasmine%20Rice%205KG/i/101322993.html. Struck-through previous price shown: HK$82.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101340728_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Lion%20%26%20Globe%20Canola%20Oil%20%203%20X%20900ML%20(Random%20Packaging)/i/101340728.html. Struck-through previous price shown: HK$99.90. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101330936_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Demae%20Black%20Garlic%20Oil%20Tonkotsu%20Noodle%2097GM/i/101330936.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101343828_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Lucky%20Brand%20Premium%20Fragrant%20Rice%208KG/i/101343828.html. Struck-through previous price shown: HK$101.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101339843_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Nissin%20Cup%20Noodle%20Seafood%2072GM/i/101339843.html. Struck-through previous price shown: HK$9.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101350757_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Fuku%20Instant%20Noodle%20%205%20X%2090GM%20(Random%20Packaging)/i/101350757.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101354717_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Demae%20Tonkotsu%20Noodle%2098GM/i/101354717.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101837276_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Meadows%20Olive%20Oil%201LT/i/101837276.html. Struck-through previous price shown: HK$200.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101326919_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Nissin%20Donbei%20Kitsune%20Udon%2095GM%20(Random%20Packaging)/i/101326919.html. Struck-through previous price shown: HK$21.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101381820_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Demae%20Hokkaido%20Wheat%20Flour%20Sesame%20Oil%20Noodles%205x91GM/i/101381820.html. Struck-through previous price shown: HK$29.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101360763_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100020/1.html",
+      "observed_at": "2026-10-03T18:13:15+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100020.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Rice, Oil & Noodles', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Knife%20Pure%20Peanut%20Oil%205LT/i/101360763.html. Struck-through previous price shown: HK$199.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_cat_100011_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Curated mapping: Market Place category 'Fruits & Vegetables' (100011) -> produce. Applies to listings shown on page 1 of this category."
+    },
+    {
+      "id": "ev_marketplace_101332659_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Jumbo%20Gold%20Kiwifruit%201EA/i/101332659.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101376957_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Large%20Envy%20Apple%201EA/i/101376957.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101374428_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Blueberry%20125GM/i/101374428.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101378087_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Broccoli%201EA/i/101378087.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113291949_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Jumbo%20Blueberry%20Tube%20200GM%20(Package%20%26%20Brand%20may%20vary)/i/113291949.html. Struck-through previous price shown: HK$36.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101373851_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Lemon%201EA/i/101373851.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101378358_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Australia%20Jumbo%20Orange%201EA/i/101378358.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101377513_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vietnam%20Dragon%20Fruit%201EA/i/101377513.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101869136_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Korea%20Shine%20Muscat%20Grape%20450GM%201PK/i/101869136.html. Struck-through previous price shown: HK$59.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101367951_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Australia%20Mandarin%201PC/i/101367951.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_102127176_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/China%20Fuji%20Apple%201EA/i/102127176.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101373047_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Jumbo%20Avocado%201PC/i/101373047.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101377503_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Jade%20Cabbage%201PC/i/101377503.html. Struck-through previous price shown: HK$11.90. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101376148_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Hamimelon%201EA%20(Approximately%20Weight%3A%201.5KG)/i/101376148.html. Struck-through previous price shown: HK$34.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101373345_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Jumbo%20Kiwifruit%201EA/i/101373345.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101375509_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Onion%201KG/i/101375509.html. Struck-through previous price shown: HK$18.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101373950_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Top%20Fragrant%20Pear%201PC/i/101373950.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101373980_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Celery%201EA/i/101373980.html. Struck-through previous price shown: HK$18.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101370929_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Orange%202.6LB/i/101370929.html. Struck-through previous price shown: HK$25.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101365694_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100011/1.html",
+      "observed_at": "2026-10-03T18:13:22+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100011.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Fruits & Vegetables', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Japan%20Kintoki%20Sweet%20Potato%20500GM/i/101365694.html. Struck-through previous price shown: HK$42.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_cat_100002_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Curated mapping: Market Place category 'Beverages' (100002) -> beverage_non_alcoholic. Applies to listings shown on page 1 of this category."
+    },
+    {
+      "id": "ev_marketplace_101343395_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Cold%20Brew%20No%20Sugar%20Jasmine%20Tea%20Drink%206%20X%20250ML%20(Random%20Package%20Delivery)/i/101343395.html. Struck-through previous price shown: HK$15.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101335431_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Hokkaido%20Specially%20Select%203.6%20Milk%20200ML%20(Random%20Packaging)/i/101335431.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101333524_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Bonaqua%20Mineralized%20Water%20Case%2024%20X%20770ML/i/101333524.html. Struck-through previous price shown: HK$192.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_103011856_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Coca%20Cola%20No%20Sugar%20Taste%20Can%20Case%2024X330ML(Random%20Packaging)/i/103011856.html. Struck-through previous price shown: HK$120.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101354473_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Distilled%20Water%20Case%2024X700ML/i/101354473.html. Struck-through previous price shown: HK$144.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101343041_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Cold%20Brew%20No%20Sugar%20Oolong%20Tea%206%20X%20250ML%20(Random%20Package%20Delivery)/i/101343041.html. Struck-through previous price shown: HK$15.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101355093_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Meadows%20Full%20Cream%20Fresh%20Milk%201LT/i/101355093.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101328184_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Meiji%20Premium%20Quality%20Milk%20946ML/i/101328184.html. Struck-through previous price shown: HK$33.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101359293_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Sensa%20Cools%20Herbal%20Green%20Tea%20350ML/i/101359293.html. Struck-through previous price shown: HK$12.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101337787_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Ya%20Shi%20Xiang%20Lemon%20Tea%206%20X%20250ML%20/i/101337787.html. Struck-through previous price shown: HK$19.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_103011866_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Schweppes%20Soda%20Water%20Can%20Case%2024X330ML/i/103011866.html. Struck-through previous price shown: HK$120.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113726041_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Zero%20Sugar%20Lemon%20Tea%206%20x%20250ML/i/113726041.html. Struck-through previous price shown: HK$19.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101342859_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Coca%20Cola%20Original%20Taste%20Can%20%20%208%20X%20330ML(Random%20Packaging)/i/101342859.html. Struck-through previous price shown: HK$40.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101333566_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Cold%20Brew%20No%20Sugar%20Tie%20Guan%20Yin%20Tea%20Drink%206%20X%20250ML%20(Random%20Package%20Delivery)/i/101333566.html. Struck-through previous price shown: HK$15.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101329578_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Da%20Hong%20Pao%20Finger%20Lime%20Lemon%20Tea%206%20X%20250ML%20(Random%20Packaging)/i/101329578.html. Struck-through previous price shown: HK$20.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101359285_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Sensa%20Cools%20Herbal%20Lemon%20Drink%20350ML/i/101359285.html. Struck-through previous price shown: HK$12.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113465194_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Apple%20Green%20Tea%20Full%20Case%20%2024%20X%20250ML/i/113465194.html. Struck-through previous price shown: HK$56.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101329244_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/VIITA%20Low%20Sugar%20Chocolate%20Milk%20Beverage%20250ml%20x%206%20pack/i/101329244.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113465244_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Vita%20Cold%20Brew%20No%20Sugar%20Oolong%20Tea%20Case%2024%20X%20250ML%20(Random%20Package%20Delivery)/i/113465244.html. Struck-through previous price shown: HK$58.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113551679_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100002/1.html",
+      "observed_at": "2026-10-03T18:13:28+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100002.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beverages', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Meadows%20Mineral%20Water%20Case%204%20X%205.5LT/i/113551679.html. Struck-through previous price shown: HK$84.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_cat_100001_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "category",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Curated mapping: Market Place category 'Beer, Wines & Spirits' (100001) -> alcohol. Applies to listings shown on page 1 of this category."
+    },
+    {
+      "id": "ev_marketplace_113277654_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/G.H.Mumm%20Champagne%20Case%206X750ML/i/113277654.html. Struck-through previous price shown: HK$2148.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101331980_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/%E7%A6%BE%E5%AF%8C%E5%B7%B4%E6%96%AF%E7%81%B0%E7%89%8C%E7%B3%BB%E5%88%97%E5%88%87%E7%B2%92%E5%AD%90%E7%B4%85%E9%85%92%20750ML/i/101331980.html. Struck-through previous price shown: HK$359.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101352421_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/San%20Miguel%20Light%20King%20Can%20Beer%204%20X%20500ML/i/101352421.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101350611_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Kronenbourg%201664%20Blanc%20Wheat%20Beer%204x500ML%20(Random%20Package%20Delivery)/i/101350611.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101322282_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Hoegaarden%20Biere%20Blanche%20Can%20Beer%204x500ML%20(Random%20Packaging)/i/101322282.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101340194_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Lescalle%20Bordeaux%20Superieur%20750ML/i/101340194.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101325696_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Tsing%20Tao%20Draft%20Beer%20%204%20X%20500ML/i/101325696.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_113557329_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Bruck%20Can%20Lager%20Case%20%2024%20X%20330%20ML/i/113557329.html. Struck-through previous price shown: HK$77.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101326603_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Blue%20Girl%20Imported%20Premium%20Beer%204x500ML/i/101326603.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101359788_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Shannon%20Ridge%20Cabernet%20Sauvignon%20750ML/i/101359788.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101344667_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Budweiser%20King%20Can%20Beer%20%204%20X%20500ML(Random%20Packaging%20)/i/101344667.html. Struck-through previous price shown: HK$45.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101361534_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Grant%20Burge%20GB19%20Series%20Semillon%20Sauvignon%20Blanc%20750ML/i/101361534.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101360365_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Japan's%20Prime%20Brew%20Kirin%20Ichiban%20beer%204x500ML%20(Random%20Package%20Delivery)/i/101360365.html. Struck-through previous price shown: HK$48.90. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101333235_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/San%20Miguel%20Light%20Pale%20Pilsen%20King%20Can%20Beer%20Case%2024%20X%20500ML%20(Random%20Package%20Delivery)/i/101333235.html. Struck-through previous price shown: HK$225.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101330882_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/%E7%A6%BE%E5%AF%8C%E5%B7%B4%E6%96%AF%E7%81%B0%E7%89%8C%E7%B3%BB%E5%88%97%E8%B5%A4%E9%9C%9E%E7%8F%A0%E5%88%87%E7%B2%92%E5%AD%90%20750ML/i/101330882.html. Struck-through previous price shown: HK$359.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_102993646_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Mud%20House%20Marlborough%20Sauvignon%20Blanc%20Case%206%20X%20750ML/i/102993646.html. Struck-through previous price shown: HK$594.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_102993606_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Oyster%20Bay%20Marlborough%20Sauvignon%20Blanc%20Case%206%20X%20750ML/i/102993606.html. Struck-through previous price shown: HK$786.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101361495_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Grant%20Burge%20GB32%20Chardonnay%20750ML/i/101361495.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101339388_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Asahi%20Nama%20Jokki%20King%20Can%204%20x%20485ML/i/101339388.html. Struck-through previous price shown: HK$76.00. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_101324752_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/category/100001/1.html",
+      "observed_at": "2026-10-03T18:13:35+08:00",
+      "kind": "product_price",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/category-100001.html.gz",
+      "conditions": "Listed price on page 1 of Market Place category 'Beer, Wines & Spirits', guest session (not logged in), no delivery address or membership selected. Product page: https://www.marketplacehk.com/en/wellcome/p/Stella%20Artois%20Belgium%20Can%20Beer%204x500ML/i/101324752.html. Multi-buy promotions were not captured; the single-unit price is used. A signed-in account's cart can charge a different price (its fulfilment store)."
+    },
+    {
+      "id": "ev_marketplace_pickup_fee_20261003T181304",
+      "source_url": "https://www.marketplacehk.com/en/wellcome/p/Golden%20Elephant%20Premium%20Jasmine%20Rice%208KG/i/101345302.html",
+      "observed_at": "2026-10-03T18:13:42+08:00",
+      "kind": "delivery_fee",
+      "capture_path": "data/catalog/evidence/marketplace-20261003T181304/product-101345302.html.gz",
+      "conditions": "Shown on the Market Place product page as: 'Enjoy our free Click & collect service on orders over HK$50.' Free Click & Collect store pickup applies to orders over HK$50. The charge for pickup orders of HK$50 or less was not observed."
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 """Stores whose real carts the agent can fill.
 
-Wellcome runs on DFI's "superweb" shop platform. Its cart is a logged-in API
+Wellcome and Market Place run on DFI's "superweb" shop platform. Its cart is a logged-in API
 (`POST /api/cart/v20/cartInfo` and `/addToCart`, form fields `param` and
 `comm`), and a guest add-to-cart redirects to yuu Rewards sign-in (mobile
 number plus SMS code). Observed on 2026-10-03:
@@ -48,4 +48,8 @@ class SuperwebStore:
 STORES: dict[str, SuperwebStore] = {
     "wellcome": SuperwebStore("wellcome", "Wellcome", "https://www.wellcome.com.hk", "wellcome.com.hk",
                               "wellcome", 5),
+    # Same platform and yuu sign-in; its own session, `domain-flag` and store IDs (seen in its
+    # addToCart request on 2026-10-03: domain-flag "marketplace", comm.dmTenantId 0, storeId 188).
+    "marketplace": SuperwebStore("marketplace", "Market Place", "https://www.marketplacehk.com", "marketplacehk.com",
+                                 "marketplace", 5),
 }

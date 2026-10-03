@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -26,6 +27,9 @@ from .connections import StoreConnections
 from .registry import STORES
 from .steel import StoreBrowserError
 from .stream import relay_login
+
+
+log = logging.getLogger(__name__)
 
 
 class CartSyncRequest(BaseModel):
@@ -79,11 +83,16 @@ def build_store_router(connections: StoreConnections, carts: CartSync, relay=rel
             await relay(window, STORES[store_id], websocket.send_json, receive, finished)
         except WebSocketDisconnect:
             return  # the user closed the store window; the sign-in stays open until it times out
-        except (StoreBrowserError, OSError):
-            try:
-                await websocket.send_json({"type": "error", "text": "The store window could not be shown. Try Connect again."})
-            except (WebSocketDisconnect, RuntimeError):
-                pass
+        except (StoreBrowserError, OSError) as exc:
+            log.warning("sign-in stream for %s failed: %s", store_id, exc)
+        # However the relay ended (signed in, tab closed, browser error), tell the client where the
+        # sign-in stands, so a finished sign-in never looks like a crash and a pending one can be resumed.
+        try:
+            status = await finished()
+            await websocket.send_json({"type": "status", "status": status} if status else
+                                      {"type": "error", "text": "The store window stopped. Reopen it to carry on."})
+        except (WebSocketDisconnect, RuntimeError):
+            pass
         try:
             await websocket.close()
         except (RuntimeError, WebSocketDisconnect):

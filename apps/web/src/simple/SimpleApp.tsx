@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
+import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
 import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
@@ -8,6 +8,7 @@ import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 import CartSyncPanel from './CartSyncPanel';
 import Onboarding, { storeName } from './Onboarding';
+import ProfileSheet from './ProfileSheet';
 
 /*
  * A single-screen take on the core Mandate story for a Gen Z caregiver:
@@ -180,6 +181,7 @@ export default function SimpleApp() {
   const [editorItems, setEditorItems] = useState<ShoppingItem[]>([]);
   const [presetError, setPresetError] = useState('');
   const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [receiptsError, setReceiptsError] = useState('');
@@ -232,11 +234,21 @@ export default function SimpleApp() {
   const spent = (period?.paid_minor ?? 0) + (period?.reserved_minor ?? 0);
   const ratio = limit ? Math.min(1, spent / limit) : 0;
 
-  /** Onboarding confirmed a new mandate with the wallet; show it. */
+  /** Onboarding confirmed a new mandate with the wallet; show it, and retire the one it replaces. */
   async function activated(result: Mandate, summary: string) {
+    const replaced = mandate && mandate.status === 'active' && mandate.id !== result.id ? mandate : null;
     localStorage.setItem(MANDATE_KEY, result.id);
     setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
     note('bean', summary, 'good');
+    if (replaced) {
+      try {
+        await api.revoke(TOKEN, replaced.id);
+        sessionStorage.removeItem(`mandate-idempotency-revoke-${replaced.id}`);
+        note('kip', 'Previous allowance frozen', 'info');
+      } catch (err) {
+        setError(`The new allowance is on, but the old one could not be frozen: ${err instanceof Error ? err.message : 'unknown error'}. Freeze it from the full dashboard.`);
+      }
+    }
     await refresh(result.id);
   }
 
@@ -577,7 +589,7 @@ export default function SimpleApp() {
   }
 
   useEffect(() => {
-    if (!editingPreset && !receiptsOpen) return;
+    if (!editingPreset && !receiptsOpen && !profileOpen) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
     const focusables = dialog ? [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')] : [];
@@ -585,8 +597,11 @@ export default function SimpleApp() {
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleKeys = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setEditingPreset(null); setReceiptsOpen(false); setSelectedReceipt(null); }
-      if (event.key === 'Tab' && focusables.length) {
+      // Escape inside a store sign-in goes to the store's page, not to closing the sheet.
+      if (event.key === 'Escape' && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
+        setEditingPreset(null); setReceiptsOpen(false); setSelectedReceipt(null); setProfileOpen(false);
+      }
+      if (event.key === 'Tab' && focusables.length && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
         const first = focusables[0]; const last = focusables[focusables.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
@@ -594,7 +609,7 @@ export default function SimpleApp() {
     };
     window.addEventListener('keydown', handleKeys);
     return () => { window.removeEventListener('keydown', handleKeys); document.body.style.overflow = oldOverflow; previous?.focus(); };
-  }, [editingPreset, receiptsOpen, selectedReceipt]);
+  }, [editingPreset, receiptsOpen, selectedReceipt, profileOpen]);
 
   useEffect(() => {
     if (loaded && mandateId) void loadReceipts();
@@ -609,7 +624,10 @@ export default function SimpleApp() {
   return <div className="m2">
     <header className="m2-top">
       <div className="m2-brand">Mandate</div>
-      <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
+      <div className="m2-top-right">
+        <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
+        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
+      </div>
     </header>
 
     {error && <div className="m2-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">Dismiss</button></div>}
@@ -626,7 +644,7 @@ export default function SimpleApp() {
             <figure><Sticker name="stella" state="idle" size={76} tilt={-3} /><figcaption><b>Stella</b> keeps the log</figcaption></figure>
           </div>
         </div>
-        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} onActivated={activated}
+        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} initialPolicy={setupOpen && mandate ? mandate.policy : null} onActivated={activated}
           onBack={setupOpen && mandate ? () => setSetupOpen(false) : undefined} />
       </section>
     ) : mandate && (
@@ -789,6 +807,8 @@ export default function SimpleApp() {
       </section>
     </div>}
 
+    {profileOpen && <ProfileSheet token={TOKEN} online={online} mandate={mandate} onClose={() => setProfileOpen(false)}
+      onChangeRules={() => { setProfileOpen(false); setRiskReviewOn(Boolean(mandate?.policy.risk_review)); setSetupOpen(true); }} />}
     {receiptsOpen && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceiptsOpen(false); }}>
       <section className="m2-modal m2-receipts-modal" role="dialog" aria-modal="true" aria-labelledby="receipts-title">
         <header className="m2-modal-head"><div><p className="m2-kicker">Your purchase history</p><h2 id="receipts-title">{selectedReceiptRecord ? 'Receipt' : 'Receipts'}</h2></div><button className="m2-icon-button" onClick={() => { setReceiptsOpen(false); setSelectedReceipt(null); }} aria-label="Close receipts"><X size={20} /></button></header>
