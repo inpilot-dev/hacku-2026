@@ -12,34 +12,21 @@ const COPY: Record<KumiActivity, [string, string]> = {
   error: ['Let’s take another look', 'Check the message below before continuing.'],
 };
 
-/** Decorative rig over the original transparent body. UI status remains readable without motion. */
+/** Floating companion with decorative props; status remains readable without motion. */
 export default function KumiStage({ activity, title, detail }: { activity: KumiActivity; title?: string; detail?: string }) {
   const copy = COPY[activity];
-  const state = activity === 'error' ? 'sad' : activity === 'found' || activity === 'added' ? 'happy' : 'idle';
+  const state = activity === 'found' || activity === 'added' ? 'happy' : 'idle';
   return <div className="kumi-stage" data-activity={activity}>
     <div className="kumi-scene" aria-hidden="true">
       <svg className="kumi-rig" viewBox="0 0 260 150" fill="none">
-        <ellipse cx="126" cy="131" rx="53" ry="6" fill="currentColor" opacity=".08" />
-        <g className="kumi-leg kumi-leg-left">
-          <path d="M111 94v25" stroke="#E98722" strokeWidth="10" strokeLinecap="round" />
-          <ellipse cx="107" cy="123" rx="12" ry="6" fill="#F8A13A" />
+        <ellipse className="kumi-shadow" cx="122" cy="123" rx="39" ry="5" fill="currentColor" opacity=".09" />
+        <g className="kumi-magnifier">
+          <path d="m184 63 10-16" stroke="#809C8B" strokeWidth="5" strokeLinecap="round" />
+          <circle cx="200" cy="36" r="14" fill="#EFF8F3" fillOpacity=".85" stroke="#809C8B" strokeWidth="3.5" />
+          <path d="M195 30q3-3 7-2" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
         </g>
-        <g className="kumi-leg kumi-leg-right">
-          <path d="M143 94v25" stroke="#E98722" strokeWidth="10" strokeLinecap="round" />
-          <ellipse cx="147" cy="123" rx="12" ry="6" fill="#F8A13A" />
-        </g>
-        <g className="kumi-arm kumi-arm-left">
-          <path d="M98 66Q81 69 78 86" stroke="#F8A13A" strokeWidth="10" strokeLinecap="round" />
-          <ellipse cx="77" cy="87" rx="7" ry="8" fill="#FFB14A" />
-        </g>
-        <g className="kumi-arm kumi-arm-right">
-          <path d="M153 66Q164 75 178 65" stroke="#F8A13A" strokeWidth="10" strokeLinecap="round" />
-          <g className="kumi-magnifier">
-            <path d="m179 65 11-18" stroke="#647765" strokeWidth="6" strokeLinecap="round" />
-            <circle cx="197" cy="35" r="17" fill="#EFF8F3" fillOpacity=".8" stroke="#647765" strokeWidth="5" />
-            <path d="M190 28q4-4 10-3" stroke="white" strokeWidth="3" strokeLinecap="round" />
-          </g>
-          <ellipse cx="179" cy="65" rx="7" ry="8" fill="#FFB14A" />
+        <g className="kumi-sparkles" stroke="#F4B94B" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M177 25v10m-5-5h10M73 48v7m-3.5-3.5h7M166 75v6m-3-3h6" />
         </g>
         <g className="kumi-basket">
           <path d="m194 102 5 28h41l5-28Z" fill="#DDEDE2" stroke="#5E896F" strokeWidth="2.5" strokeLinejoin="round" />
