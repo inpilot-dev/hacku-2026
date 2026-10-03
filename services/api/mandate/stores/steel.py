@@ -2,18 +2,18 @@
 
 Two jobs, each in its own isolated browser context (separate cookie jar):
 
-- **Sign-in.** The shop's yuu Rewards page opens in a fresh context and is shown
-  in Steel's viewer, where the user types their mobile number and SMS code
-  themselves. Once the shop's login cookie appears, its cookies and
+- **Sign-in.** The shop's yuu Rewards page opens in a fresh context, and that
+  one tab is relayed to the user's screen (stream.py), where they type their
+  mobile number and SMS code themselves. Once the shop's login cookie appears, its cookies and
   localStorage are returned for the server to keep. The user's code never
   passes through this service.
 - **Cart calls.** A saved session is restored into a fresh, throw-away context,
   and the shop's own cart API is called from its page with `fetch`, exactly as
   the shop's site does. No model runs in these contexts.
 
-Steel is one browser for the whole machine (Jev's catalog capture uses it too),
-and its viewer shows whichever tab is active. Fine for a local demo; a shared
-deployment would need one browser per user.
+Steel is one browser for the whole machine (Jev's catalog capture uses it too);
+contexts keep each user's cookies apart. A shared deployment should still give
+each user their own short-lived browser.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from websockets.sync.client import connect
 from .registry import SuperwebStore
 
 CDP_URL = os.environ.get("MANDATE_STEEL_CDP_URL", "ws://localhost:3000/")
-VIEWER_URL = os.environ.get("MANDATE_STEEL_VIEWER_URL", "http://localhost:3000/ui")
 COOKIE_FIELDS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires")
 
 CALL_JS = """(async (path, param, flag) => {
@@ -142,8 +141,6 @@ class SteelCart:
 
 
 class SteelStoreBrowser:
-    viewer_url = VIEWER_URL
-
     def __init__(self, cdp_url: str = CDP_URL):
         self.cdp_url = cdp_url
 
@@ -154,7 +151,6 @@ class SteelStoreBrowser:
         try:
             context = cdp.call("Target.createBrowserContext", disposeOnDetach=False)["browserContextId"]
             target = cdp.call("Target.createTarget", url=store.login_url(), browserContextId=context)["targetId"]
-            cdp.call("Target.activateTarget", targetId=target)  # bring it up in Steel's viewer
             return LoginWindow(context, target)
         finally:
             cdp.close()

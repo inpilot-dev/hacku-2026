@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import threading
 import time
 from datetime import datetime
@@ -22,13 +23,14 @@ from typing import Callable
 
 from mandate.payments.auth import Actor
 from mandate.payments.clock import iso
-from mandate.payments.errors import not_found
+from mandate.payments.errors import conflict, not_found
 
 from .registry import STORES, SuperwebStore
 from .steel import StoreBrowserError
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / ".data" / "stores"
 LOGIN_TIMEOUT_S = 10 * 60
+TICKET_TTL_S = 60
 
 
 def _store(store_id: str) -> SuperwebStore:
@@ -46,6 +48,7 @@ class StoreConnections:
         self.monotonic = monotonic
         self.data_dir = Path(data_dir or os.environ.get("MANDATE_STORE_DATA_DIR") or DEFAULT_DIR)
         self._pending: dict[tuple[str, str], tuple[object, float]] = {}
+        self._tickets: dict[str, tuple[tuple[str, str], float]] = {}
         self._lock = threading.Lock()
 
     # ---------------------------------------------------------------- storage
@@ -104,7 +107,7 @@ class StoreConnections:
                 self._finish(key)
                 return self._view(store, "not_connected", message="Sign-in timed out. Start again when ready.")
             else:
-                return self._view(store, "awaiting_login", viewer_url=self.browser.viewer_url,
+                return self._view(store, "awaiting_login",
                                   message=f"Sign in to {store.name} in the store window: your mobile number, "
                                           "then the SMS code.")
         record = self._read(actor.family_id, store_id)
@@ -126,6 +129,28 @@ class StoreConnections:
             self._pending[key] = (window, self.monotonic())
         return self.get(actor, store_id)
 
+    def issue_ticket(self, actor: Actor, store_id: str) -> dict:
+        """A single-use ticket for the sign-in stream (browsers cannot send headers on a WebSocket)."""
+        _store(store_id)
+        key = (actor.family_id, store_id)
+        with self._lock:
+            if key not in self._pending:
+                raise conflict("No sign-in is waiting for this store. Connect first.", code="LOGIN_NOT_STARTED")
+            now = self.monotonic()
+            self._tickets = {t: v for t, v in self._tickets.items() if v[1] > now}
+            ticket = secrets.token_urlsafe(32)
+            self._tickets[ticket] = (key, now + TICKET_TTL_S)
+        return {"ticket": ticket, "expires_in_s": TICKET_TTL_S}
+
+    def redeem_ticket(self, ticket: str, store_id: str):
+        """(user id, sign-in window) for a valid unused ticket for this store, else None."""
+        with self._lock:
+            entry = self._tickets.pop(ticket, None)
+            if entry is None or entry[1] < self.monotonic() or entry[0][1] != store_id:
+                return None
+            pending = self._pending.get(entry[0])
+        return (entry[0][0], pending[0]) if pending is not None else None
+
     def disconnect(self, actor: Actor, store_id: str) -> dict:
         _store(store_id)
         self._finish((actor.family_id, store_id))
@@ -141,7 +166,6 @@ class StoreConnections:
             self.browser.end_login(pending[0])
 
     @staticmethod
-    def _view(store: SuperwebStore, status: str, *, connected_at: str | None = None,
-              viewer_url: str | None = None, message: str) -> dict:
+    def _view(store: SuperwebStore, status: str, *, connected_at: str | None = None, message: str) -> dict:
         return {"store_id": store.id, "name": store.name, "status": status, "connected_at": connected_at,
-                "viewer_url": viewer_url, "message": message}
+                "message": message}

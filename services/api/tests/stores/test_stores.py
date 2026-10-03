@@ -17,6 +17,8 @@ from mandate.stores.connections import LOGIN_TIMEOUT_S, StoreConnections
 from mandate.stores.registry import STORES
 from mandate.stores.routes import build_store_router
 from mandate.stores.steel import StoreBrowserError
+from mandate.stores.stream import VIEWPORT, allowed_url, input_commands
+from starlette.websockets import WebSocketDisconnect
 
 USER = {"Authorization": "Bearer dev-user-token"}
 AGENT = {"Authorization": "Bearer dev-agent-token"}
@@ -92,8 +94,6 @@ class FakeCart:
 
 
 class FakeBrowser:
-    viewer_url = "http://steel.test/ui"
-
     def __init__(self):
         self.shop = FakeShop()
         self.login_done = False
@@ -120,6 +120,16 @@ class FakeBrowser:
         yield FakeCart(self.shop)
 
 
+async def fake_relay(window, store, send, receive, finished):
+    """Echoes what the real relay would turn each client message into, then reports the final status."""
+    await send({"type": "viewport", **VIEWPORT, "window": window})
+    while (msg := await receive()) is not None:
+        if msg == {"type": "done?"}:
+            await send({"type": "status", "status": await finished()})
+            return
+        await send({"type": "commands", "commands": [m for m, _ in input_commands(msg)]})
+
+
 class Ticks:
     def __init__(self):
         self.t = 0.0
@@ -138,7 +148,8 @@ def env(tmp_path, monkeypatch):
                              draft_lookup=drafts)
     browser, ticks = FakeBrowser(), Ticks()
     stores = StoreConnections(browser, wallet.clock.now, tmp_path / "stores", monotonic=ticks)
-    app.include_router(build_store_router(stores, CartSync(wallet, stores, browser)), prefix="/api/v1")
+    app.include_router(build_store_router(stores, CartSync(wallet, stores, browser), relay=fake_relay),
+                       prefix="/api/v1")
     client = TestClient(app)
 
     def confirm(policy=POLICY):
@@ -178,7 +189,7 @@ def test_sign_in_flow_saves_session_privately_and_never_returns_it(env):
     client, browser, tmp, _, *_ = env
     assert client.get("/api/v1/stores", headers=USER).json()["stores"][0]["status"] == "not_connected"
     started = client.post("/api/v1/stores/wellcome/connect", headers=USER).json()
-    assert started["status"] == "awaiting_login" and started["viewer_url"] == "http://steel.test/ui"
+    assert started["status"] == "awaiting_login" and "viewer_url" not in started
     assert client.get("/api/v1/stores/wellcome", headers=USER).json()["status"] == "awaiting_login"
 
     browser.login_done = True
@@ -208,6 +219,59 @@ def test_agents_and_unknown_stores_are_refused(env):
     assert client.get("/api/v1/stores", headers=AGENT).status_code == 403
     assert client.post("/api/v1/stores/parknshop/connect", headers=USER).status_code == 404
     assert client.post("/api/v1/carts/sync", headers=AGENT, json={"mandate_id": "m", "quote_id": "q"}).status_code == 403
+
+
+def ticket(client):
+    res = client.post("/api/v1/stores/wellcome/login/ticket", headers=USER)
+    assert res.status_code == 200, res.text
+    return res.json()["ticket"]
+
+
+def test_stream_needs_a_pending_sign_in_and_a_single_use_ticket(env):
+    client, browser, *_ = env
+    assert client.post("/api/v1/stores/wellcome/login/ticket", headers=USER).json()["error"]["code"] == "LOGIN_NOT_STARTED"
+    assert client.post("/api/v1/stores/wellcome/login/ticket", headers=AGENT).status_code == 403
+    client.post("/api/v1/stores/wellcome/connect", headers=USER)
+    good = ticket(client)
+    for bad in ("", "made-up"):
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(f"/api/v1/stores/wellcome/login/stream?ticket={bad}") as ws:
+                ws.receive_json()
+
+    with client.websocket_connect(f"/api/v1/stores/wellcome/login/stream?ticket={good}") as ws:
+        assert ws.receive_json()["window"] == "win-0"  # this user's own sign-in window
+        ws.send_json({"type": "text", "text": "98765432"})
+        assert ws.receive_json()["commands"] == ["Input.insertText"]
+        ws.send_json({"type": "eval", "expression": "document.cookie"})
+        assert ws.receive_json()["commands"] == []  # nothing outside the input set reaches the browser
+        browser.login_done = True
+        ws.send_json({"type": "done?"})
+        assert ws.receive_json() == {"type": "status", "status": "connected"}
+
+    with pytest.raises(WebSocketDisconnect):  # the ticket was used
+        with client.websocket_connect(f"/api/v1/stores/wellcome/login/stream?ticket={good}") as ws:
+            ws.receive_json()
+
+
+def test_input_commands_are_validated_and_clamped():
+    assert input_commands({"type": "down", "x": 10, "y": 99999})[0][1]["y"] == VIEWPORT["height"]
+    assert input_commands({"type": "down", "x": "10", "y": 5}) == []
+    assert [p["type"] for _, p in input_commands({"type": "key", "key": "Enter"})] == ["keyDown", "keyUp"]
+    assert input_commands({"type": "key", "key": "F12"}) == []
+    assert input_commands({"type": "text", "text": "x" * 65}) == []
+    assert input_commands({"type": "text", "text": "\x1b[A"}) == []
+    assert input_commands("down") == []
+
+
+def test_navigation_is_kept_on_the_sign_in_and_shop_sites():
+    store = STORES["wellcome"]
+    assert allowed_url("https://www.yuurewards.com/en/super/login-info", store)
+    assert allowed_url("https://www.wellcome.com.hk/en/cart", store)
+    assert allowed_url("about:blank", store)
+    assert not allowed_url("https://evil.example.com/", store)
+    assert not allowed_url("https://wellcome.com.hk.evil.example.com/", store)
+    assert not allowed_url("http://www.wellcome.com.hk/", store)
+    assert not allowed_url("file:///etc/passwd", store)
 
 
 # ------------------------------------------------------------------- cart sync
