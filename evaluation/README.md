@@ -26,7 +26,10 @@ Servers start on free ports in 8100–8199 and are stopped (own PIDs only) when 
 - **C2 (`scenarios.py`)**: 20 scenarios `det-01`–`det-20` (version 1). Each gets a fresh in-process wallet
   (TestClient, fixed clock on Wednesday 2026-10-07 10:00 HKT). Categories: normal, fee change, unknown category,
   blocked category, blocked merchant, approval threshold, expiry, revocation, concurrency, retry and quote
-  substitution. The 10 model-dependent scenarios (including injection) wait for the agent module.
+  substitution. The 10 model-dependent scenarios (including injection) are not run yet.
+- **Extra §11 items (`extra.py`)**: escalation outcomes (owner approves, denies, or never answers), the wallet's
+  per-route cost for one basket, the bounded Z3 run for both variants (same inputs as the Safety Lab), and audit
+  tamper/truncation detection on one real purchase's export.
 
 The catalog is the **placeholder** fixture (`services/api/mandate/payments/fixtures/placeholder_catalog.json`),
 not observed shop data.
@@ -44,7 +47,16 @@ The top level holds `schema_version`, `generated_at` (RFC 3339, HKT), `git_commi
 `amount_minor` and `receipt_id`. It also holds `metrics`. `unauthorized_completed_payments`, `order_cap_overspend`,
 `weekly_cap_overspend`, `legitimate_purchase_completion` and `false_refusal` are each `{count, denominator, rate}`.
 `*_overspend` also carries `amount_minor`. `duplicate_completed_payments_under_retry` is a count. `latency_ms`
-holds `authorize` and `pay`, each `{n, p50, p95}`, measured in-process with no network or model. All money is
+holds `authorize` and `pay`, each `{n, p50, p95}`, measured in-process with no network or model. `escalation` is `{count, denominator, rate}` over all C2 attempts.
+`escalation_outcomes[]` replays one HK$297 order over a HK$200 approval threshold three times (`owner_decision`
+`approve`, `deny`, `no_answer`) with `first_authorization`, `reasons`, `after_decision` and `paid_minor`.
+`route_costs` is the wallet's payment-options answer for `basket`: `routes[]` with `gross_minor`, `fee_minor`,
+`reward_minor`, `reward_counted`, `net_minor`, `rank` and `evidence_ids` (charged = gross + fee; sandbox, nothing is
+charged). `formal[]` is one bounded Z3 run per `variant` with `status`, `solver_result`, `max_steps`,
+`runtime_ms`, `assumptions`, `checked_properties` and `counterexample_steps`. `audit` checks one real purchase's
+export against a checkpoint: `cases[]` (`original`, edited, edited and rechained, deleted and rechained,
+truncated, no retained checkpoint) each with `expected`, `status`, `failure_codes` and `as_expected`, plus
+`detected` of `of`. All money is
 integer HKD cents. Every value comes from the run that wrote the file. The file is not part of `contracts/` until
 the team agrees.
 

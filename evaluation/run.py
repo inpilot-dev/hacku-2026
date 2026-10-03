@@ -1,4 +1,4 @@
-"""Run C1 (live HTTP) and C2 (20 deterministic scenarios); write results/latest.json; print a summary.
+"""Run C1 (live HTTP), C2 (20 deterministic scenarios) and the extra §11 items; write results/latest.json; print a summary.
 
     services/api/.venv/bin/python -m evaluation.run          (from the repo root)
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from mandate.payments.clock import HKT, iso
 
-from . import live, scenarios
+from . import extra, live, scenarios
 from .common import POLICY, hkd
 
 OUT = Path(__file__).with_name("results") / "latest.json"
@@ -49,6 +49,7 @@ def metrics(results: list[dict], auth_ms: list[float], pay_ms: list[float]) -> d
         "duplicate_completed_payments_under_retry": sum(not a["legit"] and a["completed"] for a in retry),
         "legitimate_purchase_completion": rate(sum(a["completed"] for a in legit), len(legit)),
         "false_refusal": rate(sum(not a["completed"] for a in legit), len(legit)),
+        "escalation": rate(sum(a["outcome"].startswith("requires_review") for a in attempts), len(attempts)),
         "latency_ms": {
             "where": "in-process FastAPI TestClient + SQLite on this machine, no network, no model",
             "authorize": {"n": len(auth_ms), "p50": pct(auth_ms, 50), "p95": pct(auth_ms, 95)},
@@ -86,7 +87,11 @@ def main() -> dict:
             "metrics": metrics(results, auth_ms, pay_ms),
             "scenarios": results,
         },
-        "not_run": "10 model-dependent scenarios (incl. prompt injection) wait for the agent module to merge",
+        "escalation_outcomes": extra.escalation(),
+        "route_costs": extra.route_costs(),
+        "formal": extra.formal(),
+        "audit": extra.audit(),
+        "not_run": "10 model-dependent scenarios (incl. prompt injection) are not run yet",
     }
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
@@ -109,6 +114,15 @@ def summary(out: dict) -> str:
         f"  legitimate completion {lc['count']}/{lc['denominator']}; false refusals {fr['count']}/{fr['denominator']}",
         f"  latency authorize p50 {m['latency_ms']['authorize']['p50']}ms p95 {m['latency_ms']['authorize']['p95']}ms; "
         f"pay p50 {m['latency_ms']['pay']['p50']}ms p95 {m['latency_ms']['pay']['p95']}ms ({m['latency_ms']['where']})",
+        f"  escalated {m['escalation']['count']}/{m['escalation']['denominator']} attempts; owner decision -> "
+        + ", ".join(f"{e['owner_decision']}: {e['after_decision']}" for e in out["escalation_outcomes"]),
+        "", "[routes] " + ", ".join(f"{r['route_id']} {hkd(r['gross_minor'] + r['fee_minor'])}"
+                                     for r in out["route_costs"]["routes"])
+        + f" (recommended {out['route_costs']['recommended_route_id']})",
+        "[Z3] " + "; ".join(f"{f['variant']} {f['status']} ({f['solver_result']}, bound {f['max_steps']}, "
+                            f"{f['runtime_ms']} ms)" for f in out["formal"]),
+        f"[audit] {out['audit']['detected']}/{out['audit']['of']} edits caught: "
+        + ", ".join(f"{c['case']} {c['status']}" for c in out["audit"]["cases"]),
         f"  wrote {OUT.relative_to(OUT.parents[2])}",
     ]
     return "\n".join(lines)
