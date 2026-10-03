@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Moon, Sun, ShoppingBag, ShoppingBasket, UserRound, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -72,7 +73,7 @@ function Shell() {
             {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id} className="gap-1.5 px-3"><Icon />{label}</TabsTrigger>)}
           </TabsList>
           <Badge variant="outline" className={cn('ml-auto gap-1.5 font-normal', online === false && 'text-destructive')}>
-            <span className={cn('size-1.5 rounded-full', online === false ? 'bg-destructive' : 'bg-success')} />
+            <span className={cn('size-1.5 rounded-full', online === false ? 'bg-destructive' : online === null ? 'bg-muted-foreground' : 'bg-success')} />
             {online === false ? 'Offline' : online === null ? 'Connecting' : 'Sandbox'}
           </Badge>
           <Button variant="ghost" size="icon" className="shrink-0 rounded-full" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
@@ -83,6 +84,7 @@ function Shell() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-48 md:pb-36">
+        {(online === false || account.refreshError) && <Alert className="mb-5"><AlertDescription className="flex items-center justify-between gap-3"><span>{online === false ? 'Can’t connect to the server. Reconnecting…' : account.refreshError}</span><Button variant="outline" size="sm" onClick={() => void account.refresh()}>Retry</Button></AlertDescription></Alert>}
         {/* Every tab stays mounted: a checkout or a purchase in progress keeps running while you look elsewhere. */}
         <TabsContent value="buy" forceMount className="data-[state=inactive]:hidden"><BuyTab profileRevision={profileRevision} active={tab === 'buy'} onOpenProfile={() => { setReturnToBuy(true); go('profile'); }} /></TabsContent>
         <TabsContent value="groceries" forceMount className="data-[state=inactive]:hidden"><GroceriesTab active={tab === 'groceries'} onOpenWallet={() => go('wallet')} /></TabsContent>

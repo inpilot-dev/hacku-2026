@@ -47,7 +47,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
 
   useEffect(() => { if (active && !older && following.current && g.messages.length) end.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, [g.messages.length, g.phase, active, older]);
 
-  if (!account.loaded) return <div className="space-y-4"><Skeleton className="h-8 w-40" /><Skeleton className="h-32" /></div>;
+  if (!account.loaded || (account.refreshError && !m)) return <div className="space-y-4"><Skeleton className="h-8 w-40" /><Skeleton className="h-32" /></div>;
   if (!m) return <div>
     <PageHeader title="Groceries" who="kumi" description="Repeat shopping under an allowance you set." />
     <Card><CardHeader><div className="mb-2"><Sticker who="bean" size={72} /></div><CardTitle>Set up an allowance first</CardTitle>

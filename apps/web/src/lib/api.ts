@@ -69,7 +69,7 @@ export async function request<T>(path: string, token: string, init: RequestInit 
 }
 
 export const api = {
-  health: () => fetch(`${API_ROOT}/health`).then(async (response) => {
+  health: () => fetch(`${API_ROOT}/health`, { signal: AbortSignal.timeout(5000) }).then(async (response) => {
     if (!response.ok) throw new Error(`API returned ${response.status}`);
     return response.json() as Promise<{ status: string; payment_mode: string; server_time: string }>;
   }),

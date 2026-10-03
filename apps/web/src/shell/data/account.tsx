@@ -37,11 +37,13 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
 
 function useAccountState() {
   const [online, setOnline] = useState<boolean | null>(null);
+  const refreshVersion = useRef(0);
   const [mandateId, setMandateId] = useState(() => localStorage.getItem(MANDATE_KEY) ?? '');
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [card, setCard] = useState<VirtualCard | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [refreshError, setRefreshError] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [holder, setHolder] = useState(() => holderName(localStorage.getItem(MANDATE_KEY)));
@@ -57,25 +59,57 @@ function useAccountState() {
   }, []);
 
   const refresh = useCallback(async (id = mandateId) => {
-    try { await api.health(); setOnline(true); } catch { setOnline(false); }
-    if (!id) { setMandate(null); setBudget(null); setCard(null); setLoaded(true); return; }
+    const version = ++refreshVersion.current;
     try {
-      const [m, b] = await Promise.all([api.mandate(TOKEN, id), api.budget(TOKEN, id)]);
-      setMandate(m); setBudget(b);
-      try { setCard(await api.card(TOKEN, id)); } catch { setCard(null); }
+      await api.health();
+      if (version !== refreshVersion.current) return;
+      setOnline(true);
+    } catch {
+      if (version === refreshVersion.current) setOnline(false);
+      return;
+    }
+    if (!id) { setMandate(null); setBudget(null); setCard(null); setRefreshError(''); setLoaded(true); return; }
+    try {
+      const [m, b] = await Promise.allSettled([api.mandate(TOKEN, id), api.budget(TOKEN, id)]);
+      if (version !== refreshVersion.current) return;
+      if (m.status === 'rejected') throw m.reason;
+      // A missing budget is not evidence that the allowance itself was deleted.
+      if (b.status === 'rejected') throw new Error('Could not refresh the budget.');
+      setMandate(m.value); setBudget(b.value); setRefreshError('');
+      try {
+        const currentCard = await api.card(TOKEN, id);
+        if (version === refreshVersion.current) setCard(currentCard);
+      } catch (err) {
+        if (version === refreshVersion.current && err instanceof ApiError && err.status === 404) setCard(null);
+      }
     } catch (err) {
-      if (err instanceof ApiError && err.status === 404) { localStorage.removeItem(MANDATE_KEY); setMandateId(''); setMandate(null); setBudget(null); }
-    } finally { setLoaded(true); }
+      if (version !== refreshVersion.current) return;
+      if (err instanceof ApiError && err.status === 404) { localStorage.removeItem(MANDATE_KEY); setMandateId(''); setMandate(null); setBudget(null); setCard(null); setRefreshError(''); }
+      else setRefreshError('Could not refresh your wallet.');
+    } finally { if (version === refreshVersion.current) setLoaded(true); }
     try {
       const result = await api.events(TOKEN, 0, 100);
+      if (version !== refreshVersion.current) return;
       setServerLog(result.events.filter((event) => !event.mandate_id || event.mandate_id === id).reverse().slice(0, 12).flatMap((event) => {
         const text = eventText(event);
         return text ? [{ ...text, id: event.event_id, at: event.occurred_at }] : [];
       }));
-    } catch { setServerLog(null); }
+    } catch { /* Keep the last known audit trail during a temporary outage. */ }
   }, [mandateId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    const check = () => { if (document.visibilityState === 'visible') void refresh(); };
+    window.addEventListener('online', check);
+    window.addEventListener('focus', check);
+    const timer = setInterval(check, online === false ? 5000 : 30000);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('online', check);
+      window.removeEventListener('focus', check);
+    };
+  }, [online, refresh]);
 
   /** A new allowance was confirmed with the wallet; show it, and retire the one it replaces. */
   async function activated(result: Mandate, summary: string, name: string) {
@@ -149,7 +183,7 @@ function useAccountState() {
   const available = period?.available_minor ?? limit;
 
   return {
-    online, loaded, mandateId, mandate, budget, card, holder, busy, error, setError,
+    online, loaded, refreshError, mandateId, mandate, budget, card, holder, busy, error, setError,
     active, limit, spent, available,
     log: serverLog && serverLog.length ? serverLog : log, fromServer: Boolean(serverLog && serverLog.length),
     note, refresh, activated, freeze, unfreeze, revoke,

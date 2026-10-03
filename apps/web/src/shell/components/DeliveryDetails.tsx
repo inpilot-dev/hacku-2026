@@ -22,24 +22,37 @@ export default function DeliveryDetails({ onSaved, returning }: { onSaved?: () =
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setLoadFailed(false); setError('');
     api.profile(TOKEN).then((p: Profile) => {
+      if (cancelled) return;
       setForm({ full_name: p.full_name ?? '', email: p.email ?? '', phone: p.phone ?? '', address_line1: p.address_line1 ?? '',
         address_line2: p.address_line2 ?? '', district: p.district ?? '', region: p.region, city: p.city ?? 'Hong Kong',
         country: p.country ?? 'Hong Kong', postal_code: p.postal_code ?? '' });
       setMissing(p.missing);
-    }).catch((err) => { if (err instanceof ApiError && err.status === 404) setMissing(['full_name', 'email', 'phone', 'address_line1', 'district']); else setError('Could not load your delivery details.'); }).finally(() => setLoading(false));
-  }, []);
+    }).catch((err) => {
+      if (cancelled) return;
+      if (err instanceof ApiError && err.status === 404) setMissing(['full_name', 'email', 'phone', 'address_line1', 'district']);
+      else { setLoadFailed(true); setError('Could not load your delivery details.'); }
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [retryTick]);
 
-  const set = (key: keyof ProfileInput) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  const set = (key: keyof ProfileInput) => (e: React.ChangeEvent<HTMLInputElement>) => { setDirty(true); setForm((f) => ({ ...f, [key]: e.target.value })); };
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (loading || saving || loadFailed) return;
     setSaving(true); setError('');
     try {
       const saved = await api.saveProfile(TOKEN, { ...form, address_line2: form.address_line2 || null, postal_code: form.postal_code || null, region: form.region || null });
       setMissing(saved.missing);
+      setDirty(false);
       setForm((f) => ({ ...f, region: saved.region }));
       toast.success('Delivery details saved');
       if (!saved.missing.length) onSaved?.();
@@ -49,7 +62,8 @@ export default function DeliveryDetails({ onSaved, returning }: { onSaved?: () =
   }
 
   return <form className="grid gap-4" onSubmit={(e) => void save(e)}>
-    <fieldset disabled={loading || saving} className="contents">
+    {loadFailed && <div className="flex items-center justify-between gap-3 rounded-lg border p-3" role="alert"><p className="text-sm text-destructive">{error}</p><Button type="button" variant="outline" size="sm" onClick={() => setRetryTick((value) => value + 1)}>Retry</Button></div>}
+    <fieldset disabled={loading || saving || loadFailed} className="contents">
     {missing && missing.length > 0 && <p className="text-sm text-muted-foreground">The one-time agent needs these before it can check out for you.</p>}
     <div className="grid gap-4 sm:grid-cols-2">
       <F id="full_name" label="Full name"><Input id="full_name" autoComplete="name" required value={form.full_name} onChange={set('full_name')} /></F>
@@ -61,16 +75,16 @@ export default function DeliveryDetails({ onSaved, returning }: { onSaved?: () =
     <div className="grid gap-4 sm:grid-cols-2">
       <F id="district" label="District"><Input id="district" required value={form.district} onChange={set('district')} placeholder="Wan Chai" /></F>
       <F id="region" label="Region">
-        <Select value={form.region ?? ''} onValueChange={(v) => setForm((f) => ({ ...f, region: v }))}>
+        <Select value={form.region ?? ''} onValueChange={(v) => { setDirty(true); setForm((f) => ({ ...f, region: v })); }}>
           <SelectTrigger id="region" className="w-full"><SelectValue placeholder="From the district" /></SelectTrigger>
           <SelectContent>{REGIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
         </Select>
       </F>
     </div>
-    {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+    {error && !loadFailed && <p className="text-sm text-destructive" role="alert">{error}</p>}
     <div className="flex items-center gap-3">
-      <Button type="submit" disabled={loading || saving}>{loading ? 'Loading…' : saving ? 'Saving…' : returning ? 'Save and return to shopping' : 'Save details'}</Button>
-      {missing && missing.length === 0 && <span className="text-xs text-success">Ready for checkout</span>}
+      <Button type="submit" disabled={loading || saving || loadFailed}>{loading ? 'Loading…' : saving ? 'Saving…' : returning ? 'Save and return to shopping' : 'Save details'}</Button>
+      {missing && missing.length === 0 && !dirty && !loadFailed && <span className="text-xs text-success">Ready for checkout</span>}
     </div>
     </fieldset>
   </form>;

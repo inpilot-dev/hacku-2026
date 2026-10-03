@@ -32,7 +32,7 @@ export default function WalletTab() {
     {a.error && <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{a.error}
       <button className="ml-2 underline" onClick={() => a.setError('')}>Dismiss</button></p>}
 
-    {!a.loaded ? <Skeleton className="h-64 rounded-2xl" /> : !a.mandate ? <Card>
+    {(!a.loaded || (a.refreshError && !a.mandate)) ? <Skeleton className="h-64 rounded-2xl" /> : !a.mandate ? <Card>
       <CardHeader><div className="mb-2"><Sticker who="kip" size={72} /></div>
         <CardTitle className="flex items-center gap-2"><Wallet className="size-4" />No card yet</CardTitle>
         <CardDescription>Set a budget and rules, and Kip issues a virtual card the grocery agent can only spend within them.</CardDescription></CardHeader>
