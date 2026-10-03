@@ -1,0 +1,2 @@
+# Z3 bounded model check (mandate/verification). Install on top of requirements-wallet.txt.
+z3-solver==5.1.0.0
