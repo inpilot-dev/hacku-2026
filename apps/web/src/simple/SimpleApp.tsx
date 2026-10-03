@@ -787,7 +787,7 @@ export default function SimpleApp() {
 
         <section className="m2-col m2-area-shop conversation-thread" ref={shopRef}>
           <div className="conversation-heading"><p className="m2-kicker">YOUR SHOPPING COMPANION</p><h1>What can I find for you?</h1><p>Shop at your allowed stores. Your confirmed spending rules stay in control.</p></div>
-          <MessageList messages={[{ id: 'welcome', speaker: 'kumi', text: `Hi${holder ? `, shopping for ${holder}` : ''}! Tell me what you need. I can search your allowed stores and build a basket for you to review.` }, ...messages]} />
+          <MessageList working={phase === 'packing' || busy === 'parse' ? { speaker: 'kumi', text: busy === 'parse' ? 'Reading your shopping list…' : 'Finding matches for your basket…' } : phase === 'paying' || ['payment-status', 'checkout-restore', 'decide'].includes(busy) ? { speaker: 'kip', text: busy === 'decide' ? 'Checking your approval…' : busy === 'payment-status' || busy === 'checkout-restore' ? 'Checking the saved payment status…' : 'Checking your rules and payment…' } : undefined} messages={[{ id: 'welcome' , speaker: 'kumi', text: `Hi${holder ? `, shopping for ${holder}` : ''}! Tell me what you need. I can search your allowed stores and build a basket for you to review.` }, ...messages]} />
           <div className="conversation-active-card" aria-label="Current shopping step">
 
           {!canSpend ? (
