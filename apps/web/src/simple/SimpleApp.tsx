@@ -92,7 +92,9 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
   switch (event.type) {
     case 'mandate_confirmed': return { who: 'bean', text: 'Allowance switched on', tone: 'good' };
-    case 'mandate_revoked': return { who: 'kip', text: 'Card frozen', tone: 'bad', state: 'revoked' };
+    case 'mandate_revoked': return { who: 'kip', text: 'Allowance permanently revoked', tone: 'bad', state: 'revoked' };
+    case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
+    case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
     case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };

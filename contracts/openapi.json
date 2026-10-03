@@ -5676,7 +5676,9 @@
               "payment_refused",
               "reservation_cancelled",
               "reservation_expired",
-              "agent_run_updated"
+              "agent_run_updated",
+              "card_frozen",
+              "card_unfrozen"
             ]
           },
           "occurred_at": {

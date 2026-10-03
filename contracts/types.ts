@@ -353,7 +353,7 @@ export type AuditEvent = {
   "stream_id": string;
   "sequence": number;
   "event_id": string;
-  "type": "mandate_confirmed" | "mandate_revoked" | "quote_created" | "authorization_approved" | "authorization_refused" | "payment_completed" | "payment_refused" | "reservation_cancelled" | "reservation_expired" | "agent_run_updated";
+  "type": "mandate_confirmed" | "mandate_revoked" | "quote_created" | "authorization_approved" | "authorization_refused" | "payment_completed" | "payment_refused" | "reservation_cancelled" | "reservation_expired" | "agent_run_updated" | "card_frozen" | "card_unfrozen";
   "occurred_at": string;
   "actor_id": string;
   "mandate_id": string | null;
