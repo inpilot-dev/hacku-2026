@@ -5,14 +5,16 @@ import './openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
 import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
-import { money } from '../lib/format';
+import { categoryLabel, money, periodWord } from '../lib/format';
+import { holderName, possessive, saveHolderName } from './holder';
 import CartSyncPanel from './CartSyncPanel';
 import Onboarding, { storeName } from './Onboarding';
 import ProfileSheet from './ProfileSheet';
 
 /*
- * A single-screen take on the core Mandate story for a Gen Z caregiver:
- * set Mum's allowance, let Kumi fill a basket, watch Kip (the wallet) pay or refuse, freeze it any time.
+ * A single-screen take on the core Mandate flow, for whoever the shopping is for (a parent, a teen, a flat or yourself):
+ * set an allowance, let Kumi fill a basket, watch Kip (the wallet) pay or refuse, freeze it any time.
+ * Copy follows the confirmed policy (period, blocked categories, stores), never a fixed scenario.
  * The wallet API stays the only authority; this screen never decides anything itself.
  */
 
@@ -58,7 +60,7 @@ const PICKS: Pick[] = [
     list: ['shine muscat grapes', 'blueberries', '2 kiwis', 'no-sugar oolong tea'],
   },
   {
-    id: 'champagne', icon: Wine, title: 'Sneak in champagne', subtitle: 'Test the rules: should be refused', tone: 'pink',
+    id: 'champagne', icon: Wine, title: 'Sneak in champagne', subtitle: 'Test the rules: refused if alcohol is blocked', tone: 'pink',
     items: [
       { product_id: 'wellcome_113277654', quantity: 1 },
       { product_id: 'wellcome_101355093', quantity: 1 },
@@ -88,7 +90,7 @@ function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: s
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
-const merchantName = (id: string) => id === 'wellcome' ? 'Wellcome' : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const merchantName = (id: string) => storeName(id) !== id ? storeName(id) : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
@@ -155,6 +157,7 @@ export default function SimpleApp() {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
+  const [holder, setHolder] = useState(() => holderName(localStorage.getItem(MANDATE_KEY)));
   const [riskReviewOn, setRiskReviewOn] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
 
@@ -221,6 +224,7 @@ export default function SimpleApp() {
 
   const products = useMemo(() => catalog?.products.filter((p) => p.merchant_id === STORE_ID && p.available) ?? [], [catalog]);
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+  const catalogById = useMemo(() => new Map((catalog?.products ?? []).map((p) => [p.id, p])), [catalog]);
   const snapshotAt = useMemo(() => {
     const times = catalog?.evidence.filter((e) => e.kind === 'product_price').map((e) => e.observed_at).sort() ?? [];
     return times.length ? new Date(times[times.length - 1]).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' }) : null;
@@ -235,9 +239,10 @@ export default function SimpleApp() {
   const ratio = limit ? Math.min(1, spent / limit) : 0;
 
   /** Onboarding confirmed a new mandate with the wallet; show it, and retire the one it replaces. */
-  async function activated(result: Mandate, summary: string) {
+  async function activated(result: Mandate, summary: string, name: string) {
     const replaced = mandate && mandate.status === 'active' && mandate.id !== result.id ? mandate : null;
     localStorage.setItem(MANDATE_KEY, result.id);
+    saveHolderName(result.id, name); setHolder(name);
     setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
     note('bean', summary, 'good');
     if (replaced) {
@@ -618,6 +623,9 @@ export default function SimpleApp() {
   const kipState = !mandate || !active ? 'revoked' : card?.status === 'frozen' ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
   const estimate = (p: Pick) => p.items.reduce((sum, line) => sum + (productById.get(line.product_id)?.unit_price_minor ?? 0) * line.quantity, 0);
+  const per = periodWord(mandate?.policy.period_limits[0]?.period);
+  const blocked = new Set<string>(mandate?.policy.blocked_categories ?? []);
+  const owner = possessive(holder);
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
   const stamp = verdict?.kind === 'paid' ? 'Paid' : verdict?.kind === 'refused' ? 'Refused' : verdict?.kind === 'review' ? 'Your call' : 'Checking';
 
@@ -635,34 +643,34 @@ export default function SimpleApp() {
     {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} /></div> : showSetup ? (
       <section className="m2-setup">
         <div className="m2-setup-copy">
-          <p className="m2-kicker">For the person who does Mum’s shopping</p>
-          <h1>Mum’s groceries, <em>on a card that can’t go rogue.</em></h1>
-          <p className="m2-lede">Kumi shops for her. Kip, the wallet, only pays when your rules say yes. You can freeze it in one tap.</p>
+          <p className="m2-kicker">For anyone handing the shopping to an agent</p>
+          <h1>Groceries, <em>on a card that can’t go rogue.</em></h1>
+          <p className="m2-lede">For a parent, a teen, a shared flat or yourself. Kumi fills the basket. Kip, the wallet, only pays when your rules say yes. You can freeze it in one tap.</p>
           <div className="m2-cast">
             <figure><Sticker name="kumi" state="idle" size={76} tilt={-5} /><figcaption><b>Kumi</b> fills the basket</figcaption></figure>
             <figure><Sticker name="kip" state="idle" size={76} tilt={4} /><figcaption><b>Kip</b> holds the money</figcaption></figure>
             <figure><Sticker name="stella" state="idle" size={76} tilt={-3} /><figcaption><b>Stella</b> keeps the log</figcaption></figure>
           </div>
         </div>
-        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} initialPolicy={setupOpen && mandate ? mandate.policy : null} onActivated={activated}
+        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} initialPolicy={setupOpen && mandate ? mandate.policy : null} initialHolder={setupOpen && mandate ? holder : ''} onActivated={activated}
           onBack={setupOpen && mandate ? () => setSetupOpen(false) : undefined} />
       </section>
     ) : mandate && (
       <main className="m2-grid">
         <section className="m2-col m2-area-card">
           <div className={`m2-card ${canSpend ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
+            <div className="m2-card-top"><span>{owner} grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
             {card && <div className="m2-card-number"><span>CONTROL CARD</span><b>{card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ···· {card.last4}</b><small>the agent never sees reusable card details</small></div>}
             {active && !card && <p className="m2-card-note">Card details are unavailable for this allowance. Wallet spending rules remain active.</p>}
-            <div className="m2-card-amount"><small>{!active ? 'Spending is off' : card?.status === 'frozen' ? 'Available when resumed' : 'Left this week'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
+            <div className="m2-card-amount"><small>{!active ? 'Spending is off' : card?.status === 'frozen' ? 'Available when resumed' : `Left this ${per}`}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
             <div className="m2-meter" aria-hidden>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < Math.round(ratio * 20) ? 'on' : ''} />)}</div>
-            <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a week</span></div>
+            <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a {per}</span></div>
             <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
           </div>
           <dl className="m2-rules">
             <div><dt>Most per order</dt><dd>{hkd(mandate.policy.per_order_limit_minor)}</dd></div>
             <div><dt>{mandate.policy.allowed_merchant_ids.length > 1 ? 'Shops' : 'Shop'}</dt><dd>{mandate.policy.allowed_merchant_ids.map(storeName).join(', ')}</dd></div>
-            <div><dt>Never buy</dt><dd>Alcohol</dd></div>
+            <div><dt>Never buy</dt><dd>{mandate.policy.blocked_categories.map(categoryLabel).join(', ') || 'Nothing blocked'}</dd></div>
             {mandate.policy.approval_above_minor != null && <div><dt>Ask me first above</dt><dd>{hkd(mandate.policy.approval_above_minor)}</dd></div>}
             {mandate.policy.risk_review && <div><dt>Extra protection</dt><dd>Unusual purchases reviewed</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
@@ -695,9 +703,9 @@ export default function SimpleApp() {
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
-              <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>What does Mum need this week?</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
+              <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>{holder ? `What does ${holder} need this ${per}?` : `What do you need this ${per}?`}</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
               <div className="m2-ask">
-                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
+                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what’s needed, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
                 <div className="m2-ask-actions">
                   <button type="button" className={`m2-mic${voice === 'recording' ? ' on' : ''}`} onClick={() => void toggleRecording()} disabled={voice === 'transcribing' || busy === 'parse'} aria-label={voice === 'recording' ? 'Stop recording' : 'Speak the list'}>
                     {voice === 'recording' ? <Square size={16} /> : <Mic size={16} />}{voice === 'recording' ? 'Stop' : voice === 'transcribing' ? 'Transcribing…' : 'Speak'}
@@ -720,7 +728,7 @@ export default function SimpleApp() {
               {showCustom && <div className="m2-shelf">
                 <input className="m2-search" placeholder="Search Wellcome" value={search} onChange={(e) => setSearch(e.target.value)} />
                 <ul>{filtered.map((p: Product) => <li key={p.id}>
-                  <span className="m2-shelf-title">{p.title}{p.category === 'alcohol' && <em> alcohol</em>}</span>
+                  <span className="m2-shelf-title">{p.title}{blocked.has(p.category) && <em> {categoryLabel(p.category).toLowerCase()}</em>}</span>
                   <b>{hkd(p.unit_price_minor)}</b>
                   <span className="m2-qty">
                     {(custom[p.id] ?? 0) > 0 && <><button onClick={() => setCustom((c) => ({ ...c, [p.id]: Math.max(0, (c[p.id] ?? 0) - 1) }))} aria-label={`Remove one ${p.title}`}>−</button><i>{custom[p.id]}</i></>}
@@ -734,22 +742,22 @@ export default function SimpleApp() {
             <div className="m2-panel m2-center">
               <Sticker name="kumi" state="idle" size={150} tilt={-5} />
               <h2>Kumi is packing{pick ? ` ${pick.title.toLowerCase()}` : ''}…</h2>
-              <p className="m2-muted">Pricing it against Wellcome’s shelf.</p>
+              <p className="m2-muted">Pricing it against {mandate.policy.allowed_merchant_ids.length > 1 ? 'each allowed store' : `${storeName(mandate.policy.allowed_merchant_ids[0])}’s shelf`}.</p>
               <div className="m2-dots"><i /><i /><i /></div>
             </div>
           ) : quote && (phase === 'basket' || phase === 'paying' || phase === 'verdict') ? (
             <div className="m2-panel m2-checkout">
               <div className="m2-panel-head">
-                <div><p className="m2-kicker">{phase === 'verdict' ? 'Kip’s decision' : agentNote}</p><h2>{phase === 'verdict' && verdict ? verdictTitle(verdict, quote.total_minor) : phase === 'paying' ? 'Kip is checking Mum’s rules…' : 'Basket’s ready.'}</h2></div>
+                <div><p className="m2-kicker">{phase === 'verdict' ? 'Kip’s decision' : agentNote}</p><h2>{phase === 'verdict' && verdict ? verdictTitle(verdict, quote.total_minor) : phase === 'paying' ? 'Kip is checking the rules…' : 'Basket’s ready.'}</h2></div>
                 <Sticker name={phase === 'verdict' && verdict?.kind === 'review' ? 'bean' : phase === 'verdict' ? 'kip' : 'kumi'} state={phase === 'verdict' && verdict ? (verdict.kind === 'paid' ? 'approved' : verdict.kind === 'refused' ? 'refused' : 'idle') : phase === 'paying' ? 'idle' : 'happy'} size={phase === 'verdict' ? 112 : 84} tilt={phase === 'verdict' ? -7 : 6} />
               </div>
               <div className="m2-receipt">
-                <div className="m2-receipt-head"><span>WELLCOME · CLICK &amp; COLLECT</span><span>{new Date(quote.created_at).toLocaleDateString('en-HK', { day: '2-digit', month: 'short' })}</span></div>
-                <ul>{quote.items.map((item) => <li key={item.product_id} className={productById.get(item.product_id)?.category === 'alcohol' ? 'flag' : ''}><span>{item.quantity}×</span><span>{item.title}</span><b>{money(item.line_total_minor)}</b></li>)}
+                <div className="m2-receipt-head"><span>{storeName(quote.merchant_id).toUpperCase()} · CLICK &amp; COLLECT</span><span>{new Date(quote.created_at).toLocaleDateString('en-HK', { day: '2-digit', month: 'short' })}</span></div>
+                <ul>{quote.items.map((item) => <li key={item.product_id} className={blocked.has(catalogById.get(item.product_id)?.category ?? '') ? 'flag' : ''}><span>{item.quantity}×</span><span data-flag={categoryLabel(catalogById.get(item.product_id)?.category ?? '').toLowerCase()}>{item.title}</span><b>{money(item.line_total_minor)}</b></li>)}
                   {quote.charges.map((charge, i) => <li key={`c${i}`} className="m2-charge"><span /><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}
                 </ul>
                 <div className="m2-receipt-total"><span>TOTAL</span><b>{money(quote.total_minor)}</b></div>
-                {phase === 'verdict' && verdict?.kind === 'paid' && <div className="m2-receipt-meta"><span>Receipt</span><span>{verdict.receipt.id.slice(0, 18)}…</span>{verdict.receipt.payment_route && <><span>Paid via</span><span>{verdict.receipt.payment_route.label}</span></>}<span>Left this week</span><span>{money(available)}</span></div>}
+                {phase === 'verdict' && verdict?.kind === 'paid' && <div className="m2-receipt-meta"><span>Receipt</span><span>{verdict.receipt.id.slice(0, 18)}…</span>{verdict.receipt.payment_route && <><span>Paid via</span><span>{verdict.receipt.payment_route.label}</span></>}<span>Left this {per}</span><span>{money(available)}</span></div>}
                 {phase === 'verdict' && verdict && <div className={`m2-stamp ${verdict.kind}`}>{stamp}</div>}
               </div>
               {phase === 'basket' && <>
@@ -763,7 +771,7 @@ export default function SimpleApp() {
                 {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
                 <p className="m2-muted">Nothing was paid.</p>
               </>}
-              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at Wellcome.</p>}
+              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at {storeName(quote.merchant_id)}.</p>}
               {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" onClick={() => void checkout()}>Check again</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
@@ -803,7 +811,7 @@ export default function SimpleApp() {
       </section>
     </div>}
 
-    {profileOpen && <ProfileSheet token={TOKEN} online={online} mandate={mandate} onClose={() => setProfileOpen(false)}
+    {profileOpen && <ProfileSheet token={TOKEN} online={online} mandate={mandate} holder={holder} onClose={() => setProfileOpen(false)}
       onChangeRules={() => { setProfileOpen(false); setRiskReviewOn(Boolean(mandate?.policy.risk_review)); setSetupOpen(true); }} />}
     {receiptsOpen && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceiptsOpen(false); }}>
       <section className="m2-modal m2-receipts-modal" role="dialog" aria-modal="true" aria-labelledby="receipts-title">
