@@ -107,6 +107,16 @@ def test_item_never_bought_before(h, regular):
     assert risk_reasons(body) == {"risk:new_items": "Never bought before: Apples 1kg."}
 
 
+def test_first_order_from_a_new_shop(h):
+    m = h.confirm(RISKY)
+    buy_with_approval(h, m["id"], MILK)
+    body = h.authorize(m["id"], h.quote(basket(("p_b_bread", 3), merchant="demo_store_b",
+                                               ctx="ctx_b_standard"))["id"]).json()
+    assert body["status"] == "requires_review"
+    assert risk_reasons(body) == {
+        "risk:new_merchant": "First order from demo_store_b; earlier orders were all from other shops."}
+
+
 def test_price_jump_against_the_last_price_paid(h):
     m = h.confirm(RISKY)
     buy_with_approval(h, m["id"], MILK)

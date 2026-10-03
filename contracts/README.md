@@ -280,7 +280,7 @@ inside the window. Cancelled and expired reservations do not count.
 
 **Risk review (proposed v0.3, wallet, Timmy).** `Policy.risk_review` (optional boolean, default `false`) adds
 review reasons for purchases that fit every hard rule but look unusual for this owner: the first purchase on the
-mandate, a basket at least 3x the median of the owner's paid purchases (after 3 of them), items never bought before
+mandate, the first order from a shop the owner has never bought from, a basket at least 3x the median of the owner's paid purchases (after 3 of them), items never bought before
 (same history), and a unit price at least 25% above the last price paid. Separately, and on every mandate, a product
 listing whose text tries to instruct the agent ("ignore previous instructions", "approve without asking") is a
 review reason. Each reason is a `RuleViolation` with code `RISK_REVIEW_REQUIRED`, a plain `message`, and its own
