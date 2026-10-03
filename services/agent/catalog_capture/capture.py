@@ -77,57 +77,59 @@ class Run:
             "conditions": conditions,
         }
 
-    def build(self, categories: dict[str, str] | None = None) -> dict:
+    def build(self, categories: dict[str, str] | None = None, shop: wellcome.Shop = wellcome.WELLCOME) -> dict:
         categories = categories or wellcome.CATEGORIES
+        mid = shop.merchant_id
         evidence: list[dict] = []
         products: list[dict] = []
         checks: list[tuple[dict, str]] = []
 
-        self.get("home", wellcome.BASE_URL + "/en")
-        merchant_ev = f"ev_wellcome_identity_{self.stamp}"
+        self.get("home", shop.base_url + "/en")
+        merchant_ev = f"ev_{mid}_identity_{self.stamp}"
         evidence.append(self.evidence(
             merchant_ev, "home", "merchant_identity",
-            "Wellcome online shop home page (www.wellcome.com.hk), English, guest session.",
+            f"{shop.name} online shop home page ({shop.base_url.removeprefix('https://')}), English, guest session.",
         ))
 
         for category_id, category in categories.items():
             name = f"category-{category_id}"
-            page = self.get(name, wellcome.category_url(category_id))
+            page = self.get(name, wellcome.category_url(category_id, shop.base_url))
             title = wellcome.category_title(page)
-            listings = wellcome.parse_category(page)
+            listings = wellcome.parse_category(page, shop.base_url)
             if not listings:
                 raise CaptureError(f"No priced listings found in category {category_id}; layout may have changed.")
-            category_ev = f"ev_wellcome_cat_{category_id}_{self.stamp}"
+            category_ev = f"ev_{mid}_cat_{category_id}_{self.stamp}"
             evidence.append(self.evidence(
                 category_ev, name, "category",
-                f"Curated mapping: Wellcome category '{title}' ({category_id}) -> {category}. "
+                f"Curated mapping: {shop.name} category '{title}' ({category_id}) -> {category}. "
                 "Applies to listings shown on page 1 of this category.",
             ))
             for item in listings:
-                earlier = next((p for p in products if p["id"] == f"wellcome_{item.sku}"), None)
+                earlier = next((p for p in products if p["id"] == f"{mid}_{item.sku}"), None)
                 if earlier is not None:
-                    # Listed under two Wellcome categories. If they map differently the
+                    # Listed under two of the shop's categories. If they map differently the
                     # category is not trustworthy; "conflicting" sends it to human review.
                     if earlier["category"] != category:
                         earlier["category_status"] = "conflicting"
                         earlier["evidence_ids"].append(category_ev)
                     continue
-                price_ev = f"ev_wellcome_{item.sku}_{self.stamp}"
+                price_ev = f"ev_{mid}_{item.sku}_{self.stamp}"
                 conditions = [
-                    f"Listed price on page 1 of Wellcome category '{title}', guest session (not logged in), "
+                    f"Listed price on page 1 of {shop.name} category '{title}', guest session (not logged in), "
                     "no delivery address or membership selected.",
                     f"Product page: {item.product_url}.",
                 ]
                 if item.was_price_minor is not None:
                     conditions.append(f"Struck-through previous price shown: HK${item.was_price_minor / 100:.2f}.")
-                conditions.append("Multi-buy promotions were not captured; the single-unit price is used.")
+                conditions.append("Multi-buy promotions were not captured; the single-unit price is used. "
+                                  "A signed-in account's cart can charge a different price (its fulfilment store).")
                 evidence.append(self.evidence(price_ev, name, "product_price", " ".join(conditions)))
                 status = "curated"
                 if category != "alcohol" and wellcome.looks_alcoholic(item.title):
                     status = "conflicting"
                 product = {
-                    "id": f"wellcome_{item.sku}",
-                    "merchant_id": MERCHANT_ID,
+                    "id": f"{mid}_{item.sku}",
+                    "merchant_id": mid,
                     "title": item.title,
                     "description": item.title,
                     "category": category,
@@ -142,22 +144,23 @@ class Run:
                 if item.available and not any(c[0]["category"] == category for c in checks):
                     checks.append((product, item.product_url))  # first available listing per category
 
-        fee_name = self._cross_check(checks)
-        fee_ev = f"ev_wellcome_pickup_fee_{self.stamp}"
+        fee_name = self._cross_check(checks, mid)
+        fee_ev = f"ev_{mid}_pickup_fee_{self.stamp}"
         evidence.append(self.evidence(
             fee_ev, fee_name, "delivery_fee",
-            f"Shown on the Wellcome product page as: '{wellcome.FREE_PICKUP_TEXT}' "
+            f"Shown on the {shop.name} product page as: '{wellcome.FREE_PICKUP_TEXT}' "
             "Free Click & Collect store pickup applies to orders over HK$50. "
             "The charge for pickup orders of HK$50 or less was not observed.",
         ))
         return {
-            "_note": f"Observed Wellcome.com.hk snapshot captured {self.now.isoformat()} by services/agent/catalog_capture.",
-            "merchants": {MERCHANT_ID: {"revision": f"wellcome-{self.stamp}", "data_mode": "observed_snapshot",
-                                        "evidence_ids": [merchant_ev]}},
+            "_note": f"Observed {shop.base_url.removeprefix('https://www.')} snapshot captured {self.now.isoformat()} "
+                     "by services/agent/catalog_capture.",
+            "merchants": {mid: {"revision": f"{mid}-{self.stamp}", "data_mode": "observed_snapshot",
+                                "evidence_ids": [merchant_ev]}},
             "products": products,
             "delivery_contexts": [{
-                "id": PICKUP_CONTEXT_ID,
-                "merchant_id": MERCHANT_ID,
+                "id": shop.pickup_context_id,
+                "merchant_id": mid,
                 "fee_rules": [{
                     "label": "Click & Collect pickup (free on orders over HK$50)",
                     "min_subtotal_minor": 5001,
@@ -169,7 +172,7 @@ class Run:
             "evidence": evidence,
         }
 
-    def _cross_check(self, checks: list[tuple[dict, str]]) -> str:
+    def _cross_check(self, checks: list[tuple[dict, str]], merchant_id: str = MERCHANT_ID) -> str:
         """Compare category-page prices with product-page JSON-LD; return a product page name for fee evidence.
 
         Fetches one product page per captured category. Any mismatch aborts the run,
@@ -177,7 +180,7 @@ class Run:
         """
         fee_name = None
         for product, url in checks:
-            name = f"product-{product['id'].removeprefix('wellcome_')}"
+            name = f"product-{product['id'].removeprefix(merchant_id + '_')}"
             page = self.get(name, url)
             listed = wellcome.json_ld_price_minor(page)
             if listed != product["unit_price_minor"]:

@@ -25,15 +25,14 @@
 .ob-login{display:grid;gap:12px;margin-top:12px}
 .ob-login-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius-xl);background:var(--color-surface-secondary);font-size:var(--font-text-sm-size);color:var(--color-text-secondary)}
 .ob-lock{font-size:12px}
-.ob-login-screen{position:relative;justify-self:center;width:min(100%,360px);aspect-ratio:412/780;border-radius:var(--radius-2xl);overflow:hidden;background:var(--color-surface-secondary);box-shadow:var(--shadow-200),inset 0 0 0 1px var(--color-border-subtle)}
-.ob-login-screen.live{aspect-ratio:auto}
+.ob-login-screen{position:relative;justify-self:center;max-width:100%;border-radius:var(--radius-2xl);overflow:hidden;background:var(--color-surface-secondary);box-shadow:var(--shadow-200),inset 0 0 0 1px var(--color-border-subtle)}
 .ob-login-screen canvas{display:block;width:100%;height:auto;touch-action:none;cursor:pointer;opacity:0;transition:opacity .2s}
 .ob-login-screen canvas.live{opacity:1}
 .ob-login-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--color-text-secondary);font-size:var(--font-text-sm-size)}
 /* Off-screen but focusable, 16px so phones don't zoom when it takes focus. */
 .ob-typing{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0}
 .ob-notice{margin:0;font-size:var(--font-text-sm-size);color:var(--color-text-secondary)}
-@media(max-width:480px){.ob-login-screen{width:100%}}
+@media(max-width:480px){.ob-profile.m2-modal{padding:16px}}
 
 /* Real-cart sync in the basket view */
 .cs{display:grid;gap:8px}
@@ -49,3 +48,19 @@
 .cs-result li small{flex:none;color:var(--color-text-secondary)}
 .cs-result li.price_changed small,.cs-result li.missing small,.cs-result li.quantity_mismatch small,.cs-result li.other small{color:var(--color-text-danger)}
 .cs-result .m2-link{justify-self:start;padding:4px 0}
+
+/* Profile sheet */
+.ob-profile .ob-section{margin:20px 0 4px;font-size:var(--font-text-md-size);font-weight:var(--font-weight-semibold)}
+.ob-profile .ob-section:first-of-type{margin-top:0}
+.ob-tag{margin-left:8px;padding:2px 8px;border-radius:var(--radius-full);background:var(--color-surface-secondary);font-style:normal;font-size:11px;font-weight:var(--font-weight-medium);color:var(--color-text-secondary)}
+.ob-rules{display:grid;margin:8px 0 12px}
+.ob-rules div{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--color-border-subtle);font-size:var(--font-text-sm-size)}
+.ob-rules dt{color:var(--color-text-secondary)}.ob-rules dd{margin:0;font-weight:var(--font-weight-medium);text-align:right;text-transform:none}
+.ob-change{display:flex;align-items:center;justify-content:center;gap:8px}
+.m2-profile-trigger{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:var(--radius-full);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-border-subtle);font-size:var(--font-text-sm-size);font-weight:var(--font-weight-medium)}
+.m2-profile-trigger:hover{background:var(--color-surface-secondary)}
+.m2-profile-trigger i{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--gray-1000);color:var(--gray-0)}
+.m2-top-right{display:flex;align-items:center;gap:8px}
+@media(max-width:480px){.m2-profile-trigger span{display:none}.m2-profile-trigger{padding:4px}}
+.ob-login-closed{display:grid;align-content:center;justify-items:center;gap:12px;padding:24px;text-align:center;background:var(--color-surface-secondary)}
+.ob-login-screen:has(.ob-login-closed) canvas{opacity:.25}

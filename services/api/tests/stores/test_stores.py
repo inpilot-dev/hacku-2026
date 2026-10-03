@@ -17,7 +17,7 @@ from mandate.stores.connections import LOGIN_TIMEOUT_S, StoreConnections
 from mandate.stores.registry import STORES
 from mandate.stores.routes import build_store_router
 from mandate.stores.steel import StoreBrowserError
-from mandate.stores.stream import VIEWPORT, allowed_url, input_commands
+from mandate.stores.stream import VIEWPORT, allowed_url, input_commands, resized
 from starlette.websockets import WebSocketDisconnect
 
 USER = {"Authorization": "Bearer dev-user-token"}
@@ -265,6 +265,14 @@ def test_input_commands_are_validated_and_clamped():
     assert input_commands("down") == []
 
 
+def test_resize_is_clamped_to_phone_sized_pages():
+    assert resized({"type": "resize", "width": 390, "height": 600}) == {"width": 390, "height": 600}
+    assert resized({"type": "resize", "width": 2000, "height": 100}) == {"width": 480, "height": 420}
+    assert resized({"type": "resize", "width": "390", "height": 600}) is None
+    assert resized({"type": "down", "x": 1, "y": 1}) is None
+    assert input_commands({"type": "resize", "width": 390, "height": 600}) == []  # never reaches Input
+
+
 def test_navigation_is_kept_on_the_sign_in_and_shop_sites():
     store = STORES["wellcome"]
     assert allowed_url("https://www.yuurewards.com/en/super/login-info", store)
@@ -380,6 +388,23 @@ def test_parse_cart_reads_lines_only():
     lines = parse_cart(body)
     assert list(lines) == [5] and lines[5].quantity == 2 and lines[5].unit_price_minor == 450 and not lines[5].checked
     assert lines[5].line_total_minor == 800  # a 2-for offer: the store's line total, not 2 x 450
+
+
+def test_market_place_is_its_own_store_on_the_same_platform():
+    store = STORES["marketplace"]
+    assert store.sku("marketplace_101365694") == 101365694 and store.sku("wellcome_101365694") is None
+    assert store.domain_flag == "marketplace" and store.vender_id == 5
+    assert "domain=marketplacehk.com" in store.login_url()
+    assert store.login_url().startswith("https://www.yuurewards.com/en/super/login-info?callbackUrl=https://www.marketplacehk.com/api/login/callback")
+    assert allowed_url("https://www.marketplacehk.com/en/cart", store)
+    assert not allowed_url("https://www.wellcome.com.hk/en/cart", store)  # each sign-in stays on its own shop
+
+
+def test_stores_list_includes_market_place(env):
+    client, *_ = env
+    stores = client.get("/api/v1/stores", headers=USER).json()["stores"]
+    assert [(s["store_id"], s["name"], s["status"]) for s in stores] == [
+        ("wellcome", "Wellcome", "not_connected"), ("marketplace", "Market Place", "not_connected")]
 
 
 def test_wellcome_store_maps_skus_and_login_url():

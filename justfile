@@ -20,7 +20,7 @@ dev:
     #!/usr/bin/env bash
     set -euo pipefail
     trap 'kill 0' EXIT
-    (cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/wellcome.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000) &
+    (cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/stores.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000) &
     (cd apps/web && npm run dev) &
     ./scripts/start-verifier.sh {{venv_python}} .data/audit/keys .data/verifier &
     wait
@@ -48,9 +48,11 @@ test:
     cd services/mcp-wallet && {{venv_python}} -m pytest -q
     cd services/agent && {{venv_python}} -m pytest -q
 
-# Capture a fresh observed Wellcome catalog into data/catalog (makes ~8 HTTP requests)
+# Capture fresh observed Wellcome and Market Place catalogs and join them (~18 HTTP requests)
 capture:
-    cd services/agent && {{venv_python}} -m catalog_capture
+    cd services/agent && {{venv_python}} -m catalog_capture --store wellcome
+    cd services/agent && {{venv_python}} -m catalog_capture --store marketplace
+    cd services/agent && {{venv_python}} -m catalog_capture.combine ../../data/catalog/wellcome.json ../../data/catalog/marketplace.json --out ../../data/catalog/stores.json
 
 # Start a self-hosted Steel browser for Jev (viewer: http://localhost:3000/ui)
 steel:
@@ -61,6 +63,6 @@ steel:
 browse store +items:
     cd services/agent && {{venv_python}} -m catalog_capture.browse --store {{store}} {{prepend("--item ", items)}}
 
-# Run only the backend, pricing quotes from the observed Wellcome catalog
+# Run only the backend, pricing quotes from the observed Wellcome and Market Place catalogs
 backend-observed:
-    cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/wellcome.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000
+    cd services/api && MANDATE_CATALOG_PATH=../../data/catalog/stores.json MANDATE_ENABLE_DEMO_CHECKOUT=1 {{venv_python}} -m uvicorn mandate.app:app --reload --port 8000

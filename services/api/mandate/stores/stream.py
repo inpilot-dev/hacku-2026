@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import logging
 from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
@@ -30,8 +31,26 @@ from websockets.asyncio.client import connect
 from .registry import SuperwebStore
 from .steel import CDP_URL, LoginWindow, StoreBrowserError
 
-VIEWPORT = {"width": 412, "height": 780}
+VIEWPORT = {"width": 412, "height": 860}  # until the client says how much room it has
+VIEWPORT_LIMITS = {"width": (320, 480), "height": (420, 1000)}  # phone-width layouts only
+
+
+def resized(msg: object) -> dict | None:
+    """The page size a `resize` message asks for, clamped to phone-like bounds; None for anything else."""
+    if not isinstance(msg, dict) or msg.get("type") != "resize":
+        return None
+    size = {}
+    for key, (low, high) in VIEWPORT_LIMITS.items():
+        value = _num(msg.get(key), low, high)
+        if value is None:
+            return None
+        size[key] = int(value)
+    return size
+log = logging.getLogger(__name__)
+
 FRAME_INTERVAL_S = 0.25
+INPUT_SETTLE_S = 0.06  # after a tap or key, capture this soon instead of waiting for the next frame
+TAB_GONE_S = 8  # captures failing this long mean the tab is gone
 MAX_COORD = 4096  # frames report their own size; this only bounds nonsense input
 KEYS = {"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowRight": 39, "Delete": 46}
 YUU_HOSTS = ("yuurewards.com",)
@@ -136,6 +155,7 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
     async with connect(cdp_url, max_size=2**26) as ws:
         cdp = _AsyncCdp(ws)
         reader = asyncio.create_task(cdp.read())
+        viewport = dict(VIEWPORT)
         try:
             session = (await cdp.call("Target.attachToTarget", targetId=window.target_id, flatten=True))["sessionId"]
             await cdp.call("Page.enable", session)
@@ -143,44 +163,85 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
             async def phone_viewport() -> None:
                 # A narrow desktop viewport: the site's responsive CSS gives the phone layout. Mobile
                 # emulation (`mobile: True`) set during a page load left yuu's sign-in stuck loading.
-                await cdp.call("Emulation.setDeviceMetricsOverride", session, width=VIEWPORT["width"],
-                               height=VIEWPORT["height"], deviceScaleFactor=2, mobile=False)
+                await cdp.call("Emulation.setDeviceMetricsOverride", session, width=viewport["width"],
+                               height=viewport["height"], deviceScaleFactor=2, mobile=False)
 
             await phone_viewport()
             # A background tab is throttled (timers, painting), which left yuu's splash screen up forever.
             await cdp.call("Page.bringToFront", session)
             await cdp.call("Emulation.setFocusEmulationEnabled", session, enabled=True)
-            await send({"type": "viewport", **VIEWPORT})
+            await send({"type": "viewport", **viewport})
+
+            wake = asyncio.Event()  # set after input so the result is captured at once
 
             async def frames() -> None:
                 # Polled screenshots, not Page.startScreencast: in Steel's browser the screencast stopped
                 # sending frames after the first paint, while a capture always paints the current page.
-                previous = None
+                # A capture can fail while the page is between documents (yuu's steps, the redirect back to
+                # the store); that is skipped, and only a tab that stays unreachable ends the stream.
+                previous, failures = None, 0
                 while True:
-                    shot = await cdp.call("Page.captureScreenshot", session, format="jpeg", quality=70,
-                                          optimizeForSpeed=True)
-                    if shot["data"] != previous:
+                    try:
+                        shot = await cdp.call("Page.captureScreenshot", session, format="jpeg", quality=65,
+                                              optimizeForSpeed=True)
+                        failures = 0
+                    except StoreBrowserError:
+                        failures += 1
+                        if failures * FRAME_INTERVAL_S > TAB_GONE_S:
+                            raise
+                        shot = None
+                    if shot and shot["data"] != previous:
                         previous = shot["data"]
-                        await send({"type": "frame", "data": shot["data"], **VIEWPORT})
-                    await asyncio.sleep(FRAME_INTERVAL_S)
+                        await send({"type": "frame", "data": shot["data"], **viewport})
+                    wake.clear()
+                    try:
+                        await asyncio.wait_for(wake.wait(), FRAME_INTERVAL_S)
+                        await asyncio.sleep(INPUT_SETTLE_S)  # let the page react before capturing
+                    except asyncio.TimeoutError:
+                        pass
 
             async def navigation() -> None:
                 while (event := await cdp.events.get()) is not None:
-                    if event.get("sessionId") != session or event.get("method") != "Page.frameNavigated":
+                    if event.get("sessionId") != session:
+                        continue
+                    if event.get("method") in ("Page.domContentEventFired", "Page.loadEventFired"):
+                        # A size set while the first document was still loading can be lost when the
+                        # renderer swaps, and re-sending the same size is then ignored: clear, then set.
+                        try:
+                            await cdp.call("Emulation.clearDeviceMetricsOverride", session)
+                            await phone_viewport()
+                        except StoreBrowserError:
+                            pass
+                        continue
+                    if event.get("method") != "Page.frameNavigated":
                         continue
                     frame = event["params"]["frame"]
                     if frame.get("parentId"):
                         continue
-                    # A navigation that swaps renderer drops the override, so set it again.
-                    await phone_viewport()
-                    if not allowed_url(frame.get("url", ""), store):
-                        await send({"type": "notice", "text": f"Only the {store.name} sign-in can be used here."})
-                        await cdp.call("Page.navigate", session, url=store.login_url())
+                    try:
+                        # A navigation that swaps renderer drops the override, so set it again.
+                        await phone_viewport()
+                        if not allowed_url(frame.get("url", ""), store):
+                            await send({"type": "notice", "text": f"Only the {store.name} sign-in can be used here."})
+                            await cdp.call("Page.navigate", session, url=store.login_url())
+                    except StoreBrowserError:
+                        log.info("sign-in relay: navigation step failed for %s", store.id)
 
             async def inputs() -> None:
                 while (msg := await receive()) is not None:  # None: the client left
+                    if (size := resized(msg)) is not None:
+                        viewport.update(size)  # the client's room for the page, so it shows 1:1, uncut
+                        try:
+                            await phone_viewport()
+                        except StoreBrowserError:
+                            log.info("sign-in relay: resize failed for %s", store.id)
+                        await send({"type": "viewport", **viewport})
                     for method, params in input_commands(msg):
-                        await cdp.call(method, session, **params)
+                        try:
+                            await cdp.call(method, session, **params)
+                        except StoreBrowserError:
+                            log.info("sign-in relay: input dropped for %s", store.id)  # page between documents
+                    wake.set()
 
             async def watch() -> None:
                 while (status := await finished()) is None:
@@ -191,8 +252,12 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
             try:
                 done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
-                    if task.exception() and not isinstance(task.exception(), (StoreBrowserError, ConnectionError)):
-                        raise task.exception()
+                    exc = task.exception()
+                    if exc is None:
+                        continue
+                    if not isinstance(exc, (StoreBrowserError, ConnectionError)):
+                        raise exc
+                    log.warning("sign-in relay for %s ended: %s", store.id, exc)
             finally:
                 for task in tasks:
                     task.cancel()
