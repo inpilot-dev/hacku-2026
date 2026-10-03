@@ -71,6 +71,11 @@ class Catalog:
         """IDs of the merchant's observed delivery contexts, in file order (read-only)."""
         return [c["id"] for c in self._data["delivery_contexts"] if c["merchant_id"] == merchant_id]
 
+    def listing_text(self, product_id: str) -> str:
+        """A product's title and description as the agent sees them; empty if unknown."""
+        product = self._products.get(product_id)
+        return f"{product['title']}\n{product.get('description') or ''}" if product else ""
+
     def merchant(self, merchant_id: str) -> dict:
         merchant = self._data["merchants"].get(merchant_id)
         if merchant is None:

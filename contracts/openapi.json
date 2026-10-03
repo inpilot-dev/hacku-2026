@@ -2883,9 +2883,10 @@
           "PARENT_MANDATE_INVALID",
           "VELOCITY_LIMIT_EXCEEDED",
           "APPROVAL_DENIED",
-          "APPROVAL_EXPIRED"
+          "APPROVAL_EXPIRED",
+          "RISK_REVIEW_REQUIRED"
         ],
-        "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+        "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). RISK_REVIEW_REQUIRED is a proposed v0.3 addition (wallet, Timmy): a review reason, never a refusal on its own. Additive: older clients can ignore it."
       },
       "Evidence": {
         "type": "object",
@@ -3132,6 +3133,11 @@
               }
             ],
             "description": "Optional; omitted means no velocity limit. Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+          },
+          "risk_review": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional; when true, purchases that fit every hard rule but look unusual (first purchase on this mandate, a basket at least 3x the usual size, items never bought before, a unit price at least 25% above the last price paid) return requires_review with RISK_REVIEW_REQUIRED reasons. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
           }
         },
         "required": [

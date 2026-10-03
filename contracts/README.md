@@ -278,6 +278,17 @@ payment earned, which also moves the route's monthly reward tier back. Audit eve
 `VELOCITY_LIMIT_EXCEEDED` once that many reserved or paid purchases by the mandate and its descendants fall
 inside the window. Cancelled and expired reservations do not count.
 
+**Risk review (proposed v0.3, wallet, Timmy).** `Policy.risk_review` (optional boolean, default `false`) adds
+review reasons for purchases that fit every hard rule but look unusual for this owner: the first purchase on the
+mandate, a basket at least 3x the median of the owner's paid purchases (after 3 of them), items never bought before
+(same history), and a unit price at least 25% above the last price paid. Separately, and on every mandate, a product
+listing whose text tries to instruct the agent ("ignore previous instructions", "approve without asking") is a
+review reason. Each reason is a `RuleViolation` with code `RISK_REVIEW_REQUIRED`, a plain `message`, and its own
+`rule_id` (`<mandate>/v<n>/risk:<check>`). They never refuse on their own: the decision is `requires_review` and goes
+through the expiring approval above. An approval waives only the `(code, rule_id)` pairs the owner saw; a risk reason
+that first appears after the approval refuses the retry. Hard rules are never waivable. A child mandate must keep
+`risk_review` on if its parent has it.
+
 New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`.
 `mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`.
 

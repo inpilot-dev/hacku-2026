@@ -20,6 +20,8 @@ ReasonCode = Literal[
     "TRANSACTION_CONFLICT", "APPROVAL_REQUIRED", "POLICY_NOT_NARROWER", "PARENT_MANDATE_INVALID",
     # v0.2 additions
     "VELOCITY_LIMIT_EXCEEDED", "APPROVAL_DENIED", "APPROVAL_EXPIRED",
+    # v0.3 addition
+    "RISK_REVIEW_REQUIRED",
 ]
 Category = Literal[
     "produce", "dairy", "eggs", "meat", "seafood", "bakery", "pantry",
@@ -58,6 +60,7 @@ class Policy(Strict):
     expires_at: StrictStr
     approval_above_minor: NonNegInt | None
     velocity_limit: VelocityLimit | None = None
+    risk_review: StrictBool = False
 
 
 class ConfirmRequest(Strict):
