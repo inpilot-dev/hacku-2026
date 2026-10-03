@@ -69,10 +69,9 @@ First run, 2026-10-03, Wellcome:
 - **Home delivery is not offered.** Wellcome publishes "free delivery to your door on orders over HK$500",
   but the charge below HK$500 is not shown without a cart. Every order under the demo's HK$300 cap falls
   below that threshold, so only Click & Collect is captured.
-- **Pickup orders of HK$50 or less.** The observed rule is "free Click & collect on orders over HK$50". The
-  wallet's catalog adapter adds no charge when no fee rule matches, so a basket of HK$50 or less would be
-  quoted with no pickup charge. Raising an error when no fee rule covers the subtotal is a wallet
-  (`catalog.py`) change for Timmy.
+- **Pickup orders of HK$50 or less.** The observed rule is "free Click & collect on orders over HK$50"; the
+  charge at or below HK$50 was not observed. The wallet therefore refuses such quotes (`422`,
+  `SUBTOTAL_NOT_SUPPORTED`) because no observed fee rule covers them.
 - **Promotions** such as "Buy 2 for $30" exist only in the page's minified app state and are not
   captured. Prices are single-unit prices.
 - **Page 1 only:** 20 products per category.
@@ -91,5 +90,4 @@ placeholder catalog remains a fallback and is labelled as unverified. The normal
 recipes select `data/catalog/wellcome.json` unless `MANDATE_CATALOG_PATH` is explicitly set.
 
 The UI blocks Wellcome quotes at or below HK$50 because the captured evidence only proves free Click & Collect
-above that amount. This is a client-side guard for the prototype flow; the wallet catalog adapter still needs
-to reject out-of-evidence delivery subtotals server-side before this constraint can be considered enforced.
+above that amount. The wallet also refuses those quotes server-side (`SUBTOTAL_NOT_SUPPORTED`).
