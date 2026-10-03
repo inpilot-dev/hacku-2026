@@ -194,6 +194,7 @@ export default function SimpleApp() {
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
   const [receiptDetailError, setReceiptDetailError] = useState('');
+  const receiptDetailRequestId = useRef(0);
   const receiptsLoaded = useRef(false);
   const receiptLoadInFlight = useRef(false);
   const shopRef = useRef<HTMLElement>(null);
@@ -582,15 +583,16 @@ export default function SimpleApp() {
   }
 
   async function openReceipt(record: ReceiptRecord) {
+    const requestId = ++receiptDetailRequestId.current;
     setSelectedReceipt(record.receipt.id); setReceiptDetailError('');
-    if (record.quote) return;
+    if (record.quote) { setReceiptDetailLoading(false); return; }
     setReceiptDetailLoading(true);
     try {
       const quote = await api.quoteById(TOKEN, record.receipt.quote_id);
-      setReceipts((current) => current.map((entry) => entry.receipt.id === record.receipt.id ? { ...entry, quote } : entry));
+      if (requestId === receiptDetailRequestId.current) setReceipts((current) => current.map((entry) => entry.receipt.id === record.receipt.id ? { ...entry, quote } : entry));
     } catch (err) {
-      setReceiptDetailError(err instanceof Error ? err.message : 'Item details are unavailable right now.');
-    } finally { setReceiptDetailLoading(false); }
+      if (requestId === receiptDetailRequestId.current) setReceiptDetailError(err instanceof Error ? err.message : 'Item details are unavailable right now.');
+    } finally { if (requestId === receiptDetailRequestId.current) setReceiptDetailLoading(false); }
   }
 
   useEffect(() => {
