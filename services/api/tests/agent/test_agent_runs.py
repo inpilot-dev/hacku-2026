@@ -191,3 +191,11 @@ def test_questions_offer_every_product_and_none():
     assert set(criteria) == {"rice", NONE}
     assert criteria["rice"]["price_hkd"] == "89.90"
     assert questions["item_0"]["instructions"]["shopper_preference"] == "cheapest"
+
+
+def test_mandate_for_a_store_missing_from_the_catalog_explains_itself(env):
+    client, confirm, _ = env
+    mandate = confirm({**POLICY, "allowed_merchant_ids": ["demo_store_a"]})
+    run = client.get(f"/api/v1/agent-runs/{start(client, mandate, [('rice', 1)]).json()['id']}", headers=USER).json()
+    assert run["status"] == "failed"
+    assert "demo_store_a is not in the current catalog" in run["message"]

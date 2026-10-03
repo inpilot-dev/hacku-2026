@@ -105,17 +105,23 @@ class AgentRuns:
         blocked = set(policy.get("blocked_categories", []))
 
         candidates: list[_Candidate] = []
+        skipped: list[str] = []
         for merchant_id in policy["allowed_merchant_ids"]:
             try:
                 listing = self.wallet.catalog.listing(merchant_id)
             except CatalogError:
-                continue  # the mandate allows a store this catalog does not carry
+                skipped.append(f"{merchant_id} is not in the current catalog")
+                continue
             contexts = self.wallet.catalog.delivery_context_ids(merchant_id)
             # The agent does not propose what the mandate blocks or what needs a person's check;
             # the wallet still enforces both at checkout.
             products = [p for p in listing["products"] if p["available"] and p["category"] not in blocked
                         and not (blocked and p["category_status"] in ("unknown", "conflicting"))]
-            if not contexts or not products:
+            if not contexts:
+                skipped.append(f"{merchant_id} has no observed delivery option")
+                continue
+            if not products:
+                skipped.append(f"{merchant_id} has no available products the mandate allows")
                 continue
             selection = self.selector.choose(items, products, req.get("instruction"))
             self._update(run_id, model_id=selection.model_id)
@@ -123,7 +129,8 @@ class AgentRuns:
 
         if not candidates:
             self._update(run_id, status="failed",
-                         message="None of the stores this mandate allows has a quotable catalog. No basket was built.")
+                         message=f"No basket was built: {'; '.join(skipped)}. "
+                                 "Set up a new mandate that allows a store in the current catalog.")
             return
         quoted = [c for c in candidates if c.quote]
         if not quoted:
