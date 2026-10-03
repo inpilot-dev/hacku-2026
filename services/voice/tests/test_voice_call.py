@@ -159,3 +159,14 @@ def test_without_elevenlabs_nothing_is_called(tmp_path):
     world = World(tmp_path, Settings(webhook_secret="hook", tool_secret="tool", caregiver_pin="2468"))
     world.escalate()
     assert world.outbound == []
+
+
+def test_web_session_gives_the_browser_the_call_id_not_the_token(world):
+    assert world.v.get("/web-session").status_code == 404
+    _, _, _, call_id = world.escalate()
+    session = world.v.get("/web-session").json()
+    assert session["agent_id"] == "agent_1" and session["call_id"] == call_id
+    assert session["dynamic_variables"] == {"call_id": call_id, "shop": "demo_store_a", "total": "HK$297.00"}
+    assert world.hook.events[0]["decision_token"] not in str(session)
+    world.tool("decline", call_id)
+    assert world.v.get("/web-session").status_code == 404

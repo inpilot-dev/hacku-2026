@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .config import Settings
@@ -47,6 +48,7 @@ class Call:
     pin_tries: int = 0
     read_back: bool = False
     outcome: str | None = None  # approved | declined | locked
+    variables: dict = field(default_factory=dict)  # shop and total, for the agent's first message
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -68,6 +70,7 @@ def create_app(settings: Settings | None = None, *, wallet_http: httpx.Client | 
     calls: dict[str, Call] = {}
     app = FastAPI(title="Mandate voice approval", version="0.1.0")
     app.state.calls = calls
+    app.add_middleware(CORSMiddleware, allow_origins=list(settings.allowed_origins), allow_methods=["GET"])
 
     def check_secret(given: str | None, expected: str | None, what: str) -> None:
         if not expected:
@@ -84,7 +87,8 @@ def create_app(settings: Settings | None = None, *, wallet_http: httpx.Client | 
             return {"ignored": True}
         approval = event["approval"]
         call = Call(id=f"call_{secrets.token_urlsafe(12)}", approval_id=approval["id"],
-                    decision_token=event["decision_token"], expires_at=approval["expires_at"])
+                    decision_token=event["decision_token"], expires_at=approval["expires_at"],
+                    variables={"shop": approval["merchant_id"], "total": money(approval["amount_minor"])})
         calls[call.id] = call
         background.add_task(place_call, call, approval)
         return {"call_id": call.id}
@@ -97,9 +101,7 @@ def create_app(settings: Settings | None = None, *, wallet_http: httpx.Client | 
         body = {
             "agent_id": settings.agent_id, "agent_phone_number_id": settings.phone_number_id,
             "to_number": settings.caregiver_phone,
-            "conversation_initiation_client_data": {"dynamic_variables": {
-                "call_id": call.id, "shop": approval["merchant_id"], "total": money(approval["amount_minor"]),
-            }},
+            "conversation_initiation_client_data": {"dynamic_variables": {"call_id": call.id, **call.variables}},
         }
         try:
             res = eleven.post(OUTBOUND_URL, json=body, headers={"xi-api-key": settings.elevenlabs_api_key})
@@ -208,6 +210,22 @@ def create_app(settings: Settings | None = None, *, wallet_http: httpx.Client | 
             return out
         call.outcome = "declined"
         return {"ok": True, "say": "Declined. Nothing will be bought."}
+
+    # ------------------------------------------------------- in-app voice backup
+
+    @app.get("/web-session")
+    def web_session():
+        """Start the same conversation in the browser instead of by phone (no Twilio needed).
+
+        Returns only the agent ID and the call ID: the decision token stays here, and the PIN
+        and read-back rules apply exactly as on a phone call.
+        """
+        open_calls = [c for c in calls.values() if c.outcome is None]
+        if not settings.agent_id or len(open_calls) != 1:
+            raise HTTPException(404, "No single open approval to talk about.")
+        call = open_calls[0]
+        return {"agent_id": settings.agent_id, "call_id": call.id, "approval_id": call.approval_id,
+                "dynamic_variables": {"call_id": call.id, **call.variables}}
 
     @app.get("/health")
     def health():

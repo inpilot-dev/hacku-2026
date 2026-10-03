@@ -92,6 +92,27 @@ be approved by phone; declining still works.
 
 Every tool returns a `say` field to read out.
 
+## In-app voice backup (no phone number needed)
+
+The same agent and tools also work in the browser. This is the backup when there's no Twilio number or the venue has
+bad reception.
+
+- `GET http://localhost:8300/web-session` returns `{agent_id, call_id, dynamic_variables}` for the one open approval,
+  or `404` if there isn't exactly one. It never returns the decision token, and the PIN and read-back rules still
+  apply.
+- For a browser to start the conversation without a key, the agent must allow public access in its security
+  settings. The voice service only allows requests from the local web app's origins; change them with
+  `VOICE_ALLOWED_ORIGINS`.
+- Frontend sketch (Noah), using `@elevenlabs/client`:
+
+  ```ts
+  const s = await fetch('http://localhost:8300/web-session').then((r) => r.json());
+  const conversation = await Conversation.startSession({ agentId: s.agent_id, dynamicVariables: s.dynamic_variables });
+  // later: await conversation.endSession();
+  ```
+
+  Check the SDK's current option names before relying on this. I wrote it from the docs but haven't run it.
+
 ## Tests
 
 `cd services/voice && ../../.venv/bin/python -m pytest -q` runs the service against a real wallet app, with

@@ -30,6 +30,8 @@ class Settings:
     elevenlabs_api_key: str | None = None
     agent_id: str | None = None
     phone_number_id: str | None = None
+    allowed_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173",
+                                        "http://localhost:8000", "http://127.0.0.1:8000")
 
     @property
     def can_call(self) -> bool:
@@ -47,4 +49,6 @@ class Settings:
             elevenlabs_api_key=e.get("ELEVENLABS_API_KEY"),
             agent_id=e.get("ELEVENLABS_AGENT_ID"),
             phone_number_id=e.get("ELEVENLABS_PHONE_NUMBER_ID"),
+            **({"allowed_origins": tuple(o.strip() for o in e["VOICE_ALLOWED_ORIGINS"].split(","))}
+               if e.get("VOICE_ALLOWED_ORIGINS") else {}),
         )
