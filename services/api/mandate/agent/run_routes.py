@@ -9,9 +9,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
 from mandate.payments.auth import Actor, current_actor, require_role
+from mandate.payments.errors import ApiError
 
 from .drafts import DraftService
 from .runs import AgentRuns
+from .shopping_list import ShoppingListError, ShoppingListService, warm_whisper
 
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
 
@@ -55,12 +57,44 @@ class DraftRequest(_Strict):
     parent_mandate_id: StrictStr | None = None
 
 
+class ParseRequest(_Strict):
+    text: Annotated[StrictStr, Field(min_length=1, max_length=2000)]
+
+
+class TranscribeRequest(_Strict):
+    audio_base64: Annotated[StrictStr, Field(min_length=1, max_length=6_000_000)]
+    format: Annotated[StrictStr, Field(min_length=2, max_length=8)]
+
+
 def _user(actor: Actor = Depends(current_actor)) -> Actor:
     return require_role(actor, "user")
 
 
-def build_agent_run_router(runs: AgentRuns, drafts: DraftService | None = None) -> APIRouter:
+def build_agent_run_router(runs: AgentRuns, drafts: DraftService | None = None,
+                           shopping_list: ShoppingListService | None = None,
+                           warm_transcription: bool = False) -> APIRouter:
     router = APIRouter(tags=["agent"])
+    shopping_list = shopping_list or ShoppingListService()
+    if warm_transcription:
+        warm_whisper()
+
+    def _fail(exc: ShoppingListError):
+        raise ApiError(exc.status, "SERVICE_UNAVAILABLE" if exc.status == 503 else "INVALID_REQUEST", str(exc),
+                       retryable=exc.status == 503) from exc
+
+    @router.post("/shopping-list/parse")
+    def parse_list(_actor: Annotated[Actor, Depends(_user)], body: ParseRequest):
+        parsed = shopping_list.parse(body.text)
+        return JSONResponse({"items": parsed.items, "source": parsed.source, "model_id": parsed.model_id,
+                             "note": parsed.note})
+
+    @router.post("/shopping-list/transcribe")
+    def transcribe(_actor: Annotated[Actor, Depends(_user)], body: TranscribeRequest):
+        try:
+            text, model_id = shopping_list.transcribe(body.audio_base64, body.format)
+        except ShoppingListError as exc:
+            _fail(exc)
+        return JSONResponse({"text": text, "model_id": model_id})
 
     if drafts is not None:
         @router.post("/mandates/draft", status_code=201)
