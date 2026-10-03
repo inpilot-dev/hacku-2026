@@ -4,7 +4,7 @@ import type { CartSyncResult, PaymentOptionsResponse, Quote, RiskAssessment } fr
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { api } from '@/lib/api';
@@ -14,7 +14,7 @@ import StoreLoginCanvas from '@/simple/StoreLoginCanvas';
 import { TOKEN, useAccount } from '../data/account';
 import { reasonTitle, riskCheck, type Groceries } from '../data/useGroceries';
 import { storeName } from './AllowanceSetup';
-import { Working } from './chat';
+import { Sticker, Working } from './chat';
 import './store-login.css';
 
 /* The priced basket and what the wallet decided about it. */
@@ -29,6 +29,8 @@ export default function Basket({ g }: { g: Groceries }) {
   return <Card className={cn(v?.kind === 'paid' && 'border-success/40', v?.kind === 'refused' && 'border-destructive/40')}>
     <CardHeader>
       <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect · {g.agentNote || 'Basket'}</CardDescription>
+      <CardAction><Sticker who={v || g.phase === 'paying' ? 'kip' : 'kumi'} size={56}
+        state={v?.kind === 'paid' ? 'approved' : v?.kind === 'refused' ? 'refused' : v || g.phase === 'paying' ? 'idle' : 'happy'} /></CardAction>
       <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0) : g.phase === 'paying' ? 'Checking your rules…' : 'Basket ready'}</CardTitle>
     </CardHeader>
     <CardContent className="space-y-4 text-sm">
@@ -48,7 +50,7 @@ export default function Basket({ g }: { g: Groceries }) {
         {g.paymentComparison && <PaymentRoutes comparison={g.paymentComparison} selected={g.routeId} onSelect={g.selectRoute} />}
       </>}
 
-      {g.phase === 'paying' && <Working>The wallet is checking your rules and paying…</Working>}
+      {g.phase === 'paying' && <Working>Kip is checking your rules and paying…</Working>}
 
       {v?.kind === 'paid' && <p className="text-muted-foreground">Paid in the sandbox within your rules. {money(account.available)} left this {per}. This is not a retailer order confirmation.</p>}
       {v?.kind === 'refused' && (v.violations.length
@@ -57,7 +59,7 @@ export default function Basket({ g }: { g: Groceries }) {
         : <p className="text-muted-foreground">{v.message}</p>)}
       {v?.kind === 'uncertain' && <Alert><AlertTitle>Payment status unknown</AlertTitle><AlertDescription>{v.message}</AlertDescription></Alert>}
       {v?.kind === 'review' && <div className="space-y-3">
-        <p className="text-muted-foreground">The wallet paused this order for you. Nothing is reserved or paid while it waits.</p>
+        <p className="text-muted-foreground">Kip paused this order for you. Nothing is reserved or paid while it waits.</p>
         {v.risk && v.risk.score > 0 && <RiskMeter risk={v.risk} />}
         {v.violations.length > 0 && <ul className="space-y-2">{v.violations.map((x, i) => { const pts = v.risk?.signals.find((s) => s.check === riskCheck(x))?.points;
           return <li key={`${x.rule_id}-${i}`}><span className="font-medium">{reasonTitle(x)}</span>{pts ? <Badge variant="secondary" className="ml-2">+{pts}</Badge> : null}

@@ -12,6 +12,7 @@ import { categoryLabel, money, periodWord } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { TOKEN, useAccount } from '../data/account';
 import StoreAccounts from './StoreAccounts';
+import { Sticker } from './chat';
 
 /*
  * Set up (or change) the grocery allowance: who it's for and the limits, the stores, then the exact permission to
@@ -128,9 +129,12 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
 
   return <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
     <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
-      <DialogHeader>
+      <DialogHeader className="flex-row items-center gap-3 text-left">
+        <Sticker who="bean" state={step === 'review' ? 'done' : 'idle'} size={56} className="shrink-0" />
+        <div className="space-y-1.5">
         <DialogTitle>{change ? 'Change the allowance' : 'Set up an allowance'}</DialogTitle>
-        <DialogDescription>The grocery agent can only spend within these rules. Nothing is active until you confirm.</DialogDescription>
+        <DialogDescription>Bean helps you set the rules. Kumi can only shop within them, and nothing is active until you confirm.</DialogDescription>
+        </div>
       </DialogHeader>
 
       <ol className="flex gap-2 text-xs" aria-label="Setup steps">

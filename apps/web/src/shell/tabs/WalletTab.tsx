@@ -11,7 +11,7 @@ import { api } from '@/lib/api';
 import { categoryLabel, money, periodWord, shortDate } from '@/lib/format';
 import { possessive } from '@/simple/holder';
 import { cn } from '@/lib/utils';
-import { PageHeader } from '../components/chat';
+import { PageHeader, Sticker } from '../components/chat';
 import DeliveryDetails from '../components/DeliveryDetails';
 import { ReceiptList } from '../components/Receipts';
 import StoreAccounts from '../components/StoreAccounts';
@@ -30,7 +30,8 @@ export default function WalletTab() {
   const [revokeOpen, setRevokeOpen] = useState(false);
 
   return <div className="space-y-6">
-    <PageHeader title="Wallet" description="Your allowance, card, receipts and the details the agents use." />
+    <PageHeader title="Wallet" who={a.mandate ? undefined : 'kip'}
+      description="Your allowance, card, receipts and the details the agents use." />
     {a.error && <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{a.error}
       <button className="ml-2 underline" onClick={() => a.setError('')}>Dismiss</button></p>}
 
@@ -43,7 +44,7 @@ export default function WalletTab() {
     {a.mandate && <CardDetails />}
 
     <Card>
-      <CardHeader><CardTitle>Receipts</CardTitle><CardDescription>Paid grocery orders.</CardDescription>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />Receipts</CardTitle><CardDescription>Paid grocery orders, kept by Stella.</CardDescription>
         {a.receipts.records.length > 0 && <CardAction><Button variant="ghost" size="sm" onClick={() => void a.receipts.load(true)}>Refresh</Button></CardAction>}</CardHeader>
       <CardContent><ReceiptList /></CardContent>
     </Card>
@@ -61,7 +62,7 @@ export default function WalletTab() {
     </Card>
 
     <Card>
-      <CardHeader><CardTitle>Activity</CardTitle><CardDescription>{a.fromServer ? 'From the wallet’s audit trail' : 'This session'}</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />Activity</CardTitle><CardDescription>{a.fromServer ? 'From the wallet’s audit trail' : 'This session'}</CardDescription></CardHeader>
       <CardContent>{a.log.length ? <ol className="space-y-2 text-sm">{a.log.map((e) => <li key={e.id} className="flex gap-3">
         <time className="w-12 shrink-0 tabular-nums text-muted-foreground">{new Date(e.at).toLocaleTimeString('en-HK', { hour: '2-digit', minute: '2-digit', hour12: false })}</time>
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', e.tone === 'good' ? 'bg-success' : e.tone === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />
@@ -94,11 +95,14 @@ function AllowanceCard({ onRevoke }: { onRevoke: () => void }) {
     <CardHeader>
       <CardDescription>{possessive(a.holder)} grocery allowance</CardDescription>
       <CardTitle className="text-3xl font-semibold tabular-nums">{a.active ? money(a.available) : money(0)}</CardTitle>
-      <CardAction><Badge variant={status === 'Active' ? 'secondary' : 'outline'} className={cn(status !== 'Active' && 'text-destructive')}>{status}</Badge></CardAction>
+      <CardAction className="flex flex-col items-end gap-1">
+        <Badge variant="outline" className={cn('border-0', status === 'Active' ? 'bg-brand-soft text-brand' : 'bg-destructive/10 text-destructive')}>{status}</Badge>
+        <Sticker who="kip" state={status === 'Active' ? 'idle' : status === 'Paused' ? 'refused' : 'revoked'} size={64} />
+      </CardAction>
     </CardHeader>
     <CardContent className="space-y-5">
       <div className="space-y-1.5">
-        <Progress value={a.limit ? Math.min(100, (a.spent / a.limit) * 100) : 0} />
+        <Progress value={a.limit ? Math.min(100, (a.spent / a.limit) * 100) : 0} className="bg-brand-soft [&>[data-slot=progress-indicator]]:bg-brand" />
         <div className="flex justify-between text-xs text-muted-foreground"><span>{money(a.spent)} used</span><span>{money(a.limit)} a {per}</span></div>
       </div>
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">

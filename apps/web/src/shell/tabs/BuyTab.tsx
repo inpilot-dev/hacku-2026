@@ -42,13 +42,16 @@ export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void })
   }
 
   return <div className="flex flex-col">
-    <PageHeader title="Buy anything" description="Describe it. The agent finds the best deal, checks out as a guest and waits for your OK."
+    <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment') ? 'happy' : 'idle'}
+      description="Describe it. Kumi finds the best deal, checks out as a guest and waits for your OK."
       action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={p.clear}>Clear</Button> : undefined} />
 
-    {p.purchases.length === 0 && <div className="mb-6 grid gap-2">
-      <p className="text-sm text-muted-foreground">Try</p>
-      {SUGGESTIONS.map((s) => <button key={s} onClick={() => setText(s)}
-        className="min-h-11 rounded-xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:bg-accent">{s}</button>)}
+    {p.purchases.length === 0 && <div className="mb-6 space-y-4">
+      <Bubble from="kumi">Hi! Tell me what you want and any must-haves: specs, brand, a price limit. I’ll find the best deal on the web, check out as a guest and show you the exact total before anything is paid.</Bubble>
+      <div className="grid gap-2 pl-[46px]">
+        {SUGGESTIONS.map((s) => <button key={s} onClick={() => setText(s)}
+          className="min-h-11 rounded-2xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:bg-accent">{s}</button>)}
+      </div>
     </div>}
 
     <div className="space-y-6">
@@ -98,11 +101,12 @@ function Thread({ purchase, acting, onApprove, onCancel }: { purchase: Purchase;
     </div>}
 
     {working && <div className="space-y-2 pl-1">
-      <Working>{STATUS_TEXT[purchase.status] ?? 'Working…'}</Working>
-      {steps.length > 0 && <p className="text-xs text-muted-foreground line-clamp-2">{steps[steps.length - 1].text}</p>}
+      <Working who={purchase.status === 'paying' ? 'kip' : 'kumi'}>{STATUS_TEXT[purchase.status] ?? 'Working…'}</Working>
+      {steps.length > 0 && <p className="pl-[46px] text-xs text-muted-foreground line-clamp-2">{steps[steps.length - 1].text}</p>}
     </div>}
 
-    {!working && purchase.status !== 'awaiting_approval' && <Bubble from="agent" tone={tone(purchase)}><Linkified text={purchase.message} /></Bubble>}
+    {!working && purchase.status !== 'awaiting_approval' && <Bubble from={speaker(purchase)} tone={tone(purchase)}><Linkified text={purchase.message} /></Bubble>}
+    {purchase.status === 'awaiting_approval' && <Bubble from="kip">Kumi got to the shop’s card form. Here’s exactly what it will cost; I only pay once you approve this total.</Bubble>}
 
     {purchase.status === 'awaiting_approval' && purchase.order && purchase.choice && <Card className="gap-4">
       <CardHeader>
@@ -154,6 +158,11 @@ function AccountOnly({ options, prominent = false }: { options: Purchase['option
     </a>)}
     {prominent && <><Separator /><p className="text-xs text-muted-foreground">These shops need you to sign in, so the agent can’t check out for you.</p></>}
   </div>;
+}
+
+/** Kip speaks for paying (the wallet); Kumi for finding and checking out. */
+function speaker(p: Purchase): 'kumi' | 'kip' {
+  return ['ordered', 'stopped_before_payment', 'needs_user', 'paying'].includes(p.status) ? 'kip' : 'kumi';
 }
 
 function tone(p: Purchase): 'good' | 'bad' | 'info' {
