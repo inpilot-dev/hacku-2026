@@ -51,6 +51,19 @@ Browser checks: setup rules → stores → exact permission review; 390px viewpo
 
 Payment route cards display the wallet’s fee, estimated reward and net-cost comparison with observed sources and caveats. The frontend does not recalculate financial values. A completed purchase links directly to the digital receipt. Receipt refresh preserves already-loaded quote details.
 
-The digital receipt was opened from the checkout result and from history, then history was refreshed and the item details were confirmed to remain visible. Remaining integration work: exercise approval/uncertain-payment states. Structured site-risk cards depend on a shared API response; the current store connection messages are displayed as text without inferring risk scores.
+The digital receipt was opened from the checkout result and from history, then history was refreshed and the item details were confirmed to remain visible. Approval and uncertain-payment states were subsequently exercised in an isolated wallet; see the verification notes below. Structured site-risk cards depend on a shared API response; the current store connection messages are displayed as text without inferring risk scores.
 
-Uncertain checkout handling: HTTP failures never imply a refusal. The client attempts a receipt lookup, preserves an unresolved transaction reference in sessionStorage, and restores its quote/receipt on reload without submitting a payment. The “Check payment status” action is GET-only. A missing receipt leaves the result unknown, and a new shopping flow is unavailable while unresolved. Quote-restore failure also blocks a fresh purchase. Known wallet refusals and completed receipts clear the pending reference. Build and source checks cover this change; a response-loss runtime reproduction is still pending.
+Uncertain checkout handling: HTTP failures never imply a refusal. The client attempts a receipt lookup, preserves an unresolved transaction reference in sessionStorage, and restores its quote/receipt on reload without submitting a payment. The “Check payment status” action is GET-only. A missing receipt leaves the result unknown, and a new shopping flow is unavailable while unresolved. Quote-restore failure also blocks a fresh purchase. Known wallet refusals and completed receipts clear the pending reference. Response-loss behavior was reproduced in an isolated runtime; see the verification notes below.
+
+### Isolated runtime verification (3 October 2026)
+
+A temporary server on :8016 used its own wallet, keys and store data under /tmp. The user-facing :8000 wallet was not modified by these checks.
+
+- Activated a permission through rules → stores → exact policy review, with a HK$100 approval threshold.
+- A HK$139.30 purchase requested approval; denying it left the payments table empty and the HK$800 budget intact.
+- A deliberate new shopping request generated a new run, rather than reusing the denied purchase.
+- Approved the next HK$139.30 purchase. A temporary middleware discarded the successful checkout response and returned HTTP 503; it also temporarily blocked receipt lookup. The UI showed an unknown result and prevented a new purchase.
+- Reload preserved the unresolved quote and transaction. A failed status lookup kept the result unknown. Database counts remained one wallet payment and one rail payment.
+- Restoring receipt lookup and clicking Check payment status recovered the original paid receipt. Counts remained one wallet payment and one rail payment; the available budget was HK$660.70.
+
+The middleware is a temporary reproduction fixture, not product code. These checks cover response loss after a completed sandbox capture; they do not establish behavior for every possible real payment-network failure.

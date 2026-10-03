@@ -104,7 +104,9 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
     case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
     case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
-    case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
+    case 'authorization_refused': return event.payload.status === 'requires_review'
+      ? { who: 'kip', text: 'Kip requested user approval', tone: 'info' }
+      : { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };
     case 'payment_refused': return { who: 'kip', text: 'Payment refused', tone: 'bad' };
     default: return null;
@@ -347,6 +349,8 @@ export default function SimpleApp() {
   }
 
   function resetShop() {
+    // A deliberate new shopping request is distinct from retrying an in-flight request.
+    sessionStorage.removeItem('mandate-idempotency-agent-run');
     setPaymentComparison(null); setRuleTestBasket(false); setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
   }
 
@@ -871,7 +875,7 @@ export default function SimpleApp() {
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
                 {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul>}
-                <p className="m2-muted">Approval covers only this basket and the reasons shown here, once.</p>
+                <p className="m2-muted">Approval covers only this basket and the reasons shown here, once. Expires {new Date(verdict.approval.expires_at).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong' })} HKT. The wallet checks expiry when you decide.</p>
                 <div className="m2-row">
                   <button className="m2-cta" onClick={() => void decide(true)} disabled={busy === 'decide'}>Approve once</button>
                   <button className="m2-ghost" onClick={() => void decide(false)} disabled={busy === 'decide'}>Say no</button>
