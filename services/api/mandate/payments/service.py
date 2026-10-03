@@ -32,6 +32,9 @@ from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
 
 PAYLOAD_VERSION = 1
+# An agent may keep only this many purchases waiting on one mandate's owner, so it cannot
+# wear the owner down with a stream of approval requests until one is tapped through.
+MAX_PENDING_APPROVALS = 3
 
 
 def _id(prefix: str) -> str:
@@ -148,7 +151,8 @@ class Wallet:
         if actor.role == "user":
             return m["owner_id"] == actor.actor_id
         if actor.role == "agent":
-            return m["delegatee_id"] == actor.actor_id
+            # Zero trust: the agent's token names the user it works for; a mandate from anyone else is invisible.
+            return m["delegatee_id"] == actor.actor_id and m["owner_id"] == actor.family_id
         return False
 
     @staticmethod
@@ -560,7 +564,7 @@ class Wallet:
                     return 200, body
 
             leaf = self._load_mandate(conn, req["mandate_id"])
-            if leaf is None or leaf["delegatee_id"] != actor.actor_id:
+            if leaf is None or not self._can_see_mandate(actor, leaf):
                 raise not_found("Mandate")
             qrow = self._load_quote(conn, req["quote_id"], actor)
             if qrow is None:
@@ -599,6 +603,14 @@ class Wallet:
                     ev.hard += [{**v, "message": f"New since the approval: {v['message']} Start a new purchase "
                                                  f"so it can be reviewed."} for v in ev.review]
                     ev.review = []
+            elif ev.status == "requires_review":
+                pending = conn.execute("SELECT COUNT(*) FROM approval_requests WHERE mandate_id = ? AND status = 'pending'",
+                                       (leaf["id"],)).fetchone()[0]
+                if pending >= MAX_PENDING_APPROVALS:
+                    ev.hard.append(rules.violation(
+                        "RISK_REVIEW_REQUIRED", leaf, "risk:pending_approvals",
+                        f"{pending} purchases are already waiting for {leaf['owner_id']} to answer; the agent "
+                        f"must wait for those before asking again."))
 
             if ev.status == "approved":
                 amount = quote["total_minor"]
@@ -764,7 +776,7 @@ class Wallet:
                 raise not_found("Authorized transaction")
             r = dict(row)
             leaf = self._load_mandate(conn, r["mandate_id"])
-            if leaf["delegatee_id"] != actor.actor_id:
+            if not self._can_see_mandate(actor, leaf):
                 raise not_found("Authorized transaction")
 
             def refuse(code: str, rule: str, message: str, release: bool, mandate: dict | None = None) -> tuple[int, dict]:

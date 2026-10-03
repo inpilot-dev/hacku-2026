@@ -2886,7 +2886,7 @@
           "APPROVAL_EXPIRED",
           "RISK_REVIEW_REQUIRED"
         ],
-        "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). RISK_REVIEW_REQUIRED is a proposed v0.3 addition (wallet, Timmy): a review reason, never a refusal on its own. Additive: older clients can ignore it."
+        "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). RISK_REVIEW_REQUIRED is a proposed v0.3 addition (wallet, Timmy): normally a review reason; it refuses only when the reason cannot be put to the owner (new since their approval, or too many purchases already waiting). Additive: older clients can ignore it."
       },
       "Evidence": {
         "type": "object",
@@ -3352,7 +3352,8 @@
         "additionalProperties": false,
         "properties": {
           "reason": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           }
         },
         "required": []
@@ -4550,7 +4551,8 @@
         "additionalProperties": false,
         "properties": {
           "reason": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 500
           }
         },
         "required": []

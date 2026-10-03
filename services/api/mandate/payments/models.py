@@ -69,11 +69,11 @@ class ConfirmRequest(Strict):
 
 
 class RevokeRequest(Strict):
-    reason: StrictStr | None = None
+    reason: Annotated[StrictStr, Field(max_length=500)] | None = None
 
 
 class CancelRequest(Strict):
-    reason: StrictStr | None = None
+    reason: Annotated[StrictStr, Field(max_length=500)] | None = None
 
 
 class QuoteItemRequest(Strict):

@@ -289,6 +289,15 @@ through the expiring approval above. An approval waives only the `(code, rule_id
 that first appears after the approval refuses the retry. Hard rules are never waivable. A child mandate must keep
 `risk_review` on if its parent has it.
 
+`RISK_REVIEW_REQUIRED` also appears in a **refusal** in two cases where the reason cannot be put to the owner: a
+risk reason that first appears after the owner approved (the retry is refused; start a new purchase), and an agent
+that already has 3 purchases waiting for the owner on that mandate (`rule_id` `.../risk:pending_approvals`), so it
+cannot wear the owner down with approval requests.
+
+**Zero trust on agent requests (wallet, Timmy).** An agent token is valid only for mandates whose delegatee is that
+agent *and* whose owner is the user the token names; anything else is 404. `RevokeRequest.reason` and
+`CancelRequest.reason` are capped at 500 characters like the other free-text fields.
+
 New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`.
 `mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`.
 
