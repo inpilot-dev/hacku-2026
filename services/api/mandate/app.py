@@ -10,6 +10,9 @@ from mandate.payments.dev_app import create_app
 from mandate.payments.drafts import InMemoryDrafts
 from mandate.agent.catalog_routes import build_catalog_router
 from mandate.agent.drafts import DraftService
+from mandate.agent.purchase.profile import ProfileStore
+from mandate.agent.purchase.routes import build_purchase_router
+from mandate.agent.purchase.runs import PurchaseRuns
 from mandate.agent.run_routes import build_agent_run_router
 from mandate.agent.runs import AgentRuns
 from mandate.integration.demo_routes import build_demo_router
@@ -36,6 +39,8 @@ def build_app():
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
     app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts), warm_transcription=True),
                        prefix="/api/v1")
+    profiles = ProfileStore()
+    app.include_router(build_purchase_router(PurchaseRuns(profiles), profiles), prefix="/api/v1")
     store_browser = SteelStoreBrowser()
     stores = StoreConnections(store_browser, wallet.clock.now)
     app.include_router(build_store_router(stores, CartSync(wallet, stores, store_browser)), prefix="/api/v1")

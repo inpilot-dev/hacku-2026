@@ -10,7 +10,9 @@ quotes the page, code checks every quote and reads the amounts.
 from __future__ import annotations
 
 import json
+import re
 import time
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 
 from .assess import amount_minor, quoted
@@ -45,6 +47,14 @@ NEXT_PAGE = ("Continue this guest checkout on the current page. The contact and 
              "or debit card, and continue. Done only when the card number field is visible. {rules}\n"
              "Shipping details:\n{shipping}")
 MAX_PAGES = 4
+# Buttons common enough to click without asking Jev: one model call less and no wrong icon picked.
+DIRECT = {
+    "add_to_cart": re.compile(r"^\s*(add\s*to\s*(cart|bag|basket)|加入購物車|加入購物袋|放入購物車|加入購物籃)\s*$", re.I),
+    "checkout": re.compile(r"^\s*((proceed|continue|go)\s*to\s*)?check\s*out\s*$|^\s*(前往)?結帳\s*$|^\s*(前往)?結算\s*$|"
+                           r"^\s*去結帳\s*$", re.I),
+}
+CART_PATH = re.compile(r"/(cart|basket|shopping-?cart|shopping-?bag|bag)/?$", re.I)
+CART_LINK = re.compile(r"^\s*(view\s*)?(cart|bag|basket)\s*$|^\s*(查看)?購物車\s*$", re.I)
 STOPS = ("card_field", "final_action")  # the tab stopped Jev at the payment step
 
 
@@ -83,7 +93,9 @@ class OrderSummary:
 
     @property
     def payable(self) -> bool:
-        return self.stage == "payment" and self.total_minor is not None and not self.problems
+        # A review page with cash on delivery or bank transfer selected is not payable by card.
+        return (self.stage == "payment" and "number" in self.card_fields and self.total_minor is not None
+                and not self.problems)
 
     def as_dict(self) -> dict:
         return {k: getattr(self, k) for k in ("stage", "url", "total_minor", "total_text", "shipping_text",
@@ -96,13 +108,16 @@ def go_to_payment(tab: GuestTab, title: str, quantity: int, profile: dict, on_st
     for phase, goal in PHASES:
         if on_step:
             on_step({"phase": phase})
+        if phase in DIRECT and _direct(tab, phase, on_step):
+            continue
         pages = MAX_PAGES if phase == "details" else 1
         for page in range(pages):
             if phase == "details" and page and "number" in _card_roles(tab):
                 return phase, "card_field"
             text = (goal if page == 0 else NEXT_PAGE).format(title=title, quantity=quantity, shipping=shipping,
                                                             rules=RULES)
-            status = _attempt(tab, text, on_step, values, stop_on_navigate=phase == "details")
+            status = _attempt(tab, text, on_step, values, stop_on_navigate=phase == "details",
+                              deny=None if phase == "add_to_cart" else DIRECT["add_to_cart"])
             if status in STOPS:
                 return phase, status
             if status != "navigated":
@@ -112,11 +127,67 @@ def go_to_payment(tab: GuestTab, title: str, quantity: int, profile: dict, on_st
     return "details", "card_field" if "number" in _card_roles(tab) else status
 
 
-def _attempt(tab: GuestTab, goal: str, on_step, values: dict, stop_on_navigate: bool) -> str:
+def _direct(tab: GuestTab, phase: str, on_step) -> bool:
+    """Click the page's one obvious button for this phase, checking the page reacted. False: leave it to Jev."""
+    before = tab.snapshot()
+    if phase == "checkout" and not _wait_for(tab, DIRECT["checkout"], timeout_s=2):
+        # Most shops only offer checkout from the cart page; open it from the shop's own cart link.
+        host = urlparse(before["url"]).hostname
+        cart = next((link["href"] for link in before["links"] if urlparse(link["href"]).hostname == host
+                     and CART_PATH.search(urlparse(link["href"]).path)), None)
+        found = tab.buttons(CART_LINK) if cart is None else []
+        if found and tab.click_button(found[0]):
+            tab.wait_loaded()
+        else:
+            for url in [cart] if cart else _cart_guesses(before["url"]):
+                page = tab.open(url)
+                if not NOT_FOUND.search(page["title"] + " " + page["text"][:300]):
+                    break
+            else:
+                tab.open(before["url"])  # no cart page: back to where Jev can look for one
+        if on_step:
+            on_step({"action": "Open the cart", "kind": "click", "url": before["url"], "typed": False})
+    found = _wait_for(tab, DIRECT[phase])
+    if not found or not tab.click_button(found[0]):
+        return False
+    if on_step:
+        on_step({"action": found[0]["text"], "kind": "click", "url": before["url"], "typed": False})
+    time.sleep(2)
+    tab.wait_loaded()
+    after = tab.snapshot()
+    if phase == "checkout":
+        return after["url"] != before["url"]
+    # Added: the shop moved to its cart, or its page now says so (a mini cart, a count, a message).
+    return after["url"] != before["url"] or after["text"] != before["text"]
+
+
+NOT_FOUND = re.compile(r"\b404\b|not found|找不到|頁面不存在", re.I)
+
+
+def _cart_guesses(url: str) -> list[str]:
+    """/zh-hk/cart then /cart: where shops without a cart link usually keep it."""
+    parts = urlparse(url)
+    origin = f"{parts.scheme}://{parts.netloc}"
+    first = parts.path.strip("/").split("/")[0]
+    locale = f"/{first}" if re.fullmatch(r"[a-z]{2}(-[a-z]{2,4})?", first, re.I) else ""
+    return [f"{origin}{locale}/cart", f"{origin}/cart"] if locale else [f"{origin}/cart"]
+
+
+def _wait_for(tab: GuestTab, pattern: re.Pattern, timeout_s: float = 8) -> list[dict]:
+    """Matching buttons, waiting for client-rendered pages to draw them."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        found = tab.buttons(pattern)
+        if found or time.monotonic() > deadline:
+            return found
+        time.sleep(0.7)
+
+
+def _attempt(tab: GuestTab, goal: str, on_step, values: dict, stop_on_navigate: bool, deny=None) -> str:
     """One Jev run, retried once with a fresh agent when it gives up (pages still rendering, fields now flagged)."""
     status = "blocked"
     for _attempt in range(2):
-        result = tab.run_jev(goal, on_step=on_step, fill_from=values, stop_on_navigate=stop_on_navigate)
+        result = tab.run_jev(goal, on_step=on_step, fill_from=values, stop_on_navigate=stop_on_navigate, deny=deny)
         status = f"{result.status}: {result.note}" if result.status in ("blocked", "error") and result.note \
             else result.status
         if result.status not in ("blocked", "error"):

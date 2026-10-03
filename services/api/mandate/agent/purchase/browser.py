@@ -80,19 +80,29 @@ SET_JS = r"""((i, value) => {
   return true;
 })""".replace("FIELDS", FIELDS)
 
-FINAL_BUTTONS_JS = r"""(pattern => {
+# Buttons whose text matches a pattern, in document order: [{index, text}]. `index` is for BUTTON_AT_JS.
+BUTTON_SELECTOR = "button, input[type=submit], input[type=button], [role=button], a"
+BUTTONS_JS = r"""(pattern => {
   const re = new RegExp(pattern, 'i');
   const out = [];
-  for (const e of document.querySelectorAll('button, input[type=submit], [role=button], a')) {
+  document.querySelectorAll(SELECTOR).forEach((e, index) => {
     const text = (e.innerText || e.value || e.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (!text || text.length > 60 || !re.test(text) || e.disabled) continue;
-    e.scrollIntoView({block: 'center'});
+    if (!text || text.length > 60 || !re.test(text) || e.disabled || e.getAttribute('aria-disabled') === 'true') return;
     const r = e.getBoundingClientRect();
-    if (!r.width || !r.height) continue;
-    out.push({text, x: r.x + r.width / 2, y: r.y + r.height / 2});
-  }
+    if (r.width < 8 || r.height < 8 || !e.checkVisibility({checkOpacity: true, checkVisibilityCSS: true})) return;
+    out.push({index, text});
+  });
   return JSON.stringify(out);
-})"""
+})""".replace("SELECTOR", json.dumps(BUTTON_SELECTOR))
+# Scroll button `index` into view; its centre if nothing covers it, else null.
+BUTTON_AT_JS = r"""(index => {
+  const e = document.querySelectorAll(SELECTOR)[index];
+  if (!e) return null;
+  e.scrollIntoView({block: 'center', inline: 'center'});
+  const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+  if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return null;
+  return e.contains(document.elementFromPoint(x, y)) ? JSON.stringify({x, y}) : null;
+})""".replace("SELECTOR", json.dumps(BUTTON_SELECTOR))
 
 
 class BrowserError(Exception):
@@ -186,7 +196,7 @@ class GuestTab:
             self.context = cdp("Target.createBrowserContext", disposeOnDetach=False)["browserContextId"]
             self.target = cdp("Target.createTarget", url="about:blank", browserContextId=self.context)["targetId"]
             self.session = cdp("Target.attachToTarget", targetId=self.target, flatten=True)["sessionId"]
-            self.call("Emulation.setDeviceMetricsOverride", width=1120, height=780, deviceScaleFactor=1, mobile=False)
+            self.call("Emulation.setDeviceMetricsOverride", width=1440, height=900, deviceScaleFactor=1, mobile=False)
             self.call("Emulation.setFocusEmulationEnabled", enabled=True)
             cdp("Target.activateTarget", targetId=self.target)  # visible in the Steel viewer
         except Exception as exc:  # noqa: BLE001 - the browser daemon raises plain errors
@@ -238,19 +248,20 @@ class GuestTab:
     # ---------------------------------------------------------------------- Jev
 
     def run_jev(self, goal: str, max_steps: int = 45, on_step=None, fill_from: dict[str, str] | None = None,
-                stop_on_navigate: bool = False) -> JevResult:
+                stop_on_navigate: bool = False, deny: re.Pattern | None = None) -> JevResult:
         """Let Jev work toward the goal in this tab; stops before any final-order click or card field.
 
         With `fill_from`, form fields get values copied from that dict only (a model picks the key).
-        With `stop_on_navigate`, returns "navigated" once a click leads to another page."""
+        With `stop_on_navigate`, returns "navigated" once a click leads to another page.
+        With `deny`, a click on a control whose label matches ends the run as "denied" (e.g. adding twice)."""
         _install_field_filler()
         _fields.values = {k: v for k, v in (fill_from or {}).items() if v} or None
         try:
-            return self._run_jev(goal, max_steps, on_step, stop_on_navigate)
+            return self._run_jev(goal, max_steps, on_step, stop_on_navigate, deny)
         finally:
             _fields.values = None
 
-    def _run_jev(self, goal: str, max_steps: int, on_step, stop_on_navigate: bool) -> JevResult:
+    def _run_jev(self, goal: str, max_steps: int, on_step, stop_on_navigate: bool, deny) -> JevResult:
         agent = _tab_agent(self, goal)
         steps: list[dict] = []
         skipped: list[str] = []
@@ -292,6 +303,8 @@ class GuestTab:
                     return JevResult("final_action", steps, label)
                 if action["kind"] == "fill" and CARD_FIELD.search(label):
                     return JevResult("card_field", steps, label)
+                if deny is not None and action["kind"] == "click" and deny.search(label.split(" → ")[0]):
+                    return JevResult("denied", steps, label)
             _fields.labels = [a["label"] for a in state["page"]["actions"] if a["kind"] in ("fill", "select")]
             try:
                 agent.command("act", {"fingerprint": state["page"]["fingerprint"]})
@@ -372,8 +385,24 @@ class GuestTab:
                 filled.append(field["role"])
         return filled
 
+    def buttons(self, pattern: re.Pattern) -> list[dict]:
+        """Visible buttons in the page (not its iframes) whose text matches."""
+        return json.loads(self.evaluate(f"({BUTTONS_JS})({json.dumps(pattern.pattern)})"))
+
     def final_buttons(self) -> list[dict]:
-        return json.loads(self.evaluate(f"({FINAL_BUTTONS_JS})({json.dumps(FINAL_ACTION.pattern)})"))
+        return self.buttons(FINAL_ACTION)
+
+    def click_button(self, button: dict) -> bool:
+        """Scroll the button into view and click its centre; False if it is gone or covered."""
+        at = self.evaluate(f"({BUTTON_AT_JS})({button['index']})")
+        if not at:
+            return False
+        time.sleep(0.3)  # smooth scrolling
+        at = json.loads(self.evaluate(f"({BUTTON_AT_JS})({button['index']})") or "null")
+        if not at:
+            return False
+        self.click(at["x"], at["y"])
+        return True
 
     def click(self, x: float, y: float) -> None:
         for event in ("mousePressed", "mouseReleased"):

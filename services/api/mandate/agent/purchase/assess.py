@@ -106,6 +106,19 @@ def amount_minor(quote: str) -> int | None:
     return int(whole) * 100 + int(cents.ljust(2, "0") or 0)
 
 
+# Words that state a count ("Dual USB-C", "雙 USB-C"), so a quote without digits can still show a number.
+NUMBER_WORDS = {"single": 1, "one": 1, "dual": 2, "double": 2, "two": 2, "twin": 2, "triple": 3, "three": 3,
+                "quad": 4, "four": 4, "five": 5, "six": 6, "單": 1, "雙": 2, "双": 2, "兩": 2, "两": 2, "三": 3, "四": 4}
+
+
+def numbers_in(quote: str) -> list[float]:
+    found = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", quote.replace(",", ""))]
+    lowered = quote.lower()
+    found += [float(v) for w, v in NUMBER_WORDS.items()
+              if (re.search(rf"\b{w}\b", lowered) if w.isascii() else w in quote)]
+    return found
+
+
 def _check(req: Requirement, answer: dict, page_text: str) -> Check:
     name = req.describe()
     quote = answer["quote"]
@@ -115,8 +128,7 @@ def _check(req: Requirement, answer: dict, page_text: str) -> Check:
         return Check(name, None, None, "the model's quote is not on the page")
     if req.kind in ("min", "max"):
         number = answer["number"]
-        if number is None or not any(n for n in re.findall(r"\d+(?:\.\d+)?", quote.replace(",", ""))
-                                     if abs(float(n) - number) < 1e-6):
+        if number is None or not any(abs(n - number) < 1e-6 for n in numbers_in(quote)):
             return Check(name, False, quote, "the value is not in the quoted text")
         ok = number >= req.number if req.kind == "min" else number <= req.number
         return Check(name, ok, quote, "" if ok else f"page shows {number:g}")
