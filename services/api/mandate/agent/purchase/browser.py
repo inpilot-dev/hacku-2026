@@ -209,7 +209,7 @@ def load_env() -> None:
     os.environ.setdefault("TEXT_MODEL_BASE_URL", "https://openrouter.ai/api/v1")
     os.environ.setdefault("TEXT_MODEL", "inception/mercury-2.5")
     os.environ.setdefault("TEXT_MODEL_REASONING", "none")
-    os.environ.setdefault("BU_CDP_WS", os.environ.get("MANDATE_STEEL_CDP_URL", "ws://localhost:3000/"))
+    os.environ.setdefault("BU_CDP_WS", os.environ.get("MANDATE_STEEL_CDP_URL", "ws://127.0.0.1:3000/"))
     os.environ.setdefault("BH_TELEMETRY", "0")
     missing = [k for k in ("TYPESAFE_API_KEY", "TEXT_MODEL_API_KEY") if not os.environ.get(k)]
     if missing:
