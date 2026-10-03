@@ -206,3 +206,49 @@ CREATE TABLE IF NOT EXISTS approval_requests (
     note            TEXT
 );
 CREATE INDEX IF NOT EXISTS approval_requests_open ON approval_requests(status, expires_at);
+
+-- Sandbox card issuer (mandate/payments/issuing.py). Each mandate has one
+-- virtual card; each purchase on a card rail gets a single-use card under it.
+-- The PAN is stored only encrypted and found by a keyed fingerprint; the CVV
+-- is derived, never stored.
+CREATE TABLE IF NOT EXISTS virtual_cards (
+    id                TEXT PRIMARY KEY,
+    owner_id          TEXT NOT NULL,
+    mandate_id        TEXT NOT NULL REFERENCES mandates(id),
+    parent_card_id    TEXT REFERENCES virtual_cards(id),
+    reservation_id    TEXT UNIQUE,
+    usage             TEXT NOT NULL CHECK (usage IN ('mandate', 'single_use')),
+    network           TEXT NOT NULL,
+    pan_fingerprint   TEXT NOT NULL UNIQUE,
+    pan_ciphertext    BLOB NOT NULL,
+    last4             TEXT NOT NULL,
+    exp_month         INTEGER NOT NULL CHECK (exp_month BETWEEN 1 AND 12),
+    exp_year          INTEGER NOT NULL,
+    expires_at        TEXT NOT NULL,
+    spend_limit_minor INTEGER NOT NULL CHECK (spend_limit_minor >= 0),
+    currency          TEXT NOT NULL,
+    merchant_lock_json TEXT,
+    blocked_mccs_json TEXT NOT NULL,
+    status            TEXT NOT NULL CHECK (status IN ('active', 'frozen', 'used', 'cancelled')),
+    issued_at         TEXT NOT NULL,
+    status_changed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS virtual_cards_one_per_mandate ON virtual_cards(mandate_id) WHERE usage = 'mandate';
+
+-- Every card authorization attempt, approved or declined, with its ISO 8583 response code.
+CREATE TABLE IF NOT EXISTS card_authorizations (
+    id             TEXT PRIMARY KEY,
+    card_id        TEXT NOT NULL REFERENCES virtual_cards(id),
+    mandate_id     TEXT NOT NULL REFERENCES mandates(id),
+    merchant_id    TEXT NOT NULL,
+    mcc            TEXT,
+    amount_minor   INTEGER NOT NULL CHECK (amount_minor >= 0),
+    currency       TEXT NOT NULL,
+    approved       INTEGER NOT NULL CHECK (approved IN (0, 1)),
+    response_code  TEXT NOT NULL,
+    decline_reason TEXT,
+    message        TEXT NOT NULL,
+    reservation_id TEXT,
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS card_authorizations_by_mandate ON card_authorizations(mandate_id, created_at);

@@ -19,6 +19,7 @@ from mandate.storage.db import Database
 
 from .catalog import Catalog
 from .drafts import InMemoryDrafts
+from .issuing import SandboxCardIssuer
 from .errors import install_error_handlers
 from .routes import build_router
 from .service import Wallet
@@ -30,8 +31,10 @@ def create_app(data_dir: str | Path | None = None, **wallet_kwargs) -> tuple[Fas
                     or Path(__file__).resolve().parents[2] / ".data" / "wallet")
     db = Database(data_dir / "wallet.sqlite3")
     db.migrate()
-    signer = Signer.from_key_dir(os.environ.get("MANDATE_WALLET_KEY_DIR") or data_dir / "keys")
+    key_dir = os.environ.get("MANDATE_WALLET_KEY_DIR") or data_dir / "keys"
+    signer = Signer.from_key_dir(key_dir)
     wallet_kwargs.setdefault("draft_lookup", InMemoryDrafts())
+    wallet_kwargs.setdefault("issuer", SandboxCardIssuer.from_key_dir(key_dir))
     wallet = Wallet(db, signer, Catalog.load(), **wallet_kwargs)
 
     app = FastAPI(title="Mandate wallet (dev)", version="0.1.0")
