@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AuditEvent, BudgetResponse, Mandate, Quote, Receipt, VirtualCard } from '../../../../../contracts/types';
 import { api, ApiError } from '@/lib/api';
 import { money } from '@/lib/format';
+import { newId } from '@/lib/utils';
 import { holderName, saveHolderName } from '@/simple/holder';
 
 /*
@@ -52,7 +53,7 @@ function useAccountState() {
   const [setup, setSetup] = useState<null | 'new' | 'change'>(null);
 
   const note = useCallback((who: Who, text: string, tone: LogEntry['tone']) => {
-    setLog((current) => [{ id: crypto.randomUUID(), at: new Date().toISOString(), who, text, tone }, ...current].slice(0, 20));
+    setLog((current) => [{ id: newId(), at: new Date().toISOString(), who, text, tone }, ...current].slice(0, 20));
   }, []);
 
   const refresh = useCallback(async (id = mandateId) => {

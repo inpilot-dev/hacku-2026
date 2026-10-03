@@ -15,26 +15,39 @@ export class ApiError extends Error {
   }
 }
 
+import { newId } from './utils';
+
 const API_ROOT = '/api/v1';
 function sessionKey(operation: string) {
   const storageKey = `mandate-idempotency-${operation}`;
   const saved = sessionStorage.getItem(storageKey);
   if (saved) return saved;
-  const generated = crypto.randomUUID();
+  const generated = newId();
   sessionStorage.setItem(storageKey, generated);
   return generated;
 }
 
+/** SHA-256 hex where Web Crypto is available (secure origins); otherwise a non-cryptographic FNV-1a hash, which is
+ *  enough to tell one request body from another for idempotency keys. */
+async function digestHex(text: string): Promise<string> {
+  if (crypto.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) { hash ^= text.charCodeAt(i); hash = Math.imul(hash, 0x01000193) >>> 0; }
+  return `fnv-${hash.toString(16)}-${text.length}`;
+}
+
 async function semanticSessionKey(operation: string, requestBody: unknown) {
   const serialized = JSON.stringify(requestBody);
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
-  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const fingerprint = await digestHex(serialized);
   const storageKey = `mandate-idempotency-${operation}`;
   try {
     const previous = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') as { fingerprint?: string; key?: string } | null;
     if (previous?.fingerprint === fingerprint && previous.key) return previous.key;
   } catch { /* Replace stale or malformed local idempotency state. */ }
-  const key = crypto.randomUUID();
+  const key = newId();
   sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key }));
   return key;
 }

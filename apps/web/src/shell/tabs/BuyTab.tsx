@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { money } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { Bubble, Linkified, PageHeader, shortUrl, Working } from '../components/chat';
 import { isWorking, usePurchases } from '../data/usePurchases';
 
@@ -66,8 +67,9 @@ export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void })
     </Alert>}
     {p.error && <Alert variant="destructive" className="mt-6"><XCircle /><AlertDescription>{p.error}</AlertDescription></Alert>}
 
-    {/* The composer sits above the phone tab bar and at the bottom of the page on desktop. */}
-    <div className="sticky bottom-20 z-10 mt-6 md:bottom-4">
+    {/* The composer sits above the phone tab bar; while a purchase is open it stays in the flow so it never covers
+        the approval buttons. */}
+    <div className={cn('z-10 mt-6', !p.busy && 'sticky bottom-20 md:bottom-4')}>
       <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40"
         onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={1000}

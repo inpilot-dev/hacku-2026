@@ -163,5 +163,5 @@ function CardDetails() {
 }
 
 function Rule({ k, v }: { k: string; v: string }) {
-  return <div className="min-w-0"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="truncate font-medium" title={v}>{v}</dd></div>;
+  return <div className="min-w-0"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="font-medium break-words">{v}</dd></div>;
 }

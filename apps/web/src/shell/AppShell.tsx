@@ -9,6 +9,7 @@ import AllowanceSetup from './components/AllowanceSetup';
 import { ReceiptDialog } from './components/Receipts';
 import { AccountProvider, useAccount } from './data/account';
 import BuyTab from './tabs/BuyTab';
+import GroceriesTab from './tabs/GroceriesTab';
 import WalletTab from './tabs/WalletTab';
 import './app.css';
 
@@ -66,15 +67,16 @@ function Shell() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-28 md:pb-12">
-        <TabsContent value="buy"><BuyTab onOpenProfile={() => { go('wallet'); window.setTimeout(() => document.getElementById('delivery')?.scrollIntoView({ behavior: 'smooth' }), 60); }} /></TabsContent>
-        <TabsContent value="groceries"><Placeholder title="Groceries" /></TabsContent>
-        <TabsContent value="wallet"><WalletTab /></TabsContent>
+        {/* Every tab stays mounted: a checkout or a purchase in progress keeps running while you look elsewhere. */}
+        <TabsContent value="buy" forceMount className="data-[state=inactive]:hidden"><BuyTab onOpenProfile={() => { go('wallet'); window.setTimeout(() => document.getElementById('delivery')?.scrollIntoView({ behavior: 'smooth' }), 60); }} /></TabsContent>
+        <TabsContent value="groceries" forceMount className="data-[state=inactive]:hidden"><GroceriesTab onOpenWallet={() => go('wallet')} /></TabsContent>
+        <TabsContent value="wallet" forceMount className="data-[state=inactive]:hidden"><WalletTab /></TabsContent>
       </main>
 
       {/* Phones: a bottom tab bar, clear of the home indicator. */}
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90 backdrop-blur md:hidden no-print"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <TabsList variant="line" className="grid h-16 w-full grid-cols-3 rounded-none p-0">
+        <TabsList variant="line" className="grid h-16! w-full grid-cols-3 rounded-none p-0">
           {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id}
             className="h-full min-h-11 flex-col gap-1 rounded-none text-xs after:hidden">
             <Icon className="size-5" />{label}
@@ -86,8 +88,4 @@ function Shell() {
     <AllowanceSetup open={account.setup !== null} change={account.setup === 'change'} onOpenChange={(open) => { if (!open) account.closeSetup(); }} />
     <ReceiptDialog />
   </>;
-}
-
-function Placeholder({ title }: { title: string }) {
-  return <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>;
 }

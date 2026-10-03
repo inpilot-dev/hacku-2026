@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApprovalRequest, CatalogResponse, PaymentOptionsResponse, Quote, Receipt, RiskAssessment, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../../contracts/types';
 import { api, ApiError } from '@/lib/api';
 import { money } from '@/lib/format';
+import { newId } from '@/lib/utils';
 import { TOKEN, useAccount, type Who } from './account';
 
 /*
@@ -159,7 +160,7 @@ export function useGroceries() {
   const [saved, setSaved] = useState<Record<string, SavedPreset>>(savedPresets);
 
   const say = useCallback((who: Who, text: string, tone: ChatMessage['tone'] = 'info') => {
-    setMessages((current) => current[current.length - 1]?.who === who && current[current.length - 1]?.text === text ? current : [...current, { id: crypto.randomUUID(), who, text, tone }]);
+    setMessages((current) => current[current.length - 1]?.who === who && current[current.length - 1]?.text === text ? current : [...current, { id: newId(), who, text, tone }]);
   }, []);
   const accountNote = account.note;
   const note = useCallback((who: Who, text: string, tone: ChatMessage['tone']) => {
@@ -359,7 +360,7 @@ export function useGroceries() {
     say('you', approvalId ? 'Proceed with this approved basket.' : `Check the rules and pay ${money(quote.total_minor)} in the sandbox.`);
     setPhase('paying'); setError('');
     const key = `mandate-tx-${quote.id}`;
-    const transactionId = sessionStorage.getItem(key) ?? crypto.randomUUID();
+    const transactionId = sessionStorage.getItem(key) ?? newId();
     sessionStorage.setItem(key, transactionId);
     sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ mandateId: mandate.id, quoteId: quote.id, transactionId }));
     await new Promise((resolve) => window.setTimeout(resolve, 600)); // the wallet's check reads as a moment, not a flicker
@@ -466,7 +467,7 @@ export function useGroceries() {
     if (!name) return 'Give this preset a name.';
     if (!items.length || items.length > 20) return 'Add between 1 and 20 items.';
     if (items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) return 'Each quantity must be between 1 and 20.';
-    if (asCopy) return persist({ ...saved, [`custom-${crypto.randomUUID()}`]: { title: `${name} copy`.slice(0, 60), items } });
+    if (asCopy) return persist({ ...saved, [`custom-${newId()}`]: { title: `${name} copy`.slice(0, 60), items } });
     return persist({ ...saved, [id]: { title: name.slice(0, 60), items } });
   }
 
