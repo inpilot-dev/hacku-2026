@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, Strict
 
 from mandate.payments.auth import Actor, current_actor, require_role
 
+from .drafts import DraftService
 from .runs import AgentRuns
 
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)]
@@ -48,12 +49,24 @@ class AgentRun(_Strict):
     updated_at: StrictStr
 
 
+class DraftRequest(_Strict):
+    text: Annotated[StrictStr, Field(min_length=1, max_length=1000)]
+    delegatee_id: Annotated[StrictStr, Field(min_length=1, max_length=128)]
+    parent_mandate_id: StrictStr | None = None
+
+
 def _user(actor: Actor = Depends(current_actor)) -> Actor:
     return require_role(actor, "user")
 
 
-def build_agent_run_router(runs: AgentRuns) -> APIRouter:
+def build_agent_run_router(runs: AgentRuns, drafts: DraftService | None = None) -> APIRouter:
     router = APIRouter(tags=["agent"])
+
+    if drafts is not None:
+        @router.post("/mandates/draft", status_code=201)
+        def create_draft(actor: Annotated[Actor, Depends(_user)], key: IdempotencyKey, body: DraftRequest):
+            status, draft = drafts.create(actor, key, body.model_dump(mode="json"))
+            return JSONResponse(draft, status_code=status)
 
     @router.post("/agent-runs", status_code=202, response_model=AgentRun)
     def start_run(actor: Annotated[Actor, Depends(_user)], key: IdempotencyKey, body: AgentRunRequest):
