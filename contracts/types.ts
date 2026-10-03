@@ -773,3 +773,57 @@ export type CartSyncResult = {
   "checkout_ready": boolean;
   "message": string;
 };
+
+export type AttackSummary = {
+  "id": string;
+  "title": string;
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "threat": string;
+  "defence": string;
+};
+
+export type AttackList = {
+  "attacks": Array<AttackSummary>;
+};
+
+export type AttackStep = {
+  "phase": "setup" | "attack";
+  "actor": string;
+  "title": string;
+  "method": string;
+  "path": string;
+  "request": Record<string, unknown> | null;
+  "http_status": number;
+  "outcome": string;
+  "response": Record<string, unknown>;
+};
+
+export type AttackLedger = {
+  "completed_payments": number;
+  "paid_total_minor": number;
+  "week_limit_minor": number | null;
+  "week_paid_minor": number | null;
+  "week_reserved_minor": number | null;
+};
+
+export type AttackSandbox = {
+  "isolated": boolean;
+  "simulated_time": string;
+  "catalog": string;
+};
+
+export type AttackResult = {
+  "id": string;
+  "title": string;
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "threat": string;
+  "defence": string;
+  "expected": string;
+  "observed": string;
+  "held": boolean;
+  "error": string | null;
+  "ran_at": string;
+  "sandbox": AttackSandbox;
+  "ledger": AttackLedger | null;
+  "steps": Array<AttackStep>;
+};
