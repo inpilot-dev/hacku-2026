@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Snowflake } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Snowflake, Wifi } from 'lucide-react';
 import '../simple/openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
 import type { CardAuthorization, Mandate, VirtualCard } from '../../../../contracts/types';
@@ -67,7 +67,7 @@ export default function CardSetup() {
     } finally { setBusy(false); }
   };
 
-  const kipState = !card ? 'idle' : card.status === 'active' ? 'approved' : 'revoked';
+  const expiry = card ? `${String(card.exp_month).padStart(2, '0')}/${String(card.exp_year).slice(-2)}` : '';
   const singleUse = card ? card.single_use_cards.used + card.single_use_cards.active + card.single_use_cards.cancelled : 0;
   const shops = card?.controls.allowed_merchant_ids ?? [];
 
@@ -94,13 +94,18 @@ export default function CardSetup() {
             <h1>One card, <em>your rules on it.</em></h1>
             <p className="m2-lede">Kumi never sees this number. Each purchase gets its own single-use card, locked to the shop and the amount.</p>
           </div>
-          <div className={`m2-card ${card.status === 'active' ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{STATUS_LABEL[card.status]}</span></div>
-            <div className="m2-card-number"><span>CONTROL CARD</span><b>{card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ···· {card.last4}</b><small>expires {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}</small></div>
-            <div className="m2-card-amount"><small>Most per purchase</small><b>{hkd(card.controls.spend_limit_minor)}</b></div>
-            <div className="m2-card-foot"><span>Issued {shortDate(card.issued_at)}</span><span>{singleUse} single-use {singleUse === 1 ? 'card' : 'cards'}</span></div>
-            <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
+          <div className={`m2-vcard ${card.status}`} role="img"
+            aria-label={`${card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ending ${card.last4}, expires ${expiry}, ${STATUS_LABEL[card.status]}`}>
+            <div className="m2-vcard-top"><b>Mandate</b>{card.status !== 'active' && <span>{STATUS_LABEL[card.status]}</span>}</div>
+            <div className="m2-vcard-chip"><i /><Wifi size={22} strokeWidth={1.75} /></div>
+            <div className="m2-vcard-number">•••• •••• •••• {card.last4}</div>
+            <div className="m2-vcard-foot">
+              <span><small>Card holder</small>Mum’s groceries</span>
+              <span><small>Valid thru</small>{expiry}</span>
+              <b>{card.network === 'mastercard' ? 'mastercard' : 'VISA'}</b>
+            </div>
           </div>
+          <p className="m2-vcard-meta">Issued {shortDate(card.issued_at)} · {singleUse} single-use {singleUse === 1 ? 'card' : 'cards'} so far</p>
           {card.status === 'frozen'
             ? <button className="m2-cta" onClick={() => void toggleFreeze()} disabled={busy}><Snowflake size={18} />{busy ? 'Resuming…' : 'Unfreeze the card'}</button>
             : card.status === 'active'

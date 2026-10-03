@@ -244,3 +244,17 @@ button:disabled{cursor:not-allowed;opacity:.4}
 a.m2-cta{text-decoration:none}
 .m2-setup-form .m2-ledger-row b{text-align:right;justify-content:flex-end}
 .m2-card-hint{margin-top:16px;font-size:var(--font-text-sm-size);color:var(--color-text-tertiary)}
+.m2-vcard{position:relative;display:grid;grid-template-rows:auto 1fr auto auto;width:100%;max-width:400px;aspect-ratio:1.586;padding:clamp(18px,5%,26px);border-radius:var(--radius-3xl);overflow:hidden;color:var(--gray-0);background:radial-gradient(120% 90% at 100% 0%,var(--gray-700),transparent 60%),linear-gradient(135deg,var(--gray-900),var(--gray-1000));box-shadow:var(--shadow-300),inset 0 0 0 1px rgb(255 255 255/.08);transition:filter .3s,opacity .3s}
+.m2-vcard.frozen,.m2-vcard.cancelled,.m2-vcard.used{filter:grayscale(1);opacity:.55}
+.m2-vcard-top{display:flex;align-items:center;justify-content:space-between}
+.m2-vcard-top b{font-weight:var(--font-weight-semibold);letter-spacing:-.01em}
+.m2-vcard-top span{padding:2px 10px;border-radius:var(--radius-full);background:rgb(255 255 255/.16);font-size:12px}
+.m2-vcard-chip{display:flex;align-items:center;gap:10px;align-self:center}
+.m2-vcard-chip i{width:44px;height:33px;border-radius:7px;box-shadow:inset 0 0 0 1px rgb(0 0 0/.15);background-image:linear-gradient(90deg,transparent 32%,rgb(0 0 0/.18) 32% 34%,transparent 34% 66%,rgb(0 0 0/.18) 66% 68%,transparent 68%),linear-gradient(0deg,transparent 48%,rgb(0 0 0/.18) 48% 52%,transparent 52%),linear-gradient(135deg,var(--yellow-200),var(--yellow-500) 55%,var(--yellow-300))}
+.m2-vcard-chip svg{transform:rotate(90deg);color:rgb(255 255 255/.7)}
+.m2-vcard-number{margin-bottom:14px;font-family:var(--font-mono);font-size:clamp(17px,4.6vw,22px);letter-spacing:.08em;word-spacing:.15em;text-shadow:0 1px 1px rgb(0 0 0/.4)}
+.m2-vcard-foot{display:flex;align-items:flex-end;gap:clamp(12px,4vw,24px);white-space:nowrap;font-size:var(--font-text-sm-size);text-transform:uppercase;letter-spacing:.04em}
+.m2-vcard-foot span{display:grid;gap:2px}
+.m2-vcard-foot small{font-size:9px;letter-spacing:.08em;color:rgb(255 255 255/.55)}
+.m2-vcard-foot b{margin-left:auto;font-size:var(--font-heading-xs-size);font-weight:var(--font-weight-bold);font-style:italic;letter-spacing:-.02em;text-transform:none}
+.m2-vcard-meta{margin:-4px 0 0;font-size:var(--font-text-sm-size);color:var(--color-text-tertiary)}
