@@ -696,11 +696,6 @@ export default function SimpleApp() {
           ) : phase === 'pick' ? (
             <div className="m2-panel">
               <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>What does Mum need this week?</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
-              <div className="m2-shopping-scene" role="img" aria-label="Kumi with rice, milk and fruit for the weekly shop">
-                <div className="m2-scene-copy"><span>THE WEEKLY SHOP</span><b>Little things,<br />taken care of.</b><small>Tell Kumi what Mum needs.</small></div>
-                <div className="m2-scene-groceries" aria-hidden="true"><span className="rice">🍚<small>Rice</small></span><span className="milk">🥛<small>Milk</small></span><span className="fruit">🍎<small>Fruit</small></span></div>
-                <img src="/agents/kumi-happy.png" alt="" width="92" height="92" />
-              </div>
               <div className="m2-ask">
                 <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
                 <div className="m2-ask-actions">
