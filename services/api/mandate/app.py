@@ -12,6 +12,7 @@ from mandate.agent.catalog_routes import build_catalog_router
 from mandate.agent.drafts import DraftService
 from mandate.agent.run_routes import build_agent_run_router
 from mandate.agent.runs import AgentRuns
+from mandate.integration.attack_lab import build_attack_lab_router
 from mandate.integration.demo_routes import build_demo_router
 from mandate.stores.carts import CartSync
 from mandate.stores.connections import StoreConnections
@@ -33,6 +34,7 @@ def build_app():
     app.title = "Mandate family wallet"
     app.version = "0.1.0"
     app.include_router(build_demo_router(wallet), prefix="/api/v1")
+    app.include_router(build_attack_lab_router(), prefix="/api/v1")
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
     app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts), warm_transcription=True),
                        prefix="/api/v1")

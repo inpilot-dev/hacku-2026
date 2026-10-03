@@ -3826,6 +3826,127 @@
           }
         }
       }
+    },
+    "/demo/attacks": {
+      "get": {
+        "operationId": "listSecurityLabAttacks",
+        "tags": [
+          "interface"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "summary": "List the attacks the local security lab can replay",
+        "description": "Available only when MANDATE_ENABLE_DEMO_CHECKOUT=1.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Attack catalog.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttackList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Security lab is disabled or actor is not a user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo/attacks/{attack_id}/runs": {
+      "post": {
+        "operationId": "runSecurityLabAttack",
+        "tags": [
+          "interface"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "summary": "Replay one attack against a disposable, isolated wallet",
+        "description": "Available only when MANDATE_ENABLE_DEMO_CHECKOUT=1. Builds a fresh wallet (own database, signing key, sandbox tokens, placeholder catalog, fixed clock), drives it over the ordinary wallet routes as user, agent and outsider actors, and deletes it afterwards. The live wallet is never touched. Bearer capabilities in the trace are redacted.",
+        "parameters": [
+          {
+            "name": "attack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attack trace and whether the wallet's defence held.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttackResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Security lab is disabled or actor is not a user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown attack.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7818,6 +7939,275 @@
           },
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "AttackSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "category",
+          "threat",
+          "defence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "control",
+              "spending_limits",
+              "policy",
+              "integrity",
+              "concurrency",
+              "revocation",
+              "access_control",
+              "scale"
+            ]
+          },
+          "threat": {
+            "type": "string"
+          },
+          "defence": {
+            "type": "string"
+          }
+        }
+      },
+      "AttackList": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "attacks"
+        ],
+        "properties": {
+          "attacks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttackSummary"
+            }
+          }
+        }
+      },
+      "AttackStep": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "phase",
+          "actor",
+          "title",
+          "method",
+          "path",
+          "request",
+          "http_status",
+          "outcome",
+          "response"
+        ],
+        "description": "One recorded request against the sandbox wallet. `outcome` is `completed`, `<status>:<violation code>` or `HTTP <status> <error code>`.",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "setup",
+              "attack"
+            ]
+          },
+          "actor": {
+            "type": "string",
+            "description": "user, agent, stranger, stranger_agent or swarm_agent_<n>."
+          },
+          "title": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Redacted request body, or null."
+          },
+          "http_status": {
+            "type": "integer"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "response": {
+            "type": "object",
+            "description": "Redacted response summary."
+          }
+        }
+      },
+      "AttackLedger": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "completed_payments",
+          "paid_total_minor",
+          "week_limit_minor",
+          "week_paid_minor",
+          "week_reserved_minor"
+        ],
+        "description": "Sandbox ledger read from the wallet database after the attack. Integer HKD cents.",
+        "properties": {
+          "completed_payments": {
+            "type": "integer"
+          },
+          "paid_total_minor": {
+            "type": "integer"
+          },
+          "week_limit_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "week_paid_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "week_reserved_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AttackSandbox": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "isolated",
+          "simulated_time",
+          "catalog"
+        ],
+        "properties": {
+          "isolated": {
+            "type": "boolean"
+          },
+          "simulated_time": {
+            "type": "string"
+          },
+          "catalog": {
+            "type": "string"
+          }
+        }
+      },
+      "AttackResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "category",
+          "threat",
+          "defence",
+          "expected",
+          "observed",
+          "held",
+          "error",
+          "ran_at",
+          "sandbox",
+          "ledger",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "control",
+              "spending_limits",
+              "policy",
+              "integrity",
+              "concurrency",
+              "revocation",
+              "access_control",
+              "scale"
+            ]
+          },
+          "threat": {
+            "type": "string"
+          },
+          "defence": {
+            "type": "string"
+          },
+          "expected": {
+            "type": "string"
+          },
+          "observed": {
+            "type": "string"
+          },
+          "held": {
+            "type": "boolean"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ran_at": {
+            "type": "string"
+          },
+          "sandbox": {
+            "$ref": "#/components/schemas/AttackSandbox"
+          },
+          "ledger": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttackLedger"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttackStep"
+            }
           }
         }
       }

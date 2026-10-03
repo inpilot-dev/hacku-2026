@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList } from '../../../../contracts/types';
+import type { AttackList, AttackResult, AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -108,6 +108,8 @@ export const api = {
   storeLoginTicket: (token: string, storeId: string) => request<StoreLoginTicket>(`/stores/${encodeURIComponent(storeId)}/login/ticket`, token, { method: 'POST' }),
   disconnectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connection`, token, { method: 'DELETE' }),
   syncCart: (token: string, input: CartSyncRequest) => request<CartSyncResult>('/carts/sync', token, { method: 'POST', body: JSON.stringify(input) }),
+  attacks: (token: string) => request<AttackList>('/demo/attacks', token),
+  runAttack: (token: string, attackId: string) => request<AttackResult>(`/demo/attacks/${encodeURIComponent(attackId)}/runs`, token, { method: 'POST' }),
 };
 
 /** WebSocket URL for a store's sign-in stream on this origin (the dev server proxies it). */
