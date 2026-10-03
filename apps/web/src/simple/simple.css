@@ -237,3 +237,10 @@ button:disabled{cursor:not-allowed;opacity:.4}
   body *{visibility:hidden!important}.m2-modal-backdrop{position:static;display:block;padding:0;background:#fff!important;backdrop-filter:none}.m2-modal-backdrop *{visibility:hidden!important}.m2-modal-backdrop .m2-paper-receipt,.m2-modal-backdrop .m2-paper-receipt *{visibility:visible!important}.m2-modal-backdrop .m2-paper-receipt{position:absolute;inset:0 auto auto 0;width:100%;max-width:640px;margin:0 auto;box-shadow:none}.m2-modal,.m2-modal-backdrop{max-height:none;overflow:visible;box-shadow:none}.m2-modal-head,.m2-back-link,.m2-print-button{display:none!important}
 }
 @media(prefers-reduced-motion:reduce){.m2-modal-backdrop{animation:none}.m2-receipts-trigger,.m2-receipt-row,.m2-edit-pick{transition:none}}
+
+/* Virtual card page (?card) */
+.m2-back{display:inline-flex;align-items:center;gap:8px;color:inherit;text-decoration:none}
+.m2-back svg{color:var(--color-text-secondary)}.m2-back:hover svg{color:var(--color-text)}
+a.m2-cta{text-decoration:none}
+.m2-setup-form .m2-ledger-row b{text-align:right;justify-content:flex-end}
+.m2-card-hint{margin-top:16px;font-size:var(--font-text-sm-size);color:var(--color-text-tertiary)}

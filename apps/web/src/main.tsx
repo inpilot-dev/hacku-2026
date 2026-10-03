@@ -7,7 +7,7 @@ const params = new URLSearchParams(window.location.search);
 const Root = params.has('classic')
   ? lazy(() => import('./styles.css').then(() => import('./app/App')))
   : params.has('card')
-    ? lazy(() => import('./card/card.css').then(() => import('./card/CardSetup')))
+    ? lazy(() => import('./simple/simple.css').then(() => import('./card/CardSetup')))
     : lazy(() => import('./simple/simple.css').then(() => import('./simple/SimpleApp')));
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
