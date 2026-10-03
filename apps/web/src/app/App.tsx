@@ -862,6 +862,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
   const [audit, setAudit] = useState<AuditExport | null>(null);
   const [auditState, setAuditState] = useState<'loading' | 'connected' | 'unavailable' | 'error'>('loading');
   const [verifier, setVerifier] = useState<VerifierResult | null>(null);
+  const [tamperNote, setTamperNote] = useState('');
   const [models, setModels] = useState<VerificationResult[]>([]);
   const [verifyBusy, setVerifyBusy] = useState<'audit' | 'model' | ''>('');
   const [actionError, setActionError] = useState('');
@@ -914,14 +915,26 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
     finally { setVerifyBusy(''); }
   }
 
-  async function runAuditCheck() {
+  async function runAuditCheck(tamper = false) {
     if (!audit?.latest_checkpoint) {
       setActionError('There is no retained checkpoint to verify yet. No pass result is available.');
       return;
     }
-    setVerifyBusy('audit'); setActionError(''); setVerifier(null);
+    let sent = audit;
+    let note = '';
+    if (tamper) {
+      // Demo: edit one covered event in a local copy of the export, leave the hashes alone, and let the verifier catch it.
+      const covered = audit.events.filter((event) => event.sequence <= audit.latest_checkpoint!.sequence);
+      const target = covered.find((event) => typeof event.payload.amount_minor === 'number') ?? covered[0];
+      if (!target) { setActionError('The export has no event covered by the checkpoint to edit.'); return; }
+      const before = target.payload.amount_minor;
+      const after = typeof before === 'number' ? before + 10000 : undefined;
+      sent = { ...audit, events: audit.events.map((event) => event === target ? { ...event, payload: typeof before === 'number' ? { ...event.payload, amount_minor: after } : { ...event.payload, edited: true } } : event) };
+      note = typeof before === 'number' ? `Edited sequence ${target.sequence} (${target.type.replace(/_/g, ' ')}): amount ${money(before)} → ${money(after!)}.` : `Edited the payload of sequence ${target.sequence}.`;
+    }
+    setVerifyBusy('audit'); setActionError(''); setVerifier(null); setTamperNote(note);
     try {
-      setVerifier(await api.verifyAudit(token, { export: audit, retained_checkpoint_id: `${audit.stream_id}:${audit.latest_checkpoint.sequence}` }));
+      setVerifier(await api.verifyAudit(token, { export: sent, retained_checkpoint_id: `${audit.stream_id}:${audit.latest_checkpoint.sequence}` }));
     } catch (error) { setActionError(error instanceof Error ? error.message : 'Verifier request failed.'); }
     finally { setVerifyBusy(''); }
   }
@@ -956,9 +969,9 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
     <div className="safety-labs">
       <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">AUDIT TRAIL</div><h2>Recent wallet events</h2></div><div className="feed-actions">{eventsState !== 'loading' && <button className="text-button" onClick={() => { setEventsState('loading'); setEventsRefresh((value) => value + 1); }}>Refresh</button>}<span className={`status-tag ${eventsState === 'connected' ? 'status-green' : 'status-muted'}`}><i />{eventsState === 'connected' ? 'Live feed' : eventsState === 'loading' ? 'Connecting' : eventsState === 'unavailable' ? 'Not connected' : 'Unavailable'}</span></div></div>
         {events.length ? <div className="event-list">{[...events].reverse().slice(0, 8).map((event) => <div className="event-row" key={`${event.stream_id}-${event.sequence}`}><span className={`event-dot event-${event.type}`} /><span className="event-copy"><strong>{eventLabel(event)}</strong><small>Sequence {event.sequence} · {event.mandate_id ?? 'account'}{event.transaction_id ? ` · ${event.transaction_id}` : ''}</small></span><time>{new Date(event.occurred_at).toLocaleTimeString('en-HK', { hour: 'numeric', minute: '2-digit' })}</time></div>)}</div> : <div className="lab-empty">{eventsState === 'unavailable' ? 'The event feed API is not connected yet.' : eventsState === 'error' ? 'Could not load events. The event feed does not assume an empty ledger.' : 'Loading authorized wallet events…'}</div>}
-        {audit?.latest_checkpoint && <div className="checkpoint-row"><FileCheck2 size={15} /><span>Export checkpoint · {audit.latest_checkpoint.stream_id}:{audit.latest_checkpoint.sequence}</span><button className="text-button" onClick={() => void runAuditCheck()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Checking…' : 'Verify history'}</button></div>}
+        {audit?.latest_checkpoint && <div className="checkpoint-row"><FileCheck2 size={15} /><span>Export checkpoint · {audit.latest_checkpoint.stream_id}:{audit.latest_checkpoint.sequence}</span><button className="text-button" onClick={() => void runAuditCheck()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Checking…' : 'Verify history'}</button><button className="text-button" onClick={() => void runAuditCheck(true)} disabled={verifyBusy !== ''}>Tamper & verify</button></div>}
         {auditState === 'connected' && !checkpointAvailable && <div className="checkpoint-row"><Clock3 size={15} /><span>No checkpoint exists for this export.</span><button className="text-button" onClick={() => void createCheckpoint()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Creating…' : 'Create checkpoint'}</button></div>}
-        {verifier && <div className={`result-banner ${verifier.valid ? 'result-good' : 'result-warn'}`}><AgentCharacter name="stella" state={verifier.valid ? 'pass' : 'fail'} label={verifier.valid ? 'Stella reports the audit check passed' : 'Stella reports the audit check failed'} size={40} /><strong>{verifier.status.replace(/_/g, ' ')}</strong><span>{verifier.message}</span><small>Checked through sequence {verifier.checked_through_sequence}; {verifier.unanchored_event_count} later event(s) unanchored.</small></div>}
+        {verifier && <div className={`result-banner ${verifier.valid ? 'result-good' : 'result-warn'}`}><AgentCharacter name="stella" state={verifier.valid ? 'pass' : 'fail'} label={verifier.valid ? 'Stella reports the audit check passed' : 'Stella reports the audit check failed'} size={40} /><strong>{verifier.status.replace(/_/g, ' ')}</strong><span>{verifier.message}</span><small>{tamperNote && `${tamperNote} `}{verifier.failures.length ? `Failures: ${[...new Set(verifier.failures.map((failure) => `${failure.code}${failure.sequence ? ` @${failure.sequence}` : ''}`))].join(', ')}.` : `Checked through sequence ${verifier.checked_through_sequence}; ${verifier.unanchored_event_count} later event(s) unanchored.`}</small></div>}
       </section>
       <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">SAFETY LAB</div><h2>Can two agents overspend?</h2></div><AgentCharacter name="stella" state={models.some((result) => result.status === 'counterexample_found') ? 'fail' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'pass' : 'idle'} label={models.some((result) => result.status === 'counterexample_found') ? 'Stella found a counterexample' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'Stella completed the bounded check' : 'Stella, checker'} /></div><p className="lab-description">Compare formal unsafe and atomic models under one HK$400 budget and two HK$300 requests. This runs the solver model; live competing wallet requests are a separate evaluation.</p><button className="button button-secondary lab-run" onClick={() => void runModelComparison()} disabled={verifyBusy !== ''}>{verifyBusy === 'model' ? <span className="spinner spinner-green" /> : <Activity size={15} />}{verifyBusy === 'model' ? 'Running bounded models…' : 'Run unsafe vs atomic models'}</button>
         {models.length > 0 && <div className="model-results">{models.map((result) => <div className="model-result" key={`${result.id}-${result.variant}`}><div><strong>{result.variant === 'unsafe' ? 'Unsafe' : 'Atomic reservation'}</strong><span className={`solver-tag ${result.status === 'inconclusive' ? 'solver-unknown' : result.status === 'counterexample_found' ? 'solver-bad' : 'solver-good'}`}>{result.status.replace(/_/g, ' ')}</span></div><p>{result.message}</p><small>{result.solver_result.toUpperCase()} · bound {result.max_steps} · {result.runtime_ms} ms</small>{result.counterexample.length > 0 && <div className="counterexample">{result.counterexample.map((step) => <div key={`${result.id}-${step.step}`}><b>{step.step}.</b> {step.actor}: {step.action}<small>{step.explanation}</small></div>)}</div>}</div>)}</div>}

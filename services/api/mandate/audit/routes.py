@@ -4,7 +4,7 @@ The shared app mounts it next to the wallet router, on the same database:
 
     app.include_router(audit_routes.build_router(wallet.db), prefix="/api/v1")
 
-``/audit/checkpoints`` signs the stream head, and only reports success after
+``/events`` pages the caller's own stream for the activity feed. ``/audit/checkpoints`` signs the stream head, and only reports success after
 the verifier process confirms it retained the checkpoint; ``/verifier/check``
 forwards to that process. Users see only their own stream
 (``stream_<user id>``, the wallet's naming); a ``verifier`` actor may check any export.
@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -110,6 +110,15 @@ def build_router(db: Database, signer: CheckpointSigner | None = None, verifier_
     def stored_checkpoint(conn, cid: str) -> dict | None:
         row = conn.execute("SELECT body_json FROM audit_checkpoints WHERE id = ?", (cid,)).fetchone()
         return json.loads(row[0]) if row else None
+
+    @router.get("/events")
+    def get_events(actor: UserOnly, after: Annotated[int, Query(ge=0)] = 0,
+                   limit: Annotated[int, Query(ge=1, le=200)] = 50):
+        with db.read() as conn:
+            events = read_events(conn, stream_for_owner(actor.actor_id), after=after, limit=limit + 1)
+        page = events[:limit]
+        return {"events": page, "next_after": page[-1]["sequence"] if page else after,
+                "has_more": len(events) > limit}
 
     @router.get("/audit/export")
     def export_audit(actor: UserOnly, stream_id: str | None = None):

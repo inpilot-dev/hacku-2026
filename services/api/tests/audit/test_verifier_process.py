@@ -223,3 +223,14 @@ def test_verifier_refuses_a_swapped_key(tmp_path):
     assert pin_public_key(tmp_path, None).public_bytes_raw() == first.public_key.public_bytes_raw()
     with pytest.raises(SystemExit):
         pin_public_key(tmp_path, tmp_path / "k2" / PUBLIC_NAME)
+
+
+def test_events_page_the_users_own_stream(a):
+    a.h.buy(a.h.confirm()["id"])
+    first = a.c.get("/api/v1/events?limit=3", headers=USER).json()
+    assert [e["sequence"] for e in first["events"]] == [1, 2, 3] and first["has_more"] and first["next_after"] == 3
+    rest = a.c.get(f"/api/v1/events?after={first['next_after']}", headers=USER).json()
+    assert rest == {"events": export(a)["events"][3:], "next_after": 4, "has_more": False}
+    assert a.c.get("/api/v1/events?after=4", headers=USER).json() == {"events": [], "next_after": 4, "has_more": False}
+    assert a.c.get("/api/v1/events", headers=AGENT).status_code == 403
+    assert a.c.get("/api/v1/events?limit=201", headers=USER).status_code == 422
