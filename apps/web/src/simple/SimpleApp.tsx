@@ -3,13 +3,14 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, PaymentOptionsResponse, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { categoryLabel, money, periodWord } from '../lib/format';
 import { holderName, possessive, saveHolderName } from './holder';
 import CartSyncPanel from './CartSyncPanel';
 import Onboarding, { storeName } from './Onboarding';
 import ProfileSheet from './ProfileSheet';
+import PaymentRouteCard from '../shopping/PaymentRouteCard';
 import MessageList, { type ConversationMessage } from '../shopping/MessageList';
 import '../shopping/conversation.css';
 
@@ -173,6 +174,7 @@ export default function SimpleApp() {
   const [showCustom, setShowCustom] = useState(false);
   const [search, setSearch] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [paymentComparison, setPaymentComparison] = useState<PaymentOptionsResponse | null>(null);
   const [routeId, setRouteId] = useState<string | null>(null);
   const [routeLabel, setRouteLabel] = useState('');
   const [verdict, setVerdict] = useState<Verdict | null>(null);
@@ -308,7 +310,7 @@ export default function SimpleApp() {
   }
 
   function resetShop() {
-    setRuleTestBasket(false); setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
+    setPaymentComparison(null); setRuleTestBasket(false); setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
   }
 
   /** Ask the agent service first; if it isn't mounted, use the preset basket and say so. */
@@ -394,6 +396,7 @@ export default function SimpleApp() {
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
     if (!spoken && !lines.length) { setError('That basket is empty in the current catalog.'); return; }
+    setPaymentComparison(null); setRouteId(null); setRouteLabel('');
     setRuleTestBasket(false);
     setError(''); setVerdict(null); setPick(chosen === 'custom' || spoken ? null : chosen); setPhase('packing');
     try {
@@ -422,7 +425,8 @@ export default function SimpleApp() {
       note('kumi', `Quote ready: ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}. Review the basket below.`, 'info');
       try {
         const options = await api.paymentOptions(TOKEN, result.id);
-        const chosenRoute = options.options.find((o) => o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
+        setPaymentComparison(options);
+        const chosenRoute = options.options.find((o) => o.eligible && o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
         setRouteId(chosenRoute?.route_id ?? null); setRouteLabel(chosenRoute?.label ?? '');
       } catch { setRouteId(null); setRouteLabel(''); }
       setPhase('basket');
@@ -448,7 +452,7 @@ export default function SimpleApp() {
         note('kip', `Your approval is needed for ${money(quote.total_minor)}: ${auth.message}. Nothing is paid while this waits.`, 'info');
       } else if (auth.status !== 'approved') {
         setVerdict({ kind: 'refused', message: auth.message, violations: auth.violations });
-        note('kip', `Purchase blocked: ${auth.message}. ${auth.violations.map((v) => v.message).join(' ')} Nothing was paid.`, 'bad');
+        note('kip', `Purchase blocked. ${[...new Set([auth.message, ...auth.violations.map((v) => v.message)])].join(' ')} Nothing was paid.`, 'bad');
       } else if (result.payment?.status === 'completed') {
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
         rememberReceipt(result.payment.receipt);
@@ -457,6 +461,7 @@ export default function SimpleApp() {
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
         note('kip', `Payment refused: ${result.payment.message}. Nothing was paid.`, 'bad');
       } else {
+        note('kip', 'The wallet approved the request, but payment is not confirmed. Check its status before making another purchase.', 'info');
         setVerdict({ kind: 'uncertain', message: 'The wallet approved it but hasn’t confirmed payment yet.' });
       }
     } catch (err) {
@@ -467,7 +472,9 @@ export default function SimpleApp() {
           const receipt = await api.paymentByTransaction(TOKEN, transactionId);
           setVerdict({ kind: 'paid', receipt, replayed: true });
           rememberReceipt(receipt);
+          note('kip', `Recovered the confirmed sandbox receipt ${receipt.id}. No second payment was submitted.`, 'good');
         } catch {
+          note('kip', 'Connection lost during checkout. Payment status is unknown; the same transaction will be reused when checking again.', 'info');
           setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
         }
       }
@@ -579,7 +586,14 @@ export default function SimpleApp() {
         catch { return null; }
       }));
       const ordered = records.filter((record): record is ReceiptRecord => record !== null).sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt));
-      setReceipts(ordered); receiptsLoaded.current = true;
+      setReceipts((current) => {
+        const previous = new Map(current.map((record) => [record.receipt.transaction_id, record]));
+        return ordered.map((record) => {
+          const cached = previous.get(record.receipt.transaction_id);
+          return { ...record, quote: cached?.quote?.id === record.receipt.quote_id ? cached.quote : record.quote };
+        });
+      });
+      receiptsLoaded.current = true;
     } catch (err) {
       setReceiptsError(err instanceof Error ? err.message : 'Could not load receipts.');
     } finally { receiptLoadInFlight.current = false; setReceiptsLoading(false); }
@@ -782,8 +796,9 @@ export default function SimpleApp() {
               </div>
               {phase === 'basket' && <>
                 {ruleTestBasket ? <p className="m2-muted" role="status">Policy test only: the agent did not build this basket. The preset is shown to demonstrate the wallet’s checks. It cannot be added to a retailer cart here.</p> : <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />}
-                <button className="m2-cta" onClick={() => void checkout()}>Confirm sandbox payment · {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
-                {routeLabel && <p className="m2-route">Kip will use <b>{routeLabel}</b>, the cheapest route it found.</p>}
+                {paymentComparison && <PaymentRouteCard comparison={paymentComparison} selected={routeId} onSelect={(id, label) => { setRouteId(id); setRouteLabel(label); }} />}
+                <button className="m2-cta" disabled={Boolean(paymentComparison && !routeId)} onClick={() => void checkout()}>Confirm sandbox payment · {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
+                {routeLabel && <p className="m2-route">Selected route: <b>{routeLabel}</b>. Kip checks your permission again before paying.</p>}
                 <button className="m2-link" onClick={resetShop}>Start over</button>
               </>}
               {phase === 'paying' && <div className="m2-dots center"><i /><i /><i /></div>}
@@ -800,6 +815,7 @@ export default function SimpleApp() {
                   <button className="m2-ghost" onClick={() => void decide(false)} disabled={busy === 'decide'}>Say no</button>
                 </div>
               </>}
+              {phase === 'verdict' && verdict?.kind === 'paid' && <button className="m2-cta" onClick={() => viewReceipt({ receipt: verdict.receipt, quote, occurredAt: verdict.receipt.paid_at })}><ReceiptText size={18} />Open digital receipt</button>}
               {phase === 'verdict' && verdict?.kind !== 'review' && <button className="m2-ghost" onClick={resetShop}>Shop again</button>}
             </div>
           ) : null}

@@ -47,4 +47,8 @@ The default page now presents user requests and real agent progress in a chronol
 
 Setup progresses through draft rules, store selection/sign-in, and an explicit review of the exact policy before confirmation. The expiry shown during review is the expiry submitted to the wallet. Existing mobile, profile, card and classic audit routes are retained. The responsive conversation layout shows the conversation first on phones. Retailer cart sync and sandbox payment remain separate operations; simulated payment is not retailer order confirmation.
 
-Remaining integration work: exercise the new setup and refusal flows end to end, inspect mobile rendering, and integrate structured site-risk results when the shared API exposes them to the shopping conversation.
+Browser checks: setup rules → stores → exact permission review; 390px viewport with no horizontal overflow; blocked alcohol/over-budget request returning wallet refusals without a debit; normal HK$113.80 sandbox checkout using a user-selected Tap & Go route, receipt and budget update. These checks did not sign in to a retailer or submit a retailer payment.
+
+Payment route cards display the wallet’s fee, estimated reward and net-cost comparison with observed sources and caveats. The frontend does not recalculate financial values. A completed purchase links directly to the digital receipt. Receipt refresh preserves already-loaded quote details.
+
+The digital receipt was opened from the checkout result and from history, then history was refreshed and the item details were confirmed to remain visible. Remaining integration work: exercise approval/uncertain-payment states. Structured site-risk cards depend on a shared API response; the current store connection messages are displayed as text without inferring risk scores.
