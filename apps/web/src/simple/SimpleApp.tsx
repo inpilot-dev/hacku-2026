@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
+import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X } from 'lucide-react';
 import './openai-tokens.css';
 import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Policy, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
@@ -682,6 +682,7 @@ export default function SimpleApp() {
             ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
+          <a className="m2-receipts-trigger" href="?card"><CreditCard size={18} /><span><b>Virtual card</b><small>Set up, lock or check the card</small></span><ArrowRight size={17} /></a>
           {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
         </section>
 

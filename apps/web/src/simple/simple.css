@@ -196,7 +196,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
 @media(prefers-reduced-motion:reduce){.m2-mic.on{animation:none}}
 
 /* Personal shopping and transaction history */
-.m2-receipts-trigger{display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border-radius:var(--radius-2xl);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-border);text-align:left;transition:background .15s,transform .1s}
+.m2-receipts-trigger{color:inherit;text-decoration:none;display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;border-radius:var(--radius-2xl);background:var(--color-surface);box-shadow:inset 0 0 0 1px var(--color-border);text-align:left;transition:background .15s,transform .1s}
 .m2-receipts-trigger>svg:first-child{color:var(--pink-600)}.m2-receipts-trigger>svg:last-child{margin-left:auto;color:var(--color-text-tertiary)}
 .m2-receipts-trigger span{display:grid;gap:3px}.m2-receipts-trigger b{font-weight:var(--font-weight-semibold)}.m2-receipts-trigger small{font-size:var(--font-text-sm-size);color:var(--color-text-secondary)}
 .m2-receipts-trigger:hover,.m2-receipt-row:hover{background:var(--color-surface-secondary)}

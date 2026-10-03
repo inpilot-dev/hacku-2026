@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CardAuthorizationList, CardStatusResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, VirtualCard } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -69,6 +69,14 @@ export const api = {
     method: 'POST', headers: { 'Idempotency-Key': sessionKey(`revoke-${id}`) }, body: JSON.stringify({ reason: 'Revoked from Mandate dashboard' }),
   }),
   budget: (token: string, id: string) => request<BudgetResponse>(`/wallet/${encodeURIComponent(id)}`, token),
+  card: (token: string, mandateId: string) => request<VirtualCard>(`/mandates/${encodeURIComponent(mandateId)}/card`, token),
+  freezeCard: (token: string, mandateId: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(mandateId)}/card/freeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ reason: 'Locked from the card setup page' }),
+  }),
+  unfreezeCard: (token: string, mandateId: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(mandateId)}/card/unfreeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify({ reason: 'Unlocked from the card setup page' }),
+  }),
+  cardAuthorizations: (token: string, mandateId: string) => request<CardAuthorizationList>(`/mandates/${encodeURIComponent(mandateId)}/card/authorizations`, token),
   catalog: (token: string, merchantId?: string) => request<CatalogResponse>(`/catalog${merchantId ? `?merchant_id=${encodeURIComponent(merchantId)}` : ''}`, token),
   quote: (token: string, input: QuoteRequest) => request<Quote>('/quotes', token, { method: 'POST', body: JSON.stringify(input) }),
   quoteById: (token: string, id: string) => request<Quote>(`/quotes/${encodeURIComponent(id)}`, token),
