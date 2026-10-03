@@ -13,7 +13,8 @@
 .conversation-active-card .m2-panel{border-radius:24px}
 .conversation-setup{display:flex!important;flex-direction:column;max-width:760px;margin:auto;gap:24px!important}
 .conversation-setup .ob{width:100%}
-.conversation-app .m2-area-card{position:sticky;top:20px}
+/* Keep the wallet in normal flow so it cannot scroll over the following audit log. */
+.conversation-app .m2-area-card{position:static;top:auto}
 .conversation-app .m2-card-top>span:first-child{font-size:13px}
 .conversation-app .m2-card-amount b{font-size:40px}
 .conversation-app .m2-card-sticker{opacity:.75}
