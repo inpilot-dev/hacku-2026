@@ -14,11 +14,12 @@ from fastapi.testclient import TestClient
 
 from mandate.agent.purchase import runs as runs_module
 from mandate.agent.purchase.assess import amount_minor, assess, numbers_in, quoted
-from mandate.agent.purchase.browser import CARD_FIELD, FINAL_ACTION
+from mandate.agent.purchase.browser import CARD_FIELD, FINAL_ACTION, WALLET
 from mandate.agent.purchase.checkout import DIRECT, OrderSummary, _cart_guesses
 from mandate.agent.purchase.profile import ProfileStore, form_values, missing_fields
 from mandate.agent.purchase.routes import build_purchase_router
 from mandate.agent.purchase.runs import PurchaseRuns
+from mandate.agent.purchase.shops import ShopMemory
 from mandate.agent.purchase.spec import PurchaseSpec, Requirement
 from mandate.payments.errors import ApiError, install_error_handlers
 from mandate.payments.auth import Actor
@@ -69,6 +70,16 @@ PAGE = {"url": "https://shop.example.com/p/1", "title": "Phone X", "text": "Phon
         "ld": [], "links": []}
 
 
+def test_model_answers_are_checked_against_their_schema():
+    from mandate.agent.purchase.assess import _schema
+    from mandate.agent.purchase.llm import conforms
+
+    assert conforms(product_answer(), _schema(1))
+    assert not conforms({"kind": "other"}, _schema(1))  # required keys missing
+    assert not conforms({**product_answer(), "kind": "shop"}, _schema(1))  # not in the enum
+    assert not conforms({**product_answer(), "requirements": []}, _schema(1))  # one answer per requirement
+
+
 def test_assess_match_and_rules():
     assert assess(PAGE, spec(), Model(page_assessment=product_answer())).matches
     over = assess(PAGE, spec(max_price_minor=200000), Model(page_assessment=product_answer()))
@@ -116,6 +127,10 @@ def test_steps_before_paying_are_allowed(label):
     assert not FINAL_ACTION.search(label)
 
 
+def test_express_wallets_are_not_the_final_button():
+    assert WALLET.search("Pay with Shop Pay") and WALLET.search("Apple Pay") and not WALLET.search("Pay now")
+
+
 def test_card_fields_and_direct_buttons():
     assert CARD_FIELD.search("Card number") and CARD_FIELD.search("安全碼") and not CARD_FIELD.search("Address")
     assert DIRECT["add_to_cart"].search("加入購物車") and not DIRECT["add_to_cart"].search("加入會員")
@@ -157,7 +172,7 @@ class Tab:
         self.opened, self.closed, self.clicked, self.filled = [], False, [], None
         Tab.instances.append(self)
 
-    def open(self, url):
+    def open(self, url, timeout_s=25):
         self.opened.append(url)
         return {**PAGE, "url": url}
 
@@ -185,8 +200,9 @@ class Tab:
         return True
 
 
-def offer(url, price, ram="8GB RAM"):
-    return {"url": url, "title": f"Phone at {url}", "text": f"Phone\n{price}\n{ram}"}
+def main_tab() -> Tab:
+    """The latest run's own tab: created first, before the tabs that read pages in parallel."""
+    return Tab.instances[-runs_module.ASSESS_WORKERS - 1]
 
 
 @pytest.fixture
@@ -219,7 +235,7 @@ def make_runs(tmp_path, monkeypatch):
                       rank={"order": [1, 0]})
 
         class PageTab(Tab):
-            def open(self, url):
+            def open(self, url, timeout_s=25):
                 state["at"] = url
                 self.opened.append(url)
                 return {"url": url, "title": "Phone", "text": pages[url], "ld": [], "links": []}
@@ -233,7 +249,7 @@ def make_runs(tmp_path, monkeypatch):
 
         monkeypatch.setattr(runs_module, "go_to_payment", lambda *a, **k: ("details", "card_field"))
         runs = PurchaseRuns(profiles, model=model, search=lambda q: [{"url": u, "title": u} for u in pages],
-                            tab_factory=PageTab, executor=Now())
+                            tab_factory=PageTab, executor=Now(), shops=ShopMemory(tmp_path / "shops.json"))
         return runs, model
 
     return build
@@ -250,7 +266,7 @@ def test_best_deal_is_checked_out_and_waits_for_approval(make_runs):
     assert run["status"] == "awaiting_approval"
     assert run["choice"]["url"] == "https://b.example.com/p"  # cheapest that meets 8GB; the 4GB one is out
     assert run["order"]["total_minor"] == 249900 and "Approve to pay" in run["message"]
-    assert not Tab.instances[-1].closed  # the checkout stays open for approval
+    assert not main_tab().closed  # the checkout stays open for approval
 
 
 def test_stated_preference_overrides_the_cheapest(make_runs):
@@ -266,7 +282,7 @@ def test_account_only_shops_are_offered_as_links(make_runs):
     assert run["status"] == "needs_account"
     assert "https://b.example.com/p" in run["message"] and "needs an account" in run["message"]
     assert [o["checkout"] for o in run["options"]] == ["account_required", "account_required"]
-    assert Tab.instances[-1].closed
+    assert main_tab().closed
 
 
 def test_guest_shop_is_bought_when_the_best_deal_needs_an_account(make_runs):
@@ -276,8 +292,19 @@ def test_guest_shop_is_bought_when_the_best_deal_needs_an_account(make_runs):
     assert "https://b.example.com/p" in run["message"]  # the cheaper account-only option is still mentioned
 
 
+def test_shops_that_needed_an_account_are_not_tried_again(make_runs):
+    runs, _ = make_runs(PAGES, {u: "sign_in_required" for u in PAGES})
+    runs.start(ME, "phone")
+    tries = len(main_tab().opened)
+    again = runs.start(ME, "phone")
+    assert again["status"] == "needs_account"
+    assert len(main_tab().opened) < tries  # remembered: no checkout pages opened this time
+    assert all(o["checkout"] == "account_required" for o in again["options"])
+
+
 def test_purchase_needs_delivery_details(tmp_path):
-    runs = PurchaseRuns(ProfileStore(tmp_path), model=Model(), search=lambda q: [], tab_factory=Tab, executor=Now())
+    runs = PurchaseRuns(ProfileStore(tmp_path), model=Model(), search=lambda q: [], tab_factory=Tab, executor=Now(),
+                        shops=ShopMemory(tmp_path / "shops.json"))
     with pytest.raises(ApiError) as err:
         runs.start(ME, "a phone")
     assert err.value.details["reason"] == "PROFILE_INCOMPLETE"
@@ -294,7 +321,7 @@ def test_approval_gate(make_runs, monkeypatch):
 
     monkeypatch.delenv("MANDATE_LIVE_PAYMENTS", raising=False)
     done = runs.approve(ME, run["id"], 249900)
-    tab = Tab.instances[-1]
+    tab = main_tab()
     assert done["status"] == "stopped_before_payment" and tab.filled == PAN and tab.clicked == []
     assert tab.closed and PAN not in json.dumps(done)
     with pytest.raises(ApiError) as again:
@@ -308,13 +335,13 @@ def test_live_payment_clicks_the_one_final_button(make_runs, monkeypatch):
     run = runs.start(ME, "phone")
     done = runs.approve(ME, run["id"], 249900)
     assert done["status"] == "ordered" and "Order #A123" in done["message"]
-    assert Tab.instances[-1].clicked == ["Pay now"] and PAN not in json.dumps(done)
+    assert main_tab().clicked == ["Pay now"] and PAN not in json.dumps(done)
 
 
 def test_cancel_closes_the_checkout(make_runs):
     runs, _ = make_runs(PAGES, {u: "payment" for u in PAGES})
     run = runs.start(ME, "phone")
-    assert runs.cancel(ME, run["id"])["status"] == "cancelled" and Tab.instances[-1].closed
+    assert runs.cancel(ME, run["id"])["status"] == "cancelled" and main_tab().closed
 
 
 def test_routes(make_runs, tmp_path):

@@ -8714,6 +8714,7 @@
               "trying",
               "guest",
               "account_required",
+              "blocked",
               "failed"
             ]
           },

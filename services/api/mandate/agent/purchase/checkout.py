@@ -47,6 +47,9 @@ NEXT_PAGE = ("Continue this guest checkout on the current page. The contact and 
              "or debit card, and continue. Done only when the card number field is visible. {rules}\n"
              "Shipping details:\n{shipping}")
 MAX_PAGES = 4
+# Jev steps per phase before giving up: a shop that needs more is rarely one a guest can finish.
+PHASE_STEPS = {"add_to_cart": 12, "checkout": 12, "details": 25}
+PHASE_SECONDS = {"add_to_cart": 40, "checkout": 40, "details": 75}
 # Buttons common enough to click without asking Jev: one model call less and no wrong icon picked.
 DIRECT = {
     "add_to_cart": re.compile(r"^\s*(add\s*to\s*(cart|bag|basket)|加入購物車|加入購物袋|放入購物車|加入購物籃)\s*$", re.I),
@@ -114,6 +117,12 @@ def go_to_payment(tab: GuestTab, title: str, quantity: int, profile: dict, on_st
     for phase, goal in PHASES:
         if on_step:
             on_step({"phase": phase})
+        for label in tab.dismiss_popups():
+            if on_step:
+                on_step({"action": f"Close pop-up ({label})", "kind": "click", "url": "", "typed": False})
+        wall = _wall(tab)
+        if wall:
+            return phase, wall  # a login or bot wall: no point letting Jev try
         if phase in DIRECT and _direct(tab, phase, on_step):
             continue
         pages = MAX_PAGES if phase == "details" else 1
@@ -122,10 +131,13 @@ def go_to_payment(tab: GuestTab, title: str, quantity: int, profile: dict, on_st
                 return phase, "card_field"
             text = (goal if page == 0 else NEXT_PAGE).format(title=title, quantity=quantity, shipping=shipping,
                                                             rules=RULES)
-            status = _attempt(tab, text, on_step, values, stop_on_navigate=phase == "details",
+            status = _attempt(tab, text, on_step, values, phase,
                               deny=None if phase == "add_to_cart" else DIRECT["add_to_cart"])
             if status in STOPS:
                 return phase, status
+            wall = _wall(tab)
+            if wall:
+                return phase, wall
             if status != "navigated":
                 break
         if status != "done" and not (phase == "details" and "number" in _card_roles(tab)):
@@ -154,7 +166,14 @@ def _direct(tab: GuestTab, phase: str, on_step) -> bool:
         if on_step:
             on_step({"action": "Open the cart", "kind": "click", "url": before["url"], "typed": False})
     found = _wait_for(tab, DIRECT[phase])
-    if not found or not tab.click_button(found[0]):
+    if not found:
+        return False
+    for attempt in range(3):  # a covered button usually means a pop-up that appeared late
+        if tab.click_button(found[0]):
+            break
+        tab.dismiss_popups()
+        time.sleep(1)
+    else:
         return False
     if on_step:
         on_step({"action": found[0]["text"], "kind": "click", "url": before["url"], "typed": False})
@@ -163,8 +182,9 @@ def _direct(tab: GuestTab, phase: str, on_step) -> bool:
     after = tab.snapshot()
     if phase == "checkout":
         return after["url"] != before["url"]
-    # Added: the shop moved to its cart, or its page now says so (a mini cart, a count, a message).
-    return after["url"] != before["url"] or after["text"] != before["text"]
+    # The add-to-cart button was clicked: never let Jev add it again (a second item). If the shop did not add it,
+    # the checkout finds an empty cart and the order summary says so.
+    return True
 
 
 NOT_FOUND = re.compile(r"\b404\b|not found|找不到|頁面不存在", re.I)
@@ -189,17 +209,27 @@ def _wait_for(tab: GuestTab, pattern: re.Pattern, timeout_s: float = 8) -> list[
         time.sleep(0.7)
 
 
-def _attempt(tab: GuestTab, goal: str, on_step, values: dict, stop_on_navigate: bool, deny=None) -> str:
-    """One Jev run, retried once with a fresh agent when it gives up (pages still rendering, fields now flagged)."""
+def _attempt(tab: GuestTab, goal: str, on_step, values: dict, phase: str, deny=None) -> str:
+    """One Jev run with the phase's step budget. Retried once with a fresh agent only when Jev did nothing (a page
+    still rendering), or on the details form (fields the shop flags only after a first try)."""
     status = "blocked"
-    for _attempt in range(2):
-        result = tab.run_jev(goal, on_step=on_step, fill_from=values, stop_on_navigate=stop_on_navigate, deny=deny)
+    for attempt in range(2):
+        result = tab.run_jev(goal, max_steps=PHASE_STEPS[phase], on_step=on_step, fill_from=values,
+                             stop_on_navigate=phase == "details", deny=deny, budget_s=PHASE_SECONDS[phase])
         status = f"{result.status}: {result.note}" if result.status in ("blocked", "error") and result.note \
             else result.status
-        if result.status not in ("blocked", "error"):
+        if result.status not in ("blocked", "error") or attempt or (result.steps and phase != "details"):
             break
-        time.sleep(3)
+        time.sleep(1.5)
     return status
+
+
+def _wall(tab: GuestTab) -> str | None:
+    """'sign_in_required' or 'blocked' when the page is a login form or a bot wall, else None."""
+    page = tab.snapshot()
+    if BOT_WALL.search(page["title"] + " " + page["text"][:400]):
+        return "blocked"
+    return "sign_in_required" if tab.evaluate(PASSWORD_JS) else None
 
 
 def _card_roles(tab: GuestTab) -> set[str]:

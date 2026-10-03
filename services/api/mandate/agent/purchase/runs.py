@@ -21,6 +21,7 @@ Runs live in memory with their browser tab: a restarted API forgets them.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from itertools import zip_longest
 import threading
@@ -33,14 +34,17 @@ from urllib.parse import urlparse
 from mandate.payments.auth import Actor
 from mandate.payments.errors import conflict, invalid, not_found
 
-from .assess import Assessment, assess, quoted
+from .assess import BUY_CONTROL, Assessment, assess, quoted
 from .browser import BrowserError, GuestTab
 from .cards import CardError, CardSource, card_source_from_env
 from .checkout import OrderSummary, go_to_payment, read_summary
-from .llm import JsonModel, ModelError
+from .llm import SPEC_MODEL, JsonModel, ModelError
 from .profile import ProfileStore, missing_fields
 from .search import SearchError, web_search
+from .shops import ShopMemory
 from .spec import PurchaseSpec, parse_spec
+
+log = logging.getLogger(__name__)
 
 MAX_PAGES = 16  # pages read while looking for a product
 MAX_MATCHES = 5
@@ -48,6 +52,11 @@ MAX_CHECKOUTS = 4  # candidates tried at checkout before giving up
 ASSESS_WORKERS = 4
 APPROVAL_TTL_S = 20 * 60
 TERMINAL = {"ordered", "failed", "cancelled", "expired", "stopped_before_payment", "needs_account"}
+
+# Where a guest checkout stalled, in words for the shopper (Jev's own status goes to the log).
+STALLED = {"add_to_cart": "I could not add it to the cart there",
+           "checkout": "I could not get from the cart to checkout as a guest",
+           "details": "the checkout did not accept the delivery details"}
 
 RANK_PROMPT = ("Order the shopping options by how well they fit the shopper's stated preference, best first; among "
                "equal fits, cheaper first. Options are listed cheapest first. Return every index once.")
@@ -84,12 +93,15 @@ def live_payments() -> bool:
 class PurchaseRuns:
     def __init__(self, profiles: ProfileStore, model: JsonModel | None = None, search=web_search,
                  tab_factory=GuestTab, cards: CardSource | None = None, executor: Executor | None = None,
-                 monotonic=time.monotonic):
+                 monotonic=time.monotonic, shops: ShopMemory | None = None):
         self.profiles = profiles
         self.model = model or JsonModel()
+        # One call that sets every requirement: the slower, steadier model (the fast one dropped a brand).
+        self.spec_model = model or JsonModel(SPEC_MODEL)
         self.search = search
         self.tab_factory = tab_factory
         self.cards = cards or card_source_from_env()
+        self.shops = shops or ShopMemory()
         self.executor = executor or ThreadPoolExecutor(max_workers=2, thread_name_prefix="purchase")
         self.monotonic = monotonic
         self._runs: dict[str, dict] = {}
@@ -176,12 +188,14 @@ class PurchaseRuns:
             fn(*args)
         except Exception as exc:  # noqa: BLE001 - a run must end in a terminal state, never hang
             known = (ModelError, SearchError, BrowserError, CardError)
+            if not isinstance(exc, known):
+                log.exception("purchase %s failed", run_id)  # tracebacks carry no card data (no locals)
             self._update(run_id, f"Stopped: {exc}" if isinstance(exc, known) else "Stopped on an internal error.",
                          status="failed", message=str(exc) if isinstance(exc, known) else "The purchase failed.")
 
     def _find_and_checkout(self, run_id: str, text: str, profile: dict) -> None:
         self._update(run_id, "Reading your request.", status="searching", message="Working out what to look for.")
-        spec = parse_spec(text, self.model)
+        spec = parse_spec(text, self.spec_model)
         cap = f" under HK${spec.max_price_minor / 100:,.0f}" if spec.max_price_minor else ""
         self._update(run_id, f"Looking for {spec.item}{cap}: " + ("; ".join(r.describe() for r in spec.requirements)
                                                                   or "no other requirements") + ".",
@@ -189,7 +203,7 @@ class PurchaseRuns:
         tab = self.tab_factory()
         keep_tab = False
         try:
-            matches = self._find(run_id, spec, tab)
+            matches = self._find(run_id, spec)
             if self._cancelled(run_id):
                 return
             if not matches:
@@ -202,8 +216,8 @@ class PurchaseRuns:
             if not keep_tab:
                 tab.close()
 
-    def _find(self, run_id: str, spec: PurchaseSpec, tab) -> list[Assessment]:
-        """Read pages in the tab one after another; the model reads them in parallel (it is the slow part)."""
+    def _find(self, run_id: str, spec: PurchaseSpec) -> list[Assessment]:
+        """Read pages in parallel: each worker has its own tab, loads a page and has the model read it."""
         queue: list[str] = []
         for query in (f"{spec.search_query} Hong Kong buy online", f"{spec.search_query} 香港 網購",
                       f"buy {spec.item} online Hong Kong price"):
@@ -219,38 +233,52 @@ class PurchaseRuns:
         self._update(run_id, f"Found {len(queue)} pages in web searches.")
         seen: set[str] = set()
         matches: list[Assessment] = []
-        pending: dict[Future, str] = {}
+        pending: dict[Future, tuple[str, object]] = {}
         pages = 0
-        with ThreadPoolExecutor(max_workers=ASSESS_WORKERS, thread_name_prefix="assess") as pool:
+        # Readers get their own tabs: one may still be loading a slow page when the checkout starts in `tab`.
+        tabs = [self.tab_factory() for _ in range(ASSESS_WORKERS)]
+        idle = list(tabs)
+        pool = ThreadPoolExecutor(max_workers=ASSESS_WORKERS, thread_name_prefix="assess")
+        try:
             while (queue or pending) and len(matches) < MAX_MATCHES and not self._cancelled(run_id):
-                if queue and pages < MAX_PAGES and len(pending) < ASSESS_WORKERS:
+                if queue and pages < MAX_PAGES and idle:
                     url = queue.pop(0)
                     if url in seen:
                         continue
                     seen.add(url)
                     pages += 1
-                    try:
-                        page = tab.open(url)
-                    except BrowserError as exc:
-                        self._update(run_id, f"Skipped {urlparse(url).hostname}: {exc}")
-                        continue
-                    pending[pool.submit(assess, page, spec, self.model)] = url
+                    worker = idle.pop()
+                    pending[pool.submit(self._read, worker, url, spec)] = (url, worker)
                     continue
                 if not pending:
                     break
                 done, _ = wait(pending, return_when=FIRST_COMPLETED)
                 for future in done:
-                    url = pending.pop(future)
+                    url, worker = pending.pop(future)
+                    idle.append(worker)
                     try:
                         result = future.result()
-                    except ModelError as exc:
+                    except (BrowserError, ModelError) as exc:
                         self._update(run_id, f"Skipped {urlparse(url).hostname}: {exc}")
                         continue
-                    links = self._record(run_id, result, matches, seen)
-                    queue = links + queue  # follow the shop's own best products before other shops
-            for future in pending:
-                future.cancel()
+                    except Exception:  # noqa: BLE001 - one unreadable page never ends the search
+                        log.exception("assessing %s failed", url)
+                        self._update(run_id, f"Skipped {urlparse(url).hostname}: could not read the page.")
+                        continue
+                    queue = self._record(run_id, result, matches, seen) + queue  # a shop's own products first
+        finally:
+            # Enough matches: do not wait for slow pages still loading (their tabs are closed under them).
+            pool.shutdown(wait=False, cancel_futures=True)
+            for reader in tabs:
+                reader.close()
         return self._rank(spec, matches)
+
+    def _read(self, tab, url: str, spec: PurchaseSpec) -> Assessment:
+        page = tab.open(url, timeout_s=10)
+        if not BUY_CONTROL.search(page["text"]):
+            time.sleep(2.5)  # client-rendered shops draw their buy button after the page has loaded
+            page = tab.snapshot()
+        return assess(page, spec, self.model)
 
     def _rank(self, spec: PurchaseSpec, matches: list[Assessment]) -> list[Assessment]:
         """Best deal first: products whose page shows every requirement, cheapest first, then the rest.
@@ -299,6 +327,10 @@ class PurchaseRuns:
             if self._cancelled(run_id) or len(options) - skipped >= MAX_CHECKOUTS:
                 break
             host = urlparse(candidate.url).hostname or ""
+            known = self.shops.get(host)
+            if known and host not in failed_shops:
+                failed_shops[host] = known
+                self._update(run_id, f"Skipping checkout on {host}: {known['reason']} (seen before).")
             if host in failed_shops:
                 # The same shop's checkout will stop the same way: record it without another attempt.
                 options.append({**_option(candidate), "checkout": failed_shops[host]["checkout"],
@@ -318,6 +350,9 @@ class PurchaseRuns:
             except (BrowserError, ModelError) as exc:
                 option.update(checkout="failed", reason=str(exc))
                 continue
+            if summary.payable and candidate.price_minor and \
+                    summary.total_minor >= candidate.price_minor * (spec.quantity + 1):
+                summary.problems.append("the order total is more than the ordered quantity costs")
             if summary.payable:
                 option["checkout"] = "guest"
                 self._update(run_id, options=options)
@@ -326,11 +361,12 @@ class PurchaseRuns:
             if summary.stage == "sign_in_required":
                 option.update(checkout="account_required", reason=f"{host} needs an account to check out")
             elif summary.stage == "blocked":
-                option.update(checkout="failed", reason=f"{host} blocks automated browsers")
+                option.update(checkout="blocked", reason=f"{host} blocks automated browsers")
             else:
-                option.update(checkout="failed",
-                              reason="; ".join(summary.problems) or f"checkout stopped at {phase} ({status})")
+                option.update(checkout="failed", reason="; ".join(summary.problems) or STALLED[phase])
+                log.info("checkout on %s stopped at %s: %s", host, phase, status)
             failed_shops[host] = option
+            self.shops.remember(host, option["checkout"], option["reason"])
             self._update(run_id, f"Could not check out on {host}: {option['reason']}.", options=options)
         accounts = [o for o in options if o["checkout"] == "account_required"]
         if accounts:
@@ -384,7 +420,8 @@ class PurchaseRuns:
                 run = self._runs[run_id]
                 approved, title, url = run["order"]["total_minor"], run["choice"]["title"], run["order"]["checkout_url"]
             summary = read_summary(tab, title, self.model)
-            if not summary.payable or summary.total_minor != approved:
+            # Only what code verifies decides here: the total quoted from the page and a card form on it.
+            if summary.total_minor != approved or "number" not in summary.card_fields:
                 self._update(run_id, "The checkout changed after approval.", status="failed",
                              message=f"The checkout no longer shows the approved total "
                                      f"({summary.total_text or 'no total'}). Nothing was paid.")

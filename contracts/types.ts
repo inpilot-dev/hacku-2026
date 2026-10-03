@@ -836,7 +836,7 @@ export type PurchaseOption = {
   "price_minor": number | null;
   "price_text": string | null;
   "unverified": Array<string>;
-  "checkout": "trying" | "guest" | "account_required" | "failed";
+  "checkout": "trying" | "guest" | "account_required" | "blocked" | "failed";
   "reason": string | null;
 };
 
