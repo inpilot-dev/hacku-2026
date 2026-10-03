@@ -730,6 +730,10 @@ export type LoginStreamClientMessage = {
 } | {
   "type": "key";
   "key": "Backspace" | "Tab" | "Enter" | "Escape" | "ArrowLeft" | "ArrowRight" | "Delete";
+} | {
+  "type": "resize";
+  "width": number;
+  "height": number;
 };
 
 export type CartSyncRequest = {

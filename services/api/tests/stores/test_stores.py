@@ -17,7 +17,7 @@ from mandate.stores.connections import LOGIN_TIMEOUT_S, StoreConnections
 from mandate.stores.registry import STORES
 from mandate.stores.routes import build_store_router
 from mandate.stores.steel import StoreBrowserError
-from mandate.stores.stream import VIEWPORT, allowed_url, input_commands
+from mandate.stores.stream import VIEWPORT, allowed_url, input_commands, resized
 from starlette.websockets import WebSocketDisconnect
 
 USER = {"Authorization": "Bearer dev-user-token"}
@@ -263,6 +263,14 @@ def test_input_commands_are_validated_and_clamped():
     assert input_commands({"type": "text", "text": "x" * 65}) == []
     assert input_commands({"type": "text", "text": "\x1b[A"}) == []
     assert input_commands("down") == []
+
+
+def test_resize_is_clamped_to_phone_sized_pages():
+    assert resized({"type": "resize", "width": 390, "height": 600}) == {"width": 390, "height": 600}
+    assert resized({"type": "resize", "width": 2000, "height": 100}) == {"width": 480, "height": 420}
+    assert resized({"type": "resize", "width": "390", "height": 600}) is None
+    assert resized({"type": "down", "x": 1, "y": 1}) is None
+    assert input_commands({"type": "resize", "width": 390, "height": 600}) == []  # never reaches Input
 
 
 def test_navigation_is_kept_on_the_sign_in_and_shop_sites():

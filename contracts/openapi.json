@@ -7622,6 +7622,31 @@
                 ]
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "width",
+              "height"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "resize"
+                ]
+              },
+              "width": {
+                "type": "number",
+                "description": "CSS px of room for the store page; clamped to 320-480."
+              },
+              "height": {
+                "type": "number",
+                "description": "Clamped to 420-1000. The server answers with a viewport message."
+              }
+            }
           }
         ]
       },

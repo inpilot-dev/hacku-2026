@@ -25,15 +25,14 @@
 .ob-login{display:grid;gap:12px;margin-top:12px}
 .ob-login-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--radius-xl);background:var(--color-surface-secondary);font-size:var(--font-text-sm-size);color:var(--color-text-secondary)}
 .ob-lock{font-size:12px}
-.ob-login-screen{position:relative;justify-self:center;width:min(100%,360px);aspect-ratio:412/780;border-radius:var(--radius-2xl);overflow:hidden;background:var(--color-surface-secondary);box-shadow:var(--shadow-200),inset 0 0 0 1px var(--color-border-subtle)}
-.ob-login-screen.live{aspect-ratio:auto}
+.ob-login-screen{position:relative;justify-self:center;max-width:100%;border-radius:var(--radius-2xl);overflow:hidden;background:var(--color-surface-secondary);box-shadow:var(--shadow-200),inset 0 0 0 1px var(--color-border-subtle)}
 .ob-login-screen canvas{display:block;width:100%;height:auto;touch-action:none;cursor:pointer;opacity:0;transition:opacity .2s}
 .ob-login-screen canvas.live{opacity:1}
 .ob-login-wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--color-text-secondary);font-size:var(--font-text-sm-size)}
 /* Off-screen but focusable, 16px so phones don't zoom when it takes focus. */
 .ob-typing{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;font-size:16px;border:0;padding:0}
 .ob-notice{margin:0;font-size:var(--font-text-sm-size);color:var(--color-text-secondary)}
-@media(max-width:480px){.ob-login-screen{width:100%}}
+@media(max-width:480px){.ob-profile.m2-modal{padding:16px}}
 
 /* Real-cart sync in the basket view */
 .cs{display:grid;gap:8px}
