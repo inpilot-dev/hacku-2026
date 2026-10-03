@@ -19,6 +19,11 @@ issuer (issuing.py): a Luhn-valid number under the mandate's card, and capture
 is a card authorization the issuer runs against that card's controls. The FPS
 rail has no card.
 
+On the card rails the owner's own money pays for each single-use card
+(funding.py): the exact authorized amount is held on the owner's funding
+source when the card is issued, captured once the issuer approves the card,
+released when the card is cancelled and refunded with the payment.
+
 No real rail is connected. All three rails are local simulations shaped like
 the products they name (HKT's Tap & Go Single Use Card, a scoped card network
 token, an FPS eDDA debit): no money moves, receipts say
@@ -36,6 +41,7 @@ import uuid
 from typing import Protocol
 
 from .clock import iso
+from .funding import FundingDeclined, SimulatedFundingSource, funding_info
 from .issuing import CardIssuanceError, CardIssuer
 
 
@@ -56,6 +62,7 @@ class PaymentRail(Protocol):
     def void(self, conn: sqlite3.Connection, reservation: dict, now) -> None: ...
     def refund(self, conn: sqlite3.Connection, reservation: dict, amount_minor: int, now) -> str: ...
     def close(self, conn: sqlite3.Connection, mandate_id: str, now) -> None: ...
+    def funding_for(self, conn: sqlite3.Connection, reservation_id: str) -> dict | None: ...
 
 
 class SimulatedSingleUseRail:
@@ -66,7 +73,7 @@ class SimulatedSingleUseRail:
 
     def __init__(self, name: str, *, network: str | None, prefix: str, holds_funds_at_rail: bool,
                  max_amount_minor: int | None = None, issuer: CardIssuer | None = None,
-                 card_network: str | None = None):
+                 card_network: str | None = None, funding: SimulatedFundingSource | None = None):
         self.name = name
         self.network = network
         self.prefix = prefix
@@ -75,6 +82,8 @@ class SimulatedSingleUseRail:
         # With an issuer, each credential is a single-use virtual card on ``card_network``.
         self.issuer = issuer
         self.card_network = card_network
+        # With a funding source, the owner's money is held for each credential (only with an issuer).
+        self.funding = funding if issuer is not None else None
 
     # accounts
 
@@ -120,6 +129,8 @@ class SimulatedSingleUseRail:
             except CardIssuanceError as exc:
                 raise RailDeclined(str(exc)) from None
             credential_id, last4 = card["card_id"], card["last4"]
+            if self.funding is not None:
+                self.funding.hold(conn, reservation, credential_id, now)
         else:
             digits = str(uuid.uuid4().int)
             credential_id = f"{self.prefix}_{uuid.uuid4().hex}"
@@ -168,11 +179,19 @@ class SimulatedSingleUseRail:
                                        currency=row["currency"], now=now, reservation_id=row["reservation_id"])
             if not auth["approved"]:
                 raise RailDeclined(f"Card issuer declined ({auth['response_code']}): {auth['message']}")
+            if self.funding is not None:
+                try:
+                    self.funding.capture(conn, row["reservation_id"], amount_minor, now)
+                except FundingDeclined as exc:
+                    raise RailDeclined(str(exc)) from None
         cur = conn.execute("UPDATE rail_payments SET status = 'captured', captured_minor = ?, updated_at = ? "
                            "WHERE credential_id = ? AND status = 'held'", (amount_minor, iso(now), credential_id))
         if cur.rowcount != 1:
             raise RailDeclined("Credential changed during capture.")
         return credential_id
+
+    def funding_for(self, conn, reservation_id: str) -> dict | None:
+        return self.funding.get(conn, reservation_id) if self.funding is not None else None
 
     def _row(self, conn, reservation: dict) -> sqlite3.Row:
         row = conn.execute("SELECT * FROM rail_payments WHERE reservation_id = ?", (reservation["id"],)).fetchone()
@@ -191,6 +210,11 @@ class SimulatedSingleUseRail:
             raise RailDeclined(f"No open credential for reservation {reservation['id']}.")
         if self.issuer is not None:
             self.issuer.cancel_card(conn, self._row(conn, reservation)["credential_id"], now)
+        if self.funding is not None:
+            try:
+                self.funding.release(conn, reservation["id"], now)
+            except FundingDeclined as exc:
+                raise RailDeclined(str(exc)) from None
 
     def refund(self, conn, reservation: dict, amount_minor: int, now) -> str:
         row = self._row(conn, reservation)
@@ -198,6 +222,11 @@ class SimulatedSingleUseRail:
             raise RailDeclined("Only a captured payment can be refunded, up to the captured amount.")
         conn.execute("UPDATE rail_payments SET status = 'refunded', refunded_minor = ?, updated_at = ? "
                      "WHERE reservation_id = ?", (amount_minor, iso(now), reservation["id"]))
+        if self.funding is not None:
+            try:
+                self.funding.refund(conn, reservation["id"], amount_minor, now)
+            except FundingDeclined as exc:
+                raise RailDeclined(str(exc)) from None
         return f"{self.prefix}rf_{uuid.uuid4().hex}"
 
 
@@ -205,13 +234,15 @@ def TapAndGoSingleUseCardSimulator(issuer: CardIssuer | None = None) -> Simulate
     """HKT Tap & Go Single Use Card: virtual prepaid Mastercard, one payment per card, HK$2,000 maximum."""
     return SimulatedSingleUseRail("tap_and_go_single_use_card", network="mastercard", prefix="tngsuc",
                                   holds_funds_at_rail=True, max_amount_minor=200000, issuer=issuer,
-                                  card_network="mastercard")
+                                  card_network="mastercard",
+                                  funding=SimulatedFundingSource("stored_value", "Tap & Go wallet balance"))
 
 
 def CardNetworkTokenSimulator(issuer: CardIssuer | None = None) -> SimulatedSingleUseRail:
     """A card tokenised per purchase (the Mastercard agent-token / Visa network-token pattern)."""
     return SimulatedSingleUseRail("card_network_token", network="card", prefix="ntok", holds_funds_at_rail=True,
-                                  issuer=issuer, card_network="visa")
+                                  issuer=issuer, card_network="visa",
+                                  funding=SimulatedFundingSource("card_authorization", "HSBC Red credit card"))
 
 
 def FpsEddaSimulator() -> SimulatedSingleUseRail:
@@ -224,6 +255,9 @@ def default_rails(issuer: CardIssuer | None = None) -> dict[str, SimulatedSingle
     return {r.name: r for r in rails}
 
 
-def rail_info(rail: PaymentRail, ref: str | None = None) -> dict:
-    """What audit payloads record about the rail; never a credential secret."""
-    return {"name": rail.name, "simulated": rail.simulated, "ref": ref}
+def rail_info(rail: PaymentRail, ref: str | None = None, funding: dict | None = None) -> dict:
+    """What audit payloads record about the rail and the owner's funding; never a credential secret."""
+    info = {"name": rail.name, "simulated": rail.simulated, "ref": ref}
+    if funding is not None:
+        info["funding"] = funding_info(funding)
+    return info

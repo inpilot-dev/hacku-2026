@@ -74,6 +74,12 @@ bank BIN sponsor) can replace it without touching the ledger.
   that shop, amount and expiry. `payment_credential.last4` is its real last4. Pay presents it to the issuer, which
   checks number, expiry, CVV, status up the card chain, shop, MCC and amount, then burns it. Cancel, expiry and
   revoke cancel cards.
+- **Funding.** The owner's money pays for each single-use card (`funding.py`): when the card is issued, the
+  exact authorized amount is held on the route's funding source (Tap & Go wallet balance, or an authorization
+  on the HSBC Red card). It is captured only after the issuer approves the card, never above the hold; cancel,
+  expiry, freeze and revoke release it; a refund returns it. Rows live in `funding_holds`, and the
+  `authorization_approved`, `payment_completed` and `payment_refunded` audit events carry `rail.funding`.
+  FPS has no card, so it has no separate hold. Simulated: no balance is checked and no money moves.
 - **Freeze.** `POST /mandates/{id}/card/freeze` and `/unfreeze` (owner only) is the reversible kill switch: new
   purchases refuse with `CARD_FROZEN`, a pending payment refuses and releases its hold, and the issuer declines
   with response code 62. Revoke still cancels for good.

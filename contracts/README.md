@@ -318,6 +318,13 @@ frozen, `POST /authorizations` refuses with the new reason code **`CARD_FROZEN`*
 `POST /payments` on an earlier authorization refuses with `CARD_FROZEN`, releases the hold and records a declined
 authorization (response code 62). FPS purchases are refused too: the card is the face of the whole mandate.
 
+**Owner funding (proposed v0.3, wallet, Timmy).** Each single-use card is paid for by a simulated hold on the
+owner's funding source for exactly the authorized amount: held at authorization, captured once the issuer approves
+the card at payment (never above the hold), released on cancel, expiry, freeze or revoke, and refunded with the
+payment. No API shape changes. The `rail` object in `authorization_approved`, `payment_completed` and
+`payment_refunded` audit payloads gains an optional `funding` object (`hold_id`, `source`, `label`, `held_minor`,
+`captured_minor`, `refunded_minor`, `status`, `simulated: true`); FPS purchases have none.
+
 New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`, `card_frozen`,
 `card_unfrozen`. `mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`, and `card`
 (card id, usage, network, last4; never the number).

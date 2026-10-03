@@ -717,7 +717,7 @@ class Wallet:
                     "payment_route": route, "payment_options": options,
                     "credential": {k: credential[k] for k in ("credential_id", "last4", "merchant_id",
                                                               "amount_minor", "expires_at", "single_use")},
-                    "rail": rail_info(rail, credential["credential_id"]),
+                    "rail": rail_info(rail, credential["credential_id"], rail.funding_for(conn, r["id"])),
                 }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
                 body = {
                     **base,
@@ -941,7 +941,7 @@ class Wallet:
             }
             seq = self._event(conn, leaf["owner_id"], "payment_completed", {
                 "decision_id": decision_id, "receipt": receipt, "mandate_version": leaf["version"],
-                "rail": rail_info(rail, capture_ref),
+                "rail": rail_info(rail, capture_ref, rail.funding_for(conn, r["id"])),
             }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
             conn.execute("INSERT INTO payments VALUES (?,?,?,?,?,?,?)",
                          (receipt["id"], r["transaction_id"], r["id"], decision_id, seq, json.dumps(receipt),
@@ -1134,7 +1134,7 @@ class Wallet:
             }
             seq = self._event(conn, row["owner_id"], "payment_refunded", {
                 "refund": refund, "reservation_id": r["id"], "released_paid_minor": amount,
-                "affected_period_ids": period_ids, "rail": rail_info(rail, rail_ref),
+                "affected_period_ids": period_ids, "rail": rail_info(rail, rail_ref, rail.funding_for(conn, r["id"])),
             }, actor=actor, now=now, mandate_id=r["mandate_id"], transaction_id=transaction_id)
             body = {"refund": refund, "budgets": self._budgets_by_ids(conn, period_ids), "event_sequence": seq}
             conn.execute("INSERT INTO refunds VALUES (?,?,?,?,?,?,?,?,?,?)",
