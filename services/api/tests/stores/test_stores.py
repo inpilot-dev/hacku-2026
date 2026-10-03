@@ -61,7 +61,8 @@ class FakeShop:
 
     def cart(self):
         wares = [{"skuId": sku, "count": l["count"], "unitSinglePrice": self.prices[sku], "wareName": f"sku {sku}",
-                  "checked": l["checked"]} for sku, l in self.lines.items()]
+                  "itemSubtotalPrice": self.prices[sku] * l["count"], "checked": l["checked"]}
+                 for sku, l in self.lines.items()]
         return {"code": "0000", "data": {"storeGroupList": [{"storeList": [{"itemGroupList": [
             {"itemList": [{"wareList": wares}]}]}]}]}}
 
@@ -254,7 +255,8 @@ def test_stream_needs_a_pending_sign_in_and_a_single_use_ticket(env):
 
 
 def test_input_commands_are_validated_and_clamped():
-    assert input_commands({"type": "down", "x": 10, "y": 99999})[0][1]["y"] == 4096
+    down = input_commands({"type": "down", "x": 10, "y": 99999})
+    assert [p["type"] for _, p in down] == ["mouseMoved", "mousePressed"] and down[1][1]["y"] == 4096
     assert input_commands({"type": "down", "x": "10", "y": 5}) == []
     assert [p["type"] for _, p in input_commands({"type": "key", "key": "Enter"})] == ["keyDown", "keyUp"]
     assert input_commands({"type": "key", "key": "F12"}) == []
@@ -291,16 +293,26 @@ def test_sync_sets_quoted_quantities_and_flags_shop_price(env):
     assert "never checks out" in result["message"]
 
 
-def test_repeat_sync_does_not_double_and_existing_lines_are_adjusted(env):
+def test_repeat_sync_does_not_double(env):
+    client, browser, _, _, confirm, quote, connect = env
+    connect()
+    browser.shop.lines[MILK] = {"count": 1, "checked": 1}
+    mandate, q = confirm(), quote([(MILK, 2)])
+    first = sync(client, mandate, q)
+    second = sync(client, mandate, q)
+    assert browser.shop.lines == {MILK: {"count": 2, "checked": 1}}
+    assert browser.shop.writes == [(MILK, 1, 2)]  # the second sync found nothing to change
+    assert first["checkout_ready"] and second["checkout_ready"] and second["status"] == "synced"
+
+
+def test_users_own_items_are_never_reduced(env):
     client, browser, _, _, confirm, quote, connect = env
     connect()
     browser.shop.lines[MILK] = {"count": 3, "checked": 1}
-    mandate, q = confirm(), quote([(MILK, 1)])
-    first = sync(client, mandate, q)
-    second = sync(client, mandate, q)
-    assert browser.shop.lines == {MILK: {"count": 1, "checked": 1}}
-    assert browser.shop.writes == [(MILK, 3, 1)]  # the second sync found nothing to change
-    assert first["checkout_ready"] and second["checkout_ready"] and second["status"] == "synced"
+    result = sync(client, confirm(), quote([(MILK, 1)]))
+    assert browser.shop.lines[MILK]["count"] == 3 and browser.shop.writes == []
+    assert result["lines"][0]["status"] == "quantity_mismatch" and result["lines"][0]["cart_quantity"] == 3
+    assert not result["checkout_ready"] and "left them as they were" in result["message"]
 
 
 def test_other_selected_items_block_checkout_and_are_left_alone(env):
@@ -362,10 +374,12 @@ def test_mandate_gates_which_carts_are_touched(env):
 
 def test_parse_cart_reads_lines_only():
     body = {"code": "0000", "data": {"userId": 1, "storeGroupList": [{"storeList": [{"itemGroupList": [
-        {"itemList": [{"wareList": [{"skuId": 5, "count": 2, "unitSinglePrice": 450, "wareName": "Pear", "checked": 0},
+        {"itemList": [{"wareList": [{"skuId": 5, "count": 2, "unitSinglePrice": 450, "itemSubtotalPrice": 800,
+                                     "wareName": "Pear", "checked": 0},
                                     {"skuId": None, "count": 1}]}]}]}]}]}}
     lines = parse_cart(body)
     assert list(lines) == [5] and lines[5].quantity == 2 and lines[5].unit_price_minor == 450 and not lines[5].checked
+    assert lines[5].line_total_minor == 800  # a 2-for offer: the store's line total, not 2 x 450
 
 
 def test_wellcome_store_maps_skus_and_login_url():

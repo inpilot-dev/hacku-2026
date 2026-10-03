@@ -4,9 +4,11 @@ Adding to a cart moves no money, but it changes the user's real account, so:
 
 - Only a store the user connected **and** the mandate allows is touched, and
   only while the mandate is active.
-- The cart is read before any write, and each line is set to the quoted
-  quantity with `beforeCount` = what the cart holds. A write whose answer is
-  lost is never sent again: the cart is read back and the result reported.
+- The cart is read before any write, and each line is raised to the quoted
+  quantity with `beforeCount` = what the cart holds. A line is never lowered:
+  items the user already had stay, and the basket is reported as differing. A
+  write whose answer is lost is never sent again: the cart is read back and the
+  result reported.
 - Nothing here checks out. The cart is then compared line by line with the
   quote. A shop price that differs from the quote, a missing line or other
   items the shop would include at checkout make the basket not checkout-ready.
@@ -36,6 +38,7 @@ class CartLine:
     title: str
     quantity: int
     unit_price_minor: int
+    line_total_minor: int  # the store's own line total, after any multi-buy offer
     checked: bool
 
 
@@ -55,6 +58,8 @@ def parse_cart(body: dict) -> dict[int, CartLine]:
                             sku=sku, title=str(ware.get("wareName") or sku),
                             quantity=count + (prior.quantity if prior else 0),
                             unit_price_minor=int(ware.get("unitSinglePrice") or 0),
+                            line_total_minor=int(ware.get("itemSubtotalPrice") or 0)
+                            + (prior.line_total_minor if prior else 0),
                             checked=bool(ware.get("checked")) or bool(prior and prior.checked))
     return lines
 
@@ -121,11 +126,11 @@ class CartSync:
 
     @staticmethod
     def _write(cart, current: dict[int, CartLine], wanted: dict[int, dict]) -> str | None:
-        """Set each quoted line to its quantity. Stops at the first unanswered or refused write."""
+        """Raise each quoted line to its quantity. Stops at the first unanswered or refused write."""
         for sku, line in wanted.items():
             have = current[sku].quantity if sku in current else 0
-            if have == line["quantity"]:
-                continue
+            if have >= line["quantity"]:
+                continue  # never remove what the user already had
             try:
                 answer = cart.add(sku, have, line["quantity"])
             except StoreBrowserError as exc:
@@ -150,7 +155,7 @@ class CartSync:
                 status = "ok"
             all_ok &= status == "ok"
             if got is not None:
-                subtotal += got.unit_price_minor * got.quantity
+                subtotal += got.line_total_minor
             lines.append({"product_id": line["product_id"], "sku": str(sku), "title": line["title"],
                           "quoted_quantity": line["quantity"], "cart_quantity": got.quantity if got else 0,
                           "quoted_unit_price_minor": line["unit_price_minor"],
@@ -168,8 +173,12 @@ class CartSync:
         if changed:
             notes.append(f"{store_name} now charges a different price for "
                          + ", ".join(l["title"] for l in changed) + ".")
-        if any(l["status"] in ("missing", "quantity_mismatch") for l in lines):
-            notes.append("Some quoted items are not in the cart as quoted.")
+        if any(l["status"] == "missing" for l in lines):
+            notes.append("Some quoted items are not in the cart.")
+        more = [l for l in lines if l["status"] == "quantity_mismatch" and l["cart_quantity"] > l["quoted_quantity"]]
+        if more:
+            notes.append("You already had more of " + ", ".join(l["title"] for l in more)
+                         + " in the cart; Kumi left them as they were.")
         if extra:
             notes.append(f"Your cart also has {len(extra)} other selected item(s) that checkout would include.")
         head = (f"Your {store_name} cart matches the quote." if ready

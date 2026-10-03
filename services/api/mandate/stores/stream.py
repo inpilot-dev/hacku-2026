@@ -1,7 +1,7 @@
 """Show the user the shop's sign-in page from the server's browser, and nothing else.
 
-`WS /stores/{store_id}/login/stream` relays one tab: Chrome's screencast frames
-go to the client as JPEG, and the client's pointer and keyboard input comes
+`WS /stores/{store_id}/login/stream` relays one tab: screenshots of it go to
+the client as JPEG (about four a second, only when the page changed), and the client's pointer and keyboard input comes
 back as CDP `Input` events for that tab only. The relay:
 
 - streams only the sign-in tab of that user's pending login (other tabs and
@@ -31,6 +31,7 @@ from .registry import SuperwebStore
 from .steel import CDP_URL, LoginWindow, StoreBrowserError
 
 VIEWPORT = {"width": 412, "height": 780}
+FRAME_INTERVAL_S = 0.25
 MAX_COORD = 4096  # frames report their own size; this only bounds nonsense input
 KEYS = {"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowRight": 39, "Delete": 46}
 YUU_HOSTS = ("yuurewards.com",)
@@ -67,6 +68,9 @@ def input_commands(msg: object) -> list[tuple[str, dict]]:
                   "buttons": 1 if kind == "down" else 0}
         if kind != "move":
             params["clickCount"] = 1
+        if kind == "down":  # move the pointer there first, as a real mouse would
+            return [("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y, "button": "none", "buttons": 0}),
+                    ("Input.dispatchMouseEvent", params)]
         return [("Input.dispatchMouseEvent", params)]
     if kind == "wheel":
         x, y = _num(msg.get("x"), 0, MAX_COORD), _num(msg.get("y"), 0, MAX_COORD)
@@ -137,31 +141,41 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
             await cdp.call("Page.enable", session)
 
             async def phone_viewport() -> None:
+                # A narrow desktop viewport: the site's responsive CSS gives the phone layout. Mobile
+                # emulation (`mobile: True`) set during a page load left yuu's sign-in stuck loading.
                 await cdp.call("Emulation.setDeviceMetricsOverride", session, width=VIEWPORT["width"],
-                               height=VIEWPORT["height"], deviceScaleFactor=2, mobile=True)
+                               height=VIEWPORT["height"], deviceScaleFactor=2, mobile=False)
 
             await phone_viewport()
-            await cdp.call("Page.startScreencast", session, format="jpeg", quality=70,
-                           maxWidth=VIEWPORT["width"] * 2, maxHeight=VIEWPORT["height"] * 2)
+            # A background tab is throttled (timers, painting), which left yuu's splash screen up forever.
+            await cdp.call("Page.bringToFront", session)
+            await cdp.call("Emulation.setFocusEmulationEnabled", session, enabled=True)
             await send({"type": "viewport", **VIEWPORT})
 
             async def frames() -> None:
+                # Polled screenshots, not Page.startScreencast: in Steel's browser the screencast stopped
+                # sending frames after the first paint, while a capture always paints the current page.
+                previous = None
+                while True:
+                    shot = await cdp.call("Page.captureScreenshot", session, format="jpeg", quality=70,
+                                          optimizeForSpeed=True)
+                    if shot["data"] != previous:
+                        previous = shot["data"]
+                        await send({"type": "frame", "data": shot["data"], **VIEWPORT})
+                    await asyncio.sleep(FRAME_INTERVAL_S)
+
+            async def navigation() -> None:
                 while (event := await cdp.events.get()) is not None:
-                    if event.get("sessionId") != session:
+                    if event.get("sessionId") != session or event.get("method") != "Page.frameNavigated":
                         continue
-                    method, params = event.get("method"), event.get("params", {})
-                    if method == "Page.screencastFrame":
-                        meta = params.get("metadata", {})
-                        await send({"type": "frame", "data": params["data"],
-                                    "width": round(meta.get("deviceWidth") or VIEWPORT["width"]),
-                                    "height": round(meta.get("deviceHeight") or VIEWPORT["height"])})
-                        await cdp.call("Page.screencastFrameAck", session, sessionId=params["sessionId"])
-                    elif method == "Page.frameNavigated" and not params["frame"].get("parentId"):
-                        # A navigation that swaps renderer drops the override, so set it again.
-                        await phone_viewport()
-                        if not allowed_url(params["frame"].get("url", ""), store):
-                            await send({"type": "notice", "text": f"Only the {store.name} sign-in can be used here."})
-                            await cdp.call("Page.navigate", session, url=store.login_url())
+                    frame = event["params"]["frame"]
+                    if frame.get("parentId"):
+                        continue
+                    # A navigation that swaps renderer drops the override, so set it again.
+                    await phone_viewport()
+                    if not allowed_url(frame.get("url", ""), store):
+                        await send({"type": "notice", "text": f"Only the {store.name} sign-in can be used here."})
+                        await cdp.call("Page.navigate", session, url=store.login_url())
 
             async def inputs() -> None:
                 while (msg := await receive()) is not None:  # None: the client left
@@ -173,7 +187,7 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
                     await asyncio.sleep(poll_s)
                 await send({"type": "status", "status": status})
 
-            tasks = [asyncio.create_task(t()) for t in (frames, inputs, watch)]
+            tasks = [asyncio.create_task(t()) for t in (frames, navigation, inputs, watch)]
             try:
                 done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
