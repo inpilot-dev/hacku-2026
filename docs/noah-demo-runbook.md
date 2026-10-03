@@ -79,3 +79,12 @@ The prior note about disconnected agent and audit/verification APIs is supersede
 The current UI includes Timmy's merged opt-in **Review unusual purchases** mandate rule. Start a fresh demo, enable it before confirming the mandate, activate, then quote the preset basket. The initial purchase should pause with the first-purchase reason. Show that the pending state has no reservation or payment, inspect the exact reason, and select **Approve once**. The same sandbox transaction should finish and update the remaining balance. Approval applies once to that basket and the listed review reasons only; it does not override hard limits. Listing text that tries to instruct the agent is always escalated.
 
 After integrating Timmy PR #13, the frontend production build passed and all 140 API tests passed. The live browser rehearsal completed the review-and-approve flow for HK$151.80, with HK$648.20 remaining. No real funds moved. The second physical-machine rehearsal remains outstanding.
+
+
+## Typed and spoken shopping-list flow — 3 October 2026
+
+The latest UI accepts a typed list or a short microphone recording. Audio transcription runs locally through faster-whisper; the resulting words appear in the editable list. Parsing may use the configured OpenRouter model, with a clearly identified fixed-rule fallback when the provider is unavailable. Read the recognized item names and quantities to the audience before packing. Jev chooses only from the allowed catalog, and the wallet calculates totals and applies the confirmed mandate. If the agent is unavailable or refuses items, the UI reports that result; it does not silently turn a typed request into a different basket.
+
+A first purchase from a shop not present in the owner's purchase history can now trigger wallet review alongside the other unusual-purchase reasons. The exact returned reasons are shown together in the review screen; approval applies only once to that basket and reason set.
+
+After syncing these team changes, the frontend production build passed and all 157 API tests passed. Microphone capture and external model-provider round trips were not part of this local validation.
