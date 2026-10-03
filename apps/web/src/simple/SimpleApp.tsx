@@ -601,7 +601,7 @@ export default function SimpleApp() {
       if (event.key === 'Escape' && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
         setEditingPreset(null); setReceiptsOpen(false); setSelectedReceipt(null); setProfileOpen(false);
       }
-      if (event.key === 'Tab' && focusables.length) {
+      if (event.key === 'Tab' && focusables.length && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
         const first = focusables[0]; const last = focusables[focusables.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }

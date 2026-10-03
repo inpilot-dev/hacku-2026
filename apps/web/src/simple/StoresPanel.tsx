@@ -55,7 +55,9 @@ export default function StoresPanel({ token, online, picked, onPick, allowedIds,
   useEffect(() => { void load(); }, [load]);
 
   async function connect(store: StoreConnection) {
-    setError(''); setBusy(store.store_id);
+    setError('');
+    if (store.status === 'awaiting_login') { setSigningIn(store); return; }  // resume, don't restart
+    setBusy(store.store_id);
     try { setSigningIn(await api.connectStore(token, store.store_id)); } catch (err) {
       setError(err instanceof Error ? err.message : `Could not open ${store.name}.`);
     } finally { setBusy(''); }
@@ -94,7 +96,7 @@ export default function StoresPanel({ token, online, picked, onPick, allowedIds,
         </div>}
         {store.status === 'connected'
           ? <button className="m2-link" onClick={() => void disconnect(store)} disabled={busy === store.store_id}>Disconnect</button>
-          : <button className="ob-connect" onClick={() => void connect(store)} disabled={busy === store.store_id || online === false}>{store.status === 'expired' ? 'Sign in again' : 'Connect'}</button>}
+          : <button className="ob-connect" onClick={() => void connect(store)} disabled={busy === store.store_id || online === false}>{store.status === 'expired' ? 'Sign in again' : store.status === 'awaiting_login' ? 'Continue sign-in' : 'Connect'}</button>}
       </li>)}
     </ul>}
     <p className="m2-muted ob-small">Disconnect forgets Mandate’s saved sign-in. You stay signed in on the store’s own site and app.</p>

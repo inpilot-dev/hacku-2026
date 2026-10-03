@@ -63,3 +63,5 @@
 .m2-profile-trigger i{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--gray-1000);color:var(--gray-0)}
 .m2-top-right{display:flex;align-items:center;gap:8px}
 @media(max-width:480px){.m2-profile-trigger span{display:none}.m2-profile-trigger{padding:4px}}
+.ob-login-closed{display:grid;align-content:center;justify-items:center;gap:12px;padding:24px;text-align:center;background:var(--color-surface-secondary)}
+.ob-login-screen:has(.ob-login-closed) canvas{opacity:.25}

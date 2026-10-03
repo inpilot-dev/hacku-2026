@@ -25,6 +25,8 @@ export default function StoreLoginCanvas({ token, storeId, storeName, onFinished
   const viewportRef = useRef({ width: 412, height: 780 });
   const pressedRef = useRef(false);
   const [state, setState] = useState<'opening' | 'live' | 'closed'>('opening');
+  const [attempt, setAttempt] = useState(0);  // Reopen: a new stream onto the same pending sign-in
+  const finalRef = useRef(false);
   const [notice, setNotice] = useState('');
   const finishedRef = useRef(onFinished);
   finishedRef.current = onFinished;
@@ -59,16 +61,25 @@ export default function StoreLoginCanvas({ token, storeId, storeName, onFinished
           } else if (msg.type === 'notice' || msg.type === 'error') {
             setNotice(msg.text);
           } else if (msg.type === 'status') {
+            finalRef.current = true;
             finishedRef.current(msg.status);
           }
         };
-        socket.onclose = () => { if (!cancelled) setState('closed'); };
+        socket.onclose = () => {
+          if (cancelled || finalRef.current) return;
+          setState('closed');
+          // The stream can drop while the store still finished signing in; ask before showing "closed".
+          api.store(token, storeId).then((store) => {
+            if (!cancelled && store.status !== 'awaiting_login') { finalRef.current = true; finishedRef.current(store.status); }
+          }).catch(() => undefined);
+        };
       } catch (err) {
         if (!cancelled) { setNotice(err instanceof Error ? err.message : 'Could not open the store window.'); setState('closed'); }
       }
     })();
+    setState('opening'); setNotice('');
     return () => { cancelled = true; socket?.close(); socketRef.current = null; };
-  }, [token, storeId]);
+  }, [token, storeId, attempt]);
 
   function send(msg: LoginStreamClientMessage) {
     const socket = socketRef.current;
@@ -93,7 +104,9 @@ export default function StoreLoginCanvas({ token, storeId, storeName, onFinished
         onPointerMove={(e) => { if (pressedRef.current) send({ type: 'move', ...point(e) }); }}
         onWheel={(e) => send({ type: 'wheel', ...point(e), dx: e.deltaX, dy: e.deltaY })}
       />
-      {state !== 'live' && <div className="ob-login-wait">{state === 'closed' ? 'The store window closed.' : `Opening ${storeName}…`}</div>}
+      {state === 'opening' && <div className="ob-login-wait">Opening {storeName}…</div>}
+      {state === 'closed' && <div className="ob-login-wait ob-login-closed"><span>The store window stopped.</span>
+        <button className="ob-connect" onClick={() => setAttempt((n) => n + 1)}>Reopen, keep my progress</button></div>}
       {/* Keyboard input for the remote page; one-time-code lets phones offer the SMS code. */}
       <input
         ref={typingRef}
