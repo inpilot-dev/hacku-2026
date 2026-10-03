@@ -20,9 +20,10 @@ class ModelError(Exception):
 
 
 class JsonModel:
-    def __init__(self, model: str = MODEL, client: httpx.Client | None = None):
+    def __init__(self, model: str = MODEL, client: httpx.Client | None = None, timeout_s: float = 30):
         self.model = model
-        self.client = client or httpx.Client(timeout=90)
+        # A stalled provider call should cost one page, not the whole search (seen: 90 s on one page).
+        self.client = client or httpx.Client(timeout=timeout_s)
 
     def ask(self, name: str, schema: dict, system: str, user: str) -> dict:
         key = env_value("OPENROUTER_KEY") or env_value("OPENROUTER_API_KEY")
