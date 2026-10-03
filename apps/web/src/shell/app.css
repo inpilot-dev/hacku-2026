@@ -118,3 +118,55 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* A thermal receipt stays paper-colored in either app theme. */
+.receipt-dialog { background: var(--muted); }
+.receipt-stage { padding: 4px 24px 12px; filter: drop-shadow(0 8px 12px rgb(0 0 0 / 9%)); }
+.receipt-sheet {
+  color: #35332e; background: #fffdf7; padding: 28px 24px 32px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.65;
+  background-image: repeating-linear-gradient(0deg, transparent 0 3px, rgb(120 100 65 / 1.8%) 3px 4px);
+  mask: linear-gradient(#000 0 0) top / 100% calc(100% - 8px) no-repeat,
+    conic-gradient(from -45deg at 50% 100%, transparent 90deg, #000 0) bottom / 16px 8px repeat-x;
+}
+.receipt-head { text-align: center; display: flex; flex-direction: column; align-items: center; }
+.receipt-brand { font-size: 10px; letter-spacing: .28em; color: #817a6c; }
+.receipt-head h2 { font-family: var(--font-sans); font-size: 26px; font-weight: 700; letter-spacing: -.055em; margin: 8px 0 2px; }
+.receipt-head p { font-size: 10px; letter-spacing: .16em; }
+.receipt-head time { margin-top: 8px; font-size: 10px; color: #746d60; }
+.receipt-stamp { display: inline-flex; align-items: center; gap: 4px; margin-top: 16px; padding: 2px 10px; border: 1.5px solid #31704f; border-radius: 4px; color: #31704f; font-size: 11px; font-weight: 700; letter-spacing: .12em; transform: rotate(-5deg); }
+.receipt-stamp svg { width: 12px; height: 12px; }
+.receipt-rule { border-top: 1px dashed #bfb7a6; margin: 20px 0 14px; }
+.receipt-columns { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: .08em; color: #817a6c; }
+.receipt-items { margin-top: 14px; display: grid; gap: 14px; }
+.receipt-item-name { overflow-wrap: anywhere; font-weight: 600; }
+.receipt-item-amount { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.receipt-item-amount > span:first-child { color: #817a6c; font-size: 10px; }
+.receipt-item-amount > span:last-child { white-space: nowrap; }
+.receipt-charges { margin-top: 14px; padding-top: 12px; border-top: 1px dotted #d6cebf; }
+.receipt-charges > div, .receipt-payment { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.receipt-charges > div > span:last-child { white-space: nowrap; }
+.receipt-total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-weight: 700; }
+.receipt-total > span { font-size: 11px; }
+.receipt-total strong { font-size: 22px; letter-spacing: -.05em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.receipt-payment { margin-top: 10px; font-size: 10px; color: #746d60; }
+.receipt-payment > span:last-child { text-align: right; overflow-wrap: anywhere; }
+.receipt-reference { font-size: 9px; color: #746d60; }
+.receipt-reference dt { text-transform: uppercase; letter-spacing: .08em; margin-top: 10px; }
+.receipt-reference dd { overflow-wrap: anywhere; line-height: 1.5; margin-top: 2px; }
+.receipt-foot { display: grid; gap: 3px; text-align: center; margin-top: 24px; font-size: 9px; color: #817a6c; }
+.receipt-unavailable { margin: 16px 0; color: #746d60; }
+@media (max-width: 380px) {
+  .receipt-stage { padding-inline: 14px; }
+  .receipt-sheet { padding-inline: 18px; }
+  .receipt-total strong { font-size: 20px; }
+}
+@media print {
+  body:has(#printable-receipt) #root, body:has(#printable-receipt) [data-slot="dialog-overlay"] { display: none !important; }
+  body:has(#printable-receipt) { background: white !important; }
+  .receipt-dialog { position: static !important; transform: none !important; width: 80mm !important; max-width: 100% !important; max-height: none !important; overflow: visible !important; margin: 0 auto; border: 0 !important; box-shadow: none !important; background: white !important; }
+  .receipt-toolbar, .receipt-dialog > button { display: none !important; }
+  .receipt-stage { padding: 0; filter: none; }
+  .receipt-sheet { background: white; background-image: none; mask: none; padding: 6mm 4mm; print-color-adjust: exact; }
+}
