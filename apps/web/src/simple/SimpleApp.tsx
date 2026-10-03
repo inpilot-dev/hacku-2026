@@ -94,6 +94,7 @@ function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: s
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
+const merchantName = (id: string) => id === 'wellcome' ? 'Wellcome' : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
@@ -133,7 +134,12 @@ function savedPresets(): Record<string, SavedPreset> {
       if ((!PICKS.some((pick) => pick.id === id) && !/^custom-[\w-]{1,80}$/.test(id)) || !raw || typeof raw !== 'object') continue;
       const candidate = raw as Partial<SavedPreset>;
       if (typeof candidate.title !== 'string' || !candidate.title.trim() || !Array.isArray(candidate.items)) continue;
-      const items = candidate.items.filter((item): item is ShoppingItem => !!item && typeof item.name === 'string' && !!item.name.trim() && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 20).slice(0, 20);
+      const items = candidate.items.flatMap((raw): ShoppingItem[] => {
+        if (!raw || typeof raw !== 'object') return [];
+        const item = raw as Partial<ShoppingItem>;
+        if (typeof item.name !== 'string' || !item.name.trim() || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 20) return [];
+        return [{ name: item.name.trim().slice(0, 100), quantity: Number(item.quantity), unit: typeof item.unit === 'string' ? item.unit.trim().slice(0, 24) || null : null }];
+      }).slice(0, 20);
       if (items.length) result[id] = { title: candidate.title.trim().slice(0, 60), items };
     }
     return result;
@@ -792,7 +798,7 @@ export default function SimpleApp() {
         {selectedReceiptRecord ? <>
           <button className="m2-back-link" onClick={() => setSelectedReceipt(null)}>← All receipts</button>
           <article className="m2-paper-receipt" id="printable-receipt">
-            <div className="m2-paper-brand">WELLCOME <span>MANDATE · SANDBOX</span></div>
+            <div className="m2-paper-brand">{merchantName(selectedReceiptRecord.receipt.merchant_id).toUpperCase()} <span>MANDATE · SANDBOX</span></div>
             <p className="m2-paper-date">{new Date(selectedReceiptRecord.receipt.paid_at || selectedReceiptRecord.occurredAt).toLocaleString('en-HK', { dateStyle: 'long', timeStyle: 'short' })}</p>
             {receiptDetailLoading ? <p className="m2-muted">Loading item details…</p> : selectedReceiptRecord.quote ? <ul>{selectedReceiptRecord.quote.items.map((item) => <li key={item.product_id}><span>{item.quantity}× {item.title}</span><b>{money(item.line_total_minor)}</b></li>)}{selectedReceiptRecord.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`}><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}</ul> : <p className="m2-muted">{receiptDetailError || 'Item details are no longer available for this purchase.'}{receiptDetailError && <button className="m2-back-link" onClick={() => void openReceipt(selectedReceiptRecord)}>Try again</button>}</p>}
             <div className="m2-paper-total"><span>Paid</span><b>{money(selectedReceiptRecord.receipt.amount_minor)}</b></div>
@@ -801,7 +807,7 @@ export default function SimpleApp() {
           <button className="m2-cta m2-print-button" onClick={() => window.print()}><Printer size={17} />Print / Save PDF</button>
         </> : <>
           {receiptsLoading ? <div className="m2-receipt-loading"><Avatar name="stella" state="idle" size={64} /><p>Finding your receipts…</p></div> : receiptsError ? <div className="m2-receipts-state"><p role="alert">{receiptsError}</p><button className="m2-ghost" onClick={() => void loadReceipts(true)}>Try again</button></div> : receipts.length ? <div className="m2-receipt-list">{receipts.map((record) => <button className="m2-receipt-row" key={record.receipt.transaction_id} onClick={() => void openReceipt(record)}>
-            <span className="m2-receipt-icon"><ReceiptText size={19} /></span><span className="m2-receipt-row-text"><b>Wellcome groceries</b><small>{new Date(record.receipt.paid_at || record.occurredAt).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b className="m2-receipt-row-amount">{money(record.receipt.amount_minor)}</b><ArrowRight size={17} />
+            <span className="m2-receipt-icon"><ReceiptText size={19} /></span><span className="m2-receipt-row-text"><b>{merchantName(record.receipt.merchant_id)} groceries</b><small>{new Date(record.receipt.paid_at || record.occurredAt).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b className="m2-receipt-row-amount">{money(record.receipt.amount_minor)}</b><ArrowRight size={17} />
           </button>)}</div> : <div className="m2-receipts-state"><Sticker name="stella" state="idle" size={104} tilt={-5} /><h3>No paid receipts yet</h3><p>Completed sandbox purchases will appear here. Refused orders are not receipts.</p></div>}
           {!receiptsLoading && receipts.length > 0 && <button className="m2-refresh-receipts" onClick={() => void loadReceipts(true)}>Refresh history</button>}
         </>}
