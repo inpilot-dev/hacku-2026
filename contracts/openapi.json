@@ -2842,6 +2842,166 @@
           }
         }
       }
+    },
+    "/shopping-list/parse": {
+      "post": {
+        "operationId": "parseShoppingList",
+        "tags": [
+          "agent"
+        ],
+        "summary": "Turn typed or spoken text into shopping-list items",
+        "description": "Items are names and quantities only; products are chosen later by an agent run and priced by the wallet.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShoppingListParseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShoppingListParseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Model provider unavailable; nothing was changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shopping-list/transcribe": {
+      "post": {
+        "operationId": "transcribeShoppingList",
+        "tags": [
+          "agent"
+        ],
+        "summary": "Transcribe a spoken shopping list",
+        "description": "Returns text for the shopper to check before parsing. Transcribed locally on the API server; audio is not sent to a third party.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranscriptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Local transcription is not installed on the server.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5945,6 +6105,103 @@
           "event_sequence"
         ],
         "description": "Proposed v0.2 addition (wallet, Timmy). Additive: v0.1 clients can ignore it."
+      },
+      "ShoppingListParseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "What the shopper typed or said. Untrusted input."
+          }
+        }
+      },
+      "ShoppingListParseResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "source",
+          "model_id",
+          "note"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShoppingItem"
+            },
+            "maxItems": 30
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "model",
+              "rules"
+            ],
+            "description": "rules when the model was unavailable and fixed splitting was used."
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "TranscriptionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "audio_base64",
+          "format"
+        ],
+        "properties": {
+          "audio_base64": {
+            "type": "string",
+            "description": "Base64 audio, at most 4 MB decoded."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "ogg",
+              "webm",
+              "wav",
+              "mp3",
+              "m4a",
+              "aac",
+              "flac"
+            ]
+          }
+        }
+      },
+      "TranscriptionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "model_id"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": "string"
+          }
+        }
       }
     }
   }

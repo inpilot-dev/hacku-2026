@@ -595,3 +595,24 @@ export type RefundResponse = {
   "budgets": Array<BudgetPeriod>;
   "event_sequence": number;
 };
+
+export type ShoppingListParseRequest = {
+  "text": string;
+};
+
+export type ShoppingListParseResponse = {
+  "items": Array<ShoppingItem>;
+  "source": "model" | "rules";
+  "model_id": string | null;
+  "note": string;
+};
+
+export type TranscriptionRequest = {
+  "audio_base64": string;
+  "format": "ogg" | "webm" | "wav" | "mp3" | "m4a" | "aac" | "flac";
+};
+
+export type TranscriptionResponse = {
+  "text": string;
+  "model_id": string;
+};

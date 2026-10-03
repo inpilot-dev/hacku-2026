@@ -1,0 +1,4 @@
+# Shopping-list input for the agent (mandate/agent/shopping_list.py): local speech-to-text.
+# PyAV 19.0.1 fails with faster-whisper 1.2.1 (open() no longer takes metadata_errors); 16.1.0 works.
+faster-whisper==1.2.1
+av==16.1.0
