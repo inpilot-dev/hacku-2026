@@ -60,7 +60,7 @@ def test_authorization_uses_the_recommended_route_and_logs_the_ranking(h):
         "rail": "card_network_token", "fee_minor": 0, "reward_minor": 1188, "net_minor": 28512,
         "rank": None, "recommended_route_id": None, "rule": None, "caveats": []}
     with h.wallet.db.read() as conn:
-        logged = json.loads(conn.execute("SELECT payload_json FROM wallet_stub_audit_events "
+        logged = json.loads(conn.execute("SELECT payload_json FROM audit_events "
                                          "WHERE type = 'authorization_approved'").fetchone()[0])
     assert [o["route_id"] for o in logged["payment_options"]] == ["card_hsbc_red", "tng_single_use_card", "fps_edda"]
 
