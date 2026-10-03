@@ -81,8 +81,8 @@ function Avatar({ name, state, size = 64, bob = false }: { name: Mascot; state: 
   return <img className={`m2-avatar${bob ? ' m2-bob' : ''}`} src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
 }
 
-function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: () => void }) {
-  return <button type="button" role="switch" aria-checked={on} aria-label={label} className={`m2-switch${on ? ' on' : ''}`} disabled={disabled} onClick={onChange}><i /></button>;
+function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
+  return <button type="button" role="switch" aria-checked={on} aria-label={label} className={`m2-switch${on ? ' on' : ''}`} onClick={onChange}><i /></button>;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
@@ -116,7 +116,8 @@ export default function SimpleApp() {
 
   const [weekly, setWeekly] = useState('800');
   const [perOrder, setPerOrder] = useState('300');
-  const [askAbove, setAskAbove] = useState('');
+  const [askOn, setAskOn] = useState(false);
+  const [askAbove, setAskAbove] = useState('100');
   const [setupOpen, setSetupOpen] = useState(false);
 
   const [phase, setPhase] = useState<Phase>('pick');
@@ -174,12 +175,11 @@ export default function SimpleApp() {
   const spent = (period?.paid_minor ?? 0) + (period?.reserved_minor ?? 0);
   const ratio = limit ? Math.min(1, spent / limit) : 0;
 
-  /** Turns the card on with the setup form's values, or with a frozen card's previous rules. */
-  async function activate(previous?: Policy) {
+  async function activate() {
     setError('');
-    const weeklyMinor = previous ? previous.period_limits[0]?.limit_minor ?? 0 : Math.round(Number(weekly) * 100);
-    const orderMinor = previous ? previous.per_order_limit_minor : Math.round(Number(perOrder) * 100);
-    const askMinor = previous ? previous.approval_above_minor : askAbove.trim() ? Math.round(Number(askAbove) * 100) : null;
+    const weeklyMinor = Math.round(Number(weekly) * 100);
+    const orderMinor = Math.round(Number(perOrder) * 100);
+    const askMinor = askOn ? Math.round(Number(askAbove) * 100) : null;
     if (!(weeklyMinor > 0) || !(orderMinor > 0) || (askMinor !== null && !(askMinor > 0))) { setError('Use whole HK$ amounts above zero.'); return; }
     const policy: Policy = {
       currency: 'HKD',
@@ -365,12 +365,12 @@ export default function SimpleApp() {
           <h2>Mum’s rules</h2>
           <label className="m2-ledger-row"><span>Weekly budget</span><b>HK$<input inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} aria-label="Weekly budget in HK$" /></b></label>
           <label className="m2-ledger-row"><span>Most per order</span><b>HK$<input inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} aria-label="Maximum per order in HK$" /></b></label>
-          <label className="m2-ledger-row"><span>Ask me first above <small>optional</small></span><b>HK$<input inputMode="numeric" placeholder="off" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>
+          <div className="m2-ledger-row"><span>Ask me first</span><Switch on={askOn} label="Ask me first before bigger orders" onChange={() => setAskOn(!askOn)} /></div>
+          {askOn && <label className="m2-ledger-row m2-ledger-sub"><span>For orders above</span><b>HK$<input inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>}
           <div className="m2-ledger-row fixed"><span>Shop</span><b>Wellcome</b></div>
           <div className="m2-ledger-row fixed"><span>Never buy</span><b>Alcohol</b></div>
           <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
-          <div className="m2-switch-row"><span><b>Mum’s card</b><small>{busy === 'activate' ? 'Switching on…' : 'Off. Flip it on to start.'}</small></span>
-            <Switch on={busy === 'activate'} label="Switch on Mum’s card" disabled={busy === 'activate' || online === false} onChange={() => void activate()} /></div>
+          <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
           {setupOpen && mandate && <button className="m2-link" onClick={() => setSetupOpen(false)}>Back</button>}
         </div>
       </section>
@@ -378,12 +378,11 @@ export default function SimpleApp() {
       <main className="m2-grid">
         <section className="m2-col m2-area-card">
           <div className={`m2-card ${active ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><Sticker name="kip" state={kipState} size={52} tilt={0} /><span>Mum’s grocery card</span><span className="m2-status">{busy === 'freeze' ? 'Freezing…' : busy === 'activate' ? 'Switching on…' : active ? 'On' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span>
-              <Switch on={busy === 'activate' || (active && busy !== 'freeze')} label={active ? 'Freeze Mum’s card' : 'Switch Mum’s card back on'} disabled={busy === 'freeze' || busy === 'activate' || online === false}
-                onChange={() => void (active ? freeze() : activate(mandate.policy))} /></div>
+            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{active ? 'Active' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span></div>
             <div className="m2-card-amount"><small>{active ? 'Left this week' : 'Spending is off'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
             <div className="m2-meter" aria-hidden>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < Math.round(ratio * 20) ? 'on' : ''} />)}</div>
             <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a week</span></div>
+            <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
           </div>
           <dl className="m2-rules">
             <div><dt>Most per order</dt><dd>{hkd(mandate.policy.per_order_limit_minor)}</dd></div>
@@ -392,7 +391,9 @@ export default function SimpleApp() {
             {mandate.policy.approval_above_minor != null && <div><dt>Ask me first above</dt><dd>{hkd(mandate.policy.approval_above_minor)}</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
           </dl>
-          <p className="m2-switch-hint"><Snowflake size={14} />{active ? 'Flip the switch off to freeze the card. Nobody can spend until you flip it back.' : 'Flip the switch to turn the card back on with the same rules.'}</p>
+          {active
+            ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
+            : <button className="m2-cta" onClick={() => setSetupOpen(true)}>Start a new allowance<ArrowRight size={18} /></button>}
         </section>
 
         <section className="m2-col m2-area-feed">
