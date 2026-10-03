@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-03T12:19:21+08:00",
-  "git_commit": "a3e0704",
+  "generated_at": "2026-10-03T12:39:33+08:00",
+  "git_commit": "3ebaeeb",
   "python": "3.13.14",
   "catalog": "placeholder (services/api/mandate/payments/fixtures/placeholder_catalog.json), NOT observed data",
   "live_http": {
@@ -35,7 +35,7 @@
         "refusals": [
           {
             "code": "PERIOD_BUDGET_EXCEEDED",
-            "rule_id": "m_13f139acf3cb4624b568d7e309770e65/v1/period:calendar_week"
+            "rule_id": "m_1684e22ca4504a308a72e16f2b1886df/v1/period:calendar_week"
           }
         ],
         "completed_payments": 1,
@@ -49,9 +49,9 @@
     ],
     "retry": {
       "receipt_ids": [
-        "rcpt_17c534321da94b9995103b9bb5bdcacd",
-        "rcpt_17c534321da94b9995103b9bb5bdcacd",
-        "rcpt_17c534321da94b9995103b9bb5bdcacd"
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2"
       ],
       "same_receipt": true,
       "replayed_flags": [
@@ -65,12 +65,12 @@
     "revoke": {
       "approved_before_revoke": "approved",
       "cancelled_reservation_ids": [
-        "res_d3044b67de584e8b9f4fd7fecf968d36"
+        "res_6472703a1f1c4ee292678c51e30ebed0"
       ],
       "payment_after_revoke": "refused",
       "refusal": {
         "code": "MANDATE_REVOKED",
-        "rule_id": "m_a2299e13157346f6a002afc4c9f9ed9c/v2/status"
+        "rule_id": "m_05472dde0d2d4030a25c4b8f77b73045/v2/status"
       },
       "earlier_payment_still_paid": true,
       "week_after": {
@@ -113,17 +113,22 @@
         "denominator": 8,
         "rate": 0.0
       },
+      "escalation": {
+        "count": 2,
+        "denominator": 22,
+        "rate": 0.0909
+      },
       "latency_ms": {
         "where": "in-process FastAPI TestClient + SQLite on this machine, no network, no model",
         "authorize": {
           "n": 27,
-          "p50": 2.19,
-          "p95": 3.4
+          "p50": 2.13,
+          "p95": 3.23
         },
         "pay": {
           "n": 20,
-          "p50": 1.99,
-          "p95": 2.95
+          "p50": 1.92,
+          "p95": 2.21
         }
       }
     },
@@ -148,7 +153,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_aa4e0ae82c1a48a9b23806c3db43c46c"
+            "receipt_id": "rcpt_69df5362ca8e4b4eb17894b98ab6a677"
           }
         ]
       },
@@ -172,7 +177,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 23530,
-            "receipt_id": "rcpt_2a2c13123a98400b86276dbc26f52de7"
+            "receipt_id": "rcpt_ba2f08a51e44489ba5ec80eae4ade007"
           }
         ]
       },
@@ -196,7 +201,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_bd619a4d0720425292d2ff48602c235e"
+            "receipt_id": "rcpt_f5571bf0c2fc482e834e335bc5c59978"
           }
         ]
       },
@@ -436,7 +441,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_20c0d00905244694a150943684ca7242"
+            "receipt_id": "rcpt_482e675943fa4fea98cbd5a7785bd65f"
           }
         ]
       },
@@ -470,16 +475,24 @@
         "category": "concurrency",
         "setup": "HK$400 left, 2x HK$300 concurrent on one mandate",
         "expected": [
-          "refused:PERIOD_BUDGET_EXCEEDED",
-          "completed"
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
         ],
         "observed": [
-          "refused:PERIOD_BUDGET_EXCEEDED",
-          "completed"
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
         ],
         "passed": true,
         "error": null,
         "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_7746f49f5f594ec9a766cfd659d62539"
+          },
           {
             "legit": false,
             "expected": "refused:PERIOD_BUDGET_EXCEEDED",
@@ -487,14 +500,6 @@
             "completed": false,
             "amount_minor": null,
             "receipt_id": null
-          },
-          {
-            "legit": true,
-            "expected": "completed",
-            "outcome": "completed",
-            "completed": true,
-            "amount_minor": 30000,
-            "receipt_id": "rcpt_0b56df26d79843dbb5187034f9957c0a"
           }
         ]
       },
@@ -528,7 +533,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 30000,
-            "receipt_id": "rcpt_f5210a5171db46259de98825c889ea00"
+            "receipt_id": "rcpt_702a2236c6ab4844aa028f75af31b8e4"
           }
         ]
       },
@@ -552,7 +557,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_a419358b4b1246458f36cb3e38785736"
+            "receipt_id": "rcpt_815858c9b4da4126bdbba5fb5aa5d2a0"
           }
         ]
       },
@@ -576,7 +581,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_79ae7fe9b59444ca94ceabcfb966f348"
+            "receipt_id": "rcpt_389b2dc916594300bc314f1ecd91d1a6"
           }
         ]
       },
@@ -630,5 +635,229 @@
       }
     ]
   },
-  "not_run": "10 model-dependent scenarios (incl. prompt injection) wait for the agent module to merge"
+  "escalation_outcomes": [
+    {
+      "owner_decision": "approve",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "completed",
+      "paid_minor": 29700
+    },
+    {
+      "owner_decision": "deny",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "refused:APPROVAL_DENIED",
+      "paid_minor": 0
+    },
+    {
+      "owner_decision": "no_answer",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "refused:APPROVAL_EXPIRED",
+      "paid_minor": 0
+    }
+  ],
+  "route_costs": {
+    "note": "charged = gross_minor + fee_minor; reward_minor is the wallet's sourced rebate estimate, not money moved",
+    "basket": {
+      "merchant_id": "demo_store_a",
+      "items": [
+        {
+          "product_id": "p_a_rice",
+          "quantity": 3
+        }
+      ],
+      "delivery_context_id": "ctx_a_standard"
+    },
+    "quote_total_minor": 29700,
+    "rule": "Net cost = basket total + route fee - reward value. Lowest net cost wins; ties go to a route that holds funds at the rail, then route id. Rewards count only when observed with a source.",
+    "recommended_route_id": "card_hsbc_red",
+    "routes": [
+      {
+        "route_id": "card_hsbc_red",
+        "label": "HSBC Red credit card (scoped network token)",
+        "rail": "card_network_token",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 1188,
+        "reward_counted": true,
+        "net_minor": 28512,
+        "rank": 1,
+        "evidence_ids": [
+          "src_hsbc_red_rebate",
+          "src_hsbc_rewardcash_value"
+        ]
+      },
+      {
+        "route_id": "tng_single_use_card",
+        "label": "Tap & Go Single Use Card",
+        "rail": "tap_and_go_single_use_card",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 0,
+        "reward_counted": false,
+        "net_minor": 29700,
+        "rank": 2,
+        "evidence_ids": [
+          "src_tng_charges",
+          "src_tng_single_use_card"
+        ]
+      },
+      {
+        "route_id": "fps_edda",
+        "label": "FPS direct debit (eDDA)",
+        "rail": "fps_edda",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 0,
+        "reward_counted": false,
+        "net_minor": 29700,
+        "rank": 3,
+        "evidence_ids": [
+          "src_hsbc_fps"
+        ]
+      }
+    ]
+  },
+  "formal": [
+    {
+      "variant": "unsafe",
+      "status": "counterexample_found",
+      "solver_result": "sat",
+      "max_steps": 8,
+      "transaction_count": 2,
+      "runtime_ms": 89,
+      "assumptions": [
+        "Exactly two transactions, one per agent (Agent A, Agent B), share one available budget.",
+        "Amounts are the concrete integer HKD cents in the request.",
+        "Each step is one atomic transition by one actor; any interleaving of actors is allowed.",
+        "In the unsafe variant, reserve trusts the amount read by an earlier check (no re-check).",
+        "In the atomic variant, check-and-reserve is a single transition.",
+        "Payment commits a reservation once; retry of a paid transaction returns the same receipt.",
+        "Revocation is one mandate-wide flag set by the user; no payment network, clock or database is modelled.",
+        "Invariant 4 (payment matches reserved amount and bound quote) is not modelled."
+      ],
+      "checked_properties": [
+        "1. Paid plus active reserved funds never exceed the available budget.",
+        "2. Each transaction produces at most one payment, including on retry.",
+        "3. No payment commits after the mandate is revoked.",
+        "5. Cancellation or expiry releases a reservation at most once and leaves it unspendable."
+      ],
+      "initial_available_minor": 40000,
+      "purchase_amounts_minor": [
+        30000,
+        30000
+      ],
+      "counterexample_steps": 6
+    },
+    {
+      "variant": "atomic",
+      "status": "no_counterexample_within_bound",
+      "solver_result": "unsat",
+      "max_steps": 8,
+      "transaction_count": 2,
+      "runtime_ms": 112,
+      "assumptions": [
+        "Exactly two transactions, one per agent (Agent A, Agent B), share one available budget.",
+        "Amounts are the concrete integer HKD cents in the request.",
+        "Each step is one atomic transition by one actor; any interleaving of actors is allowed.",
+        "In the unsafe variant, reserve trusts the amount read by an earlier check (no re-check).",
+        "In the atomic variant, check-and-reserve is a single transition.",
+        "Payment commits a reservation once; retry of a paid transaction returns the same receipt.",
+        "Revocation is one mandate-wide flag set by the user; no payment network, clock or database is modelled.",
+        "Invariant 4 (payment matches reserved amount and bound quote) is not modelled."
+      ],
+      "checked_properties": [
+        "1. Paid plus active reserved funds never exceed the available budget.",
+        "2. Each transaction produces at most one payment, including on retry.",
+        "3. No payment commits after the mandate is revoked.",
+        "5. Cancellation or expiry releases a reservation at most once and leaves it unspendable."
+      ],
+      "initial_available_minor": 40000,
+      "purchase_amounts_minor": [
+        30000,
+        30000
+      ],
+      "counterexample_steps": 0
+    }
+  ],
+  "audit": {
+    "where": "in-process verify(); the same cases against the separate verifier process run in services/api/tests/audit/test_verifier_process.py",
+    "events_in_export": 4,
+    "checkpoint_sequence": 4,
+    "detected": 5,
+    "of": 5,
+    "cases": [
+      {
+        "case": "original",
+        "expected": "valid_through_checkpoint",
+        "status": "valid_through_checkpoint",
+        "valid": true,
+        "failure_codes": [],
+        "as_expected": true
+      },
+      {
+        "case": "amount_edited",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "HASH_MISMATCH"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "amount_edited_and_rechained",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "CHECKPOINT_MISMATCH"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "event_deleted_and_rechained",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "TRUNCATED_BEFORE_CHECKPOINT"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "truncated_before_checkpoint",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "TRUNCATED_BEFORE_CHECKPOINT"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "no_retained_checkpoint",
+        "expected": "no_trusted_checkpoint",
+        "status": "no_trusted_checkpoint",
+        "valid": false,
+        "failure_codes": [],
+        "as_expected": true
+      }
+    ]
+  },
+  "not_run": "10 model-dependent scenarios (incl. prompt injection) are not run yet"
 }
