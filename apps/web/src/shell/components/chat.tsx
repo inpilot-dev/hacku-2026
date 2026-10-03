@@ -43,12 +43,12 @@ export function PageHeader({ title, description, action, who, state }: {
 
 export function Bubble({ from, children, tone = 'info', state }: { from: 'you' | Agent; children: ReactNode; tone?: 'good' | 'bad' | 'info'; state?: string }) {
   if (from === 'you') {
-    return <div className="flex justify-end pl-10">
+    return <div className="chat-arrive flex justify-end pl-10">
       <div className="max-w-[85%] rounded-3xl rounded-tr-md bg-primary px-4 py-2.5 text-sm leading-relaxed whitespace-pre-line break-words text-primary-foreground">{children}</div>
     </div>;
   }
   const who = IDENTITY[from];
-  return <div className="flex items-start gap-2.5 pr-6">
+  return <div className="chat-arrive flex items-start gap-2.5 pr-6">
     <Sticker who={from} state={state ?? (tone === 'bad' ? badPose(from) : tone === 'good' ? goodPose(from) : 'idle')} size={36} className="mt-0.5 shrink-0" />
     <div className={cn('min-w-0 max-w-[85%] rounded-3xl rounded-tl-md border px-4 py-2.5', tone === 'bad' && 'border-destructive/30')} style={tint(from)}>
       <p className="mb-0.5 text-xs font-semibold" style={{ color: `var(--${from})` }}>{who.name}<span className="ml-1.5 font-normal opacity-70">{who.role}</span></p>
@@ -93,7 +93,7 @@ export function present(text: string): string {
   }
   if (/^Jev is choosing products/.test(text)) return 'Looking through the shelves for your list…';
   if (text.startsWith('Checkout response unavailable')) return 'I couldn’t confirm the checkout response. Checking the saved transaction before doing anything else.';
-  const paid = text.match(/^Sandbox payment confirmed: (HK\$[\d,.]+)/);
+  const paid = text.match(/^Sandbox payment confirmed: (HK\$\d[\d,]*(?:\.\d{2})?)/);
   if (paid) return `All set! Your sandbox payment of ${paid[1]} is confirmed. No real purchase was made.`;
   return text;
 }

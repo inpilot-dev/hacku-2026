@@ -18,17 +18,25 @@ export function ReceiptList({ limit }: { limit?: number }) {
     <Button variant="outline" size="sm" onClick={() => void receipts.load(true)}>Try again</Button></div>;
   if (!receipts.records.length) return <p className="text-sm text-muted-foreground">No paid receipts yet. Refused orders are not receipts.</p>;
   const shown = limit ? receipts.records.slice(0, limit) : receipts.records;
-  return <ul className="divide-y rounded-xl border">
-    {shown.map((record) => <li key={record.receipt.transaction_id}>
-      <button className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left hover:bg-accent/60" onClick={() => void receipts.open(record)}>
-        <ReceiptText className="size-4 text-muted-foreground" />
-        <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{storeName(record.receipt.merchant_id)} groceries</span>
-          <span className="block text-xs text-muted-foreground">{when(record)}</span></span>
-        <span className="text-sm font-medium tabular-nums">{money(record.receipt.amount_minor)}</span>
-        <ChevronRight className="size-4 text-muted-foreground" />
-      </button>
-    </li>)}
-  </ul>;
+  const latest = shown[0];
+  const label = (record: ReceiptRecord) => `${storeName(record.receipt.merchant_id)} groceries ${when(record)} ${money(record.receipt.amount_minor)}`;
+  return <div className="receipt-collection">
+    <button className="receipt-preview" onClick={() => void receipts.open(latest)} aria-label={label(latest)}>
+      <span className="receipt-preview-top"><span>Latest receipt</span><Check className="size-3.5" aria-hidden="true" /></span>
+      <span className="receipt-preview-main"><strong>{storeName(latest.receipt.merchant_id)}</strong><strong>{money(latest.receipt.amount_minor)}</strong></span>
+      <span className="receipt-preview-bottom"><time>{when(latest)}</time><span>View receipt<ChevronRight className="size-3.5" aria-hidden="true" /></span></span>
+    </button>
+    {shown.length > 1 && <ul className="receipt-list">
+      {shown.slice(1).map((record) => <li key={record.receipt.transaction_id}>
+        <button className="receipt-list-row" onClick={() => void receipts.open(record)} aria-label={label(record)}>
+          <span className="receipt-list-icon"><ReceiptText className="size-4" aria-hidden="true" /></span>
+          <span className="receipt-list-copy"><strong>{storeName(record.receipt.merchant_id)}</strong><time>{when(record)}</time></span>
+          <span className="receipt-list-amount">{money(record.receipt.amount_minor)}</span>
+          <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden="true" />
+        </button>
+      </li>)}
+    </ul>}
+  </div>;
 }
 
 export function ReceiptDialog() {

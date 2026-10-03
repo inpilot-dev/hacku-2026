@@ -62,6 +62,7 @@ function Shell() {
   const go = (next: string) => {
     window.history.replaceState(null, '', `#${next}`);
     setTab(next as TabId);
+    window.scrollTo(0, 0);
   };
 
   return <>

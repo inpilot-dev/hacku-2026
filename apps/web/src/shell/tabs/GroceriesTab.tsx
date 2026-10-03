@@ -119,7 +119,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
             <span className="tabular-nums text-muted-foreground">{money(p.unit_price_minor)}</span>
             <span className="flex items-center gap-1">
               {q > 0 && <><Button variant="outline" size="icon-sm" aria-label={`Remove one ${p.title}`} onClick={() => g.setCustom((c) => ({ ...c, [p.id]: Math.max(0, q - 1) }))}><Minus /></Button>
-                <span className="w-5 text-center tabular-nums">{q}</span></>}
+                <span key={q} className="shelf-quantity w-5 text-center tabular-nums">{q}</span></>}
               <Button variant="outline" size="icon-sm" aria-label={`Add one ${p.title}`} onClick={() => g.setCustom((c) => ({ ...c, [p.id]: Math.min(20, q + 1) }))}><Plus /></Button>
             </span>
           </li>; })}</ul>
@@ -131,7 +131,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
 
     {/* The list box only while picking: once a basket is up, its own buttons are the next step. */}
     {g.canSpend && g.phase === 'pick' && <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shell-composer z-10 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
-      <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40" onSubmit={(e) => { e.preventDefault(); void g.shopFromText(); }}>
+      <form className="shop-input relative" data-ready={Boolean(g.listText.trim()) && !g.busy && !g.voice} onSubmit={(e) => { e.preventDefault(); void g.shopFromText(); }}>
         <Textarea value={g.listText} onChange={(e) => g.setListText(e.target.value)} rows={2}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !g.voice) { e.preventDefault(); void g.shopFromText(); } }}
           placeholder="Type or say the list: rice, two litres of milk, 3 apples"
@@ -141,7 +141,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
           <Button type="button" variant={g.voice === 'recording' ? 'destructive' : 'outline'} size="icon" className={cn('size-10 rounded-full', g.voice === 'recording' && 'animate-pulse')}
             onClick={() => void g.toggleRecording()} disabled={g.voice === 'transcribing' || g.busy === 'parse'}
             aria-label={g.voice === 'recording' ? 'Stop recording' : 'Speak the list'}>{g.voice === 'recording' ? <Square /> : <Mic />}</Button>
-          <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Send list"
+          <Button type="submit" size="icon" className="shop-send size-10 rounded-full" aria-label="Send list"
             disabled={g.phase !== 'pick' || !g.listText.trim() || g.busy === 'parse' || Boolean(g.voice) || !g.products.length}><ArrowUp /></Button>
         </div>
       </form>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, CheckCircle2, ExternalLink, ListChecks, MapPin, Store, XCircle } from 'lucide-react';
-import type { Purchase } from '../../../../../contracts/types';
+import type { Purchase, PurchaseCandidate } from '../../../../../contracts/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Bubble, Linkified, PageHeader, shortUrl, Working } from '../components/chat';
+import ProductVisual from '../components/ProductVisual';
 import HistoryControls from '../components/HistoryControls';
 import { isWorking, usePurchases } from '../data/usePurchases';
 
@@ -19,10 +20,10 @@ import { isWorking, usePurchases } from '../data/usePurchases';
  */
 
 const SUGGESTIONS = [
-  'A 65W USB-C GaN charger with at least 2 USB-C ports, under HK$400',
-  'Noise-cancelling wireless earbuds under HK$600',
-  'A phone with at least 8GB RAM and a 1080p screen, under HK$3000',
-];
+  { title: '65W charger', detail: 'GaN · 2 USB-C ports', budget: 'Under HK$400', kind: 'charger', request: 'A 65W USB-C GaN charger with at least 2 USB-C ports, under HK$400' },
+  { title: 'Wireless earbuds', detail: 'Noise cancelling', budget: 'Under HK$600', kind: 'earbuds', request: 'Noise-cancelling wireless earbuds under HK$600' },
+  { title: 'A new phone', detail: '8GB RAM · 1080p screen', budget: 'Under HK$3,000', kind: 'phone', request: 'A phone with at least 8GB RAM and a 1080p screen, under HK$3000' },
+] as const;
 
 const STATUS_TEXT: Partial<Record<Purchase['status'], string>> = {
   queued: 'Starting…',
@@ -58,11 +59,13 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
       description="Find a match. Review the total before paying."
       action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={() => { p.clear(); setOlder(0); }}>New conversation</Button> : undefined} />
 
-    {p.purchases.length === 0 && <div className="mb-6 space-y-4">
+    {p.purchases.length === 0 && <div className="shop-welcome mb-6 space-y-5">
       <Bubble from="kumi">What are you looking for? Tell me your budget and any must-haves.</Bubble>
-      <div className="grid gap-2 pl-[46px]">
-        {SUGGESTIONS.map((s) => <button key={s} onClick={() => setText(s)}
-          className="min-h-11 rounded-2xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:bg-accent">{s}</button>)}
+      <div className="shop-suggestions">
+        {SUGGESTIONS.map((s) => <button key={s.kind} onClick={() => setText(s.request)} className="shop-suggestion" aria-label={`${s.title}, ${s.budget}`}>
+          <ProductVisual title={s.title} kind={s.kind} />
+          <span className="suggestion-copy"><strong>{s.title}</strong><span>{s.detail}</span><span className="suggestion-budget">{s.budget}<ArrowUp className="size-3.5 rotate-45" aria-hidden="true" /></span></span>
+        </button>)}
       </div>
     </div>}
 
@@ -84,20 +87,19 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
     </Alert>}
     {p.error && <Alert variant="destructive" className="mt-6"><XCircle /><AlertDescription>{p.error}</AlertDescription></Alert>}
 
-    {/* The composer sits above the phone tab bar; while a purchase is open it stays in the flow so it never covers
-        the approval buttons. */}
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shell-composer z-10 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
-      <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40"
+    {/* Review and approval use the whole screen; the composer returns when the purchase ends. */}
+    {!p.busy && <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shell-composer z-10 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
+      <form className="shop-input relative" data-ready={Boolean(text.trim()) && !p.sending && !p.busy}
         onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={1000}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
           placeholder={p.restoring ? 'Checking saved purchases…' : p.busy ? 'Finish or cancel the current purchase first' : 'What do you want to buy?'}
           aria-label="What do you want to buy?" disabled={p.sending || p.busy}
           className="min-h-14 resize-none border-0 bg-transparent pr-14 shadow-none focus-visible:ring-0" />
-        <Button type="submit" size="icon" className="absolute right-2 bottom-2 size-10 rounded-full"
+        <Button type="submit" size="icon" className="shop-send absolute right-2 bottom-2 size-10 rounded-full"
           disabled={!text.trim() || p.sending || p.busy} aria-label="Send">{p.sending ? <span className="text-xs">…</span> : <ArrowUp />}</Button>
       </form>
-    </div></div>
+    </div></div>}
   </div>;
 }
 
@@ -120,15 +122,18 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
     </div>}
 
     {!working && purchase.status !== 'awaiting_approval' && <Bubble from={speaker(purchase)} tone={tone(purchase)}><Linkified text={presentPurchase(purchase.message)} /></Bubble>}
-    {purchase.status === 'awaiting_approval' && <Bubble from="kip">Kumi got to the shop’s card form. Here’s exactly what it will cost; I only pay once you approve this total.</Bubble>}
+    {purchase.status !== 'awaiting_approval' && purchase.candidates.some((c) => c.matches) && <div className="shop-results">
+      {purchase.candidates.filter((c) => c.matches).map((candidate) => <MatchCard key={candidate.url} candidate={candidate} />)}
+    </div>}
+    {purchase.status === 'awaiting_approval' && <Bubble from="kip">Review the total. I’ll wait for your approval before paying.</Bubble>}
 
-    {purchase.status === 'awaiting_approval' && purchase.order && purchase.choice && <Card className="gap-4">
+    {purchase.status === 'awaiting_approval' && purchase.order && purchase.choice && <Card className="checkout-card gap-4">
       <CardHeader>
         <CardDescription className="flex items-center gap-1.5"><Store className="size-3.5" />{purchase.order.shop}</CardDescription>
-        <CardTitle className="text-base leading-snug">{purchase.choice.title}</CardTitle>
+        <div className="checkout-product"><ProductVisual title={purchase.choice.title} /><CardTitle className="text-base leading-snug">{purchase.choice.title}</CardTitle></div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <div className="flex items-baseline justify-between"><span className="text-muted-foreground">Total at checkout</span>
+        <div className="checkout-total flex items-baseline justify-between"><span className="text-muted-foreground">Total at checkout</span>
           <span className="text-xl font-semibold tabular-nums">{purchase.order.total_text ?? money(purchase.order.total_minor)}</span></div>
         <div className="flex justify-between text-muted-foreground"><span>Delivery</span><span>{purchase.order.shipping_text ?? 'not shown'}</span></div>
         {purchase.choice.checks.length > 0 && <ul className="space-y-1">
@@ -142,7 +147,7 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
           View the product page<ExternalLink className="size-3" /></a>
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 sm:flex-row">
-        <Button className="min-h-11 flex-1" onClick={onApprove} disabled={acting}>
+        <Button className="checkout-pay min-h-11 flex-1" onClick={onApprove} disabled={acting}>
           {checking ? 'Checking status…' : acting ? 'Submitting…' : `Approve and pay ${purchase.order.total_text ?? money(purchase.order.total_minor)}`}</Button>
         <Button variant="outline" className="min-h-11" onClick={onCancel} disabled={acting}>Cancel</Button>
       </CardFooter>
@@ -157,6 +162,19 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
     </details>}
     {working && <div className="pl-1"><Button variant="ghost" size="sm" onClick={onCancel} disabled={acting || purchase.status === 'paying'}>Stop</Button></div>}
   </section>;
+}
+
+function MatchCard({ candidate }: { candidate: PurchaseCandidate }) {
+  const checks = candidate.checks.filter((c) => c.ok);
+  return <article className="shop-match ui-enter">
+    <ProductVisual title={candidate.title} />
+    <div className="shop-match-copy">
+      <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="shop-match-title">{candidate.title}<ExternalLink aria-hidden="true" className="size-3 shrink-0" /></a>
+      <span className="shop-match-price">{candidate.price_text ?? (candidate.price_minor != null ? money(candidate.price_minor) : 'Price not shown')}</span>
+      {checks.length > 0 && <p className="shop-match-reason"><CheckCircle2 aria-hidden="true" className="size-3.5 shrink-0" />{checks.map((c) => c.requirement).join(' · ')}</p>}
+      {candidate.unverified.length > 0 && <p className="text-xs text-warning">Not verified: {candidate.unverified.join(', ')}</p>}
+    </div>
+  </article>;
 }
 
 function AccountOnly({ options, prominent = false }: { options: Purchase['options']; prominent?: boolean }) {

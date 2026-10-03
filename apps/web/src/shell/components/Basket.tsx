@@ -14,6 +14,7 @@ import StoreLoginCanvas from '@/simple/StoreLoginCanvas';
 import { TOKEN, useAccount } from '../data/account';
 import { reasonTitle, riskCheck, type Groceries } from '../data/useGroceries';
 import { storeName } from './AllowanceSetup';
+import ProductVisual from './ProductVisual';
 import { Sticker, Working } from './chat';
 import './store-login.css';
 
@@ -26,7 +27,7 @@ export default function Basket({ g }: { g: Groceries }) {
   const v = g.phase === 'verdict' ? g.verdict : null;
   const per = periodWord(account.mandate?.policy.period_limits[0]?.period);
 
-  return <Card className={cn(v?.kind === 'paid' && 'border-success/40', v?.kind === 'refused' && 'border-destructive/40')}>
+  return <Card data-phase={g.phase} data-verdict={v?.kind} className={cn('shopping-basket', v?.kind === 'paid' && 'border-success/40', v?.kind === 'refused' && 'border-destructive/40')}>
     <CardHeader>
       <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect</CardDescription>
       <CardAction><Sticker who={v || g.phase === 'paying' ? 'kip' : 'kumi'} size={56}
@@ -34,14 +35,15 @@ export default function Basket({ g }: { g: Groceries }) {
       <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0) : g.phase === 'paying' ? 'Checking your rules…' : 'Basket ready'}</CardTitle>
     </CardHeader>
     <CardContent className="space-y-4 text-sm">
-      <ul className="space-y-1.5">
+      <ul className="basket-products">
         {quote.items.map((item) => { const category = g.catalogById.get(item.product_id)?.category ?? ''; const flagged = blocked.has(category);
-          return <li key={item.product_id} className="flex justify-between gap-4">
-            <span className={cn(flagged && 'text-destructive')}>{item.quantity}× {item.title}{flagged && <Badge variant="outline" className="ml-2 border-destructive/40 text-destructive">{categoryLabel(category)}</Badge>}</span>
-            <span className="tabular-nums">{money(item.line_total_minor)}</span></li>; })}
+          return <li key={item.product_id} className="basket-product ui-enter">
+            <ProductVisual title={item.title} />
+            <span className={cn('basket-product-name', flagged && 'text-destructive')}>{item.title}<small>Qty {item.quantity}</small>{flagged && <Badge variant="outline" className="border-destructive/40 text-destructive">{categoryLabel(category)}</Badge>}</span>
+            <span className="basket-product-price">{money(item.line_total_minor)}</span></li>; })}
         {quote.charges.map((c, i) => <li key={`c${i}`} className="flex justify-between gap-4 text-muted-foreground"><span>{c.label}</span><span>{c.amount_minor ? money(c.amount_minor) : 'Free'}</span></li>)}
       </ul>
-      <div className="flex justify-between border-t pt-3 font-semibold"><span>Total</span><span className="tabular-nums">{money(quote.total_minor)}</span></div>
+      <div className="basket-total flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{money(quote.total_minor)}</span></div>
 
       {g.phase === 'basket' && <>
         {g.ruleTestBasket
@@ -52,7 +54,7 @@ export default function Basket({ g }: { g: Groceries }) {
 
       {g.phase === 'paying' && <Working>Kip is checking your rules and paying…</Working>}
 
-      {v?.kind === 'paid' && <p className="text-muted-foreground">Paid in the sandbox within your rules. {money(account.available)} left this {per}. This is not a retailer order confirmation.</p>}
+      {v?.kind === 'paid' && <p className="payment-success ui-enter text-muted-foreground"><CheckCircle2 className="size-5 shrink-0" aria-hidden="true" />Paid in the sandbox within your rules. {money(account.available)} left this {per}. This is not a retailer order confirmation.</p>}
       {v?.kind === 'refused' && (v.violations.length
         ? <ul className="space-y-2">{v.violations.map((x, i) => <li key={`${x.rule_id}-${i}`} className="flex gap-2"><XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
           <span><span className="font-medium">{reasonTitle(x)}</span><span className="block text-xs text-muted-foreground">{x.message}</span></span></li>)}</ul>
@@ -69,7 +71,7 @@ export default function Basket({ g }: { g: Groceries }) {
     </CardContent>
     <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap">
       {g.phase === 'basket' && <>
-        <Button className="min-h-11 flex-1" disabled={Boolean(g.paymentComparison && !g.routeId)} onClick={() => void g.checkout()}>Pay {money(quote.total_minor)} in the sandbox</Button>
+        <Button className="checkout-pay min-h-11 flex-1" disabled={Boolean(g.paymentComparison && !g.routeId)} onClick={() => void g.checkout()}>Pay {money(quote.total_minor)} in the sandbox</Button>
         <Button variant="ghost" className="min-h-11" onClick={g.resetShop}>Start over</Button>
       </>}
       {v?.kind === 'review' && <>

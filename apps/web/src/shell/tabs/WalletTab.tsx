@@ -88,8 +88,8 @@ function WalletCard({ onRevoke }: { onRevoke: () => void }) {
   return <Card>
     <CardContent className="space-y-5">
       {/* The card itself: what's left this period, on the card the agent pays with. */}
-      <div className={cn('relative flex min-h-52 max-w-md flex-col justify-between overflow-hidden rounded-3xl bg-gradient-to-br from-neutral-900 to-neutral-700 p-5 text-white',
-        status !== 'Active' && 'from-neutral-500 to-neutral-400')}
+      <div className={cn('wallet-hero relative flex min-h-60 w-full flex-col justify-between overflow-hidden rounded-3xl p-6 text-white',
+        status !== 'Active' && 'wallet-hero-inactive')}
         role="img" aria-label={`${possessive(a.holder)} grocery card, ${a.active ? money(a.available) : money(0)} left this ${per}, ${status}${card ? `, ending ${card.last4}` : ''}`}>
         <div className="flex items-start justify-between">
           <div>
@@ -100,17 +100,17 @@ function WalletCard({ onRevoke }: { onRevoke: () => void }) {
         </div>
         <div>
           <p className="text-xs text-white/60">{a.active ? `Left this ${per}` : 'Spending is off'}</p>
-          <p className="text-4xl font-semibold tracking-tight tabular-nums">{a.active ? money(a.available) : money(0)}</p>
+          <p className="wallet-balance font-semibold tracking-tight tabular-nums">{a.active ? money(a.available) : money(0)}</p>
         </div>
         <div className="flex items-end justify-between text-xs">
           <span className="font-mono text-sm tracking-widest">{card ? `•••• ${card.last4}` : 'No card number'}</span>
           {card && <span className="text-right"><span className="block text-white/60">Valid thru</span>{expiry}</span>}
           {card && <span className="text-base font-semibold italic">{card.network === 'mastercard' ? 'mastercard' : 'VISA'}</span>}
         </div>
-        <Sticker who="kip" state={status === 'Active' ? 'idle' : frozen ? 'refused' : 'revoked'} size={72} className="absolute top-10 right-3 opacity-95" />
+        <span className="wallet-mascot"><Sticker who="kip" state={status === 'Active' ? 'idle' : frozen ? 'refused' : 'revoked'} size={56} /></span>
       </div>
 
-      <div className="max-w-md space-y-1.5">
+      <div className="space-y-1.5">
         <Progress value={a.limit ? Math.min(100, (a.spent / a.limit) * 100) : 0} className="bg-brand-soft [&>[data-slot=progress-indicator]]:bg-brand" />
         <div className="flex justify-between text-xs text-muted-foreground"><span>{money(a.spent)} used</span><span>{money(a.limit)} a {per}</span></div>
       </div>
