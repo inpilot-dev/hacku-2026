@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Ban, Bot, CircleAlert, Crown, FlaskConical, KeyRound, Loader2, Network, Play, Radio, Receipt, Repeat, RotateCcw, ShieldCheck, ShieldX, ShoppingBasket, Shuffle, Store, Tag, Timer, Users, Volume2, VolumeX, Wine, Zap } from 'lucide-react';
@@ -137,7 +138,7 @@ export default function SecurityLab() {
   return <div className="sl">
     <section className="sl-dark" data-theme="dark">
       <header className="sl-top">
-        <span className="sl-brand">Mandate <span>Security lab</span></span>
+        <span className="sl-brand"><BrandLogo /><span className="sl-brand-label">Security lab</span></span>
         <nav><button className="sl-sound" onClick={() => setSound(!sound)} aria-pressed={sound} aria-label={sound ? 'Mute sound effects' : 'Turn on sound effects'}>{sound ? <Volume2 size={16} /> : <VolumeX size={16} />}{sound ? 'Sound on' : 'Sound off'}</button><a href="?about">About</a><a href="?classic">Audit &amp; verification</a><a className="sl-nav-cta" href="./">Open the demo</a></nav>
       </header>
 

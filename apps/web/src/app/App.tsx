@@ -1,5 +1,6 @@
+import BrandLogo from '../components/BrandLogo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
 import type { AgentRun, AgentRunRequest, ApprovalRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, PaymentOptionsResponse, Policy, Product, Quote, Receipt, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
 // Read-only: written by `python -m evaluation.run` (owner: Seungbin). Not a contract; Vite inlines only these keys.
@@ -476,7 +477,7 @@ function App() {
 
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
-      <div className="brand"><span className="brand-mark"><Leaf size={18} strokeWidth={2.4} /></span><span>mandate<span className="brand-period">.</span></span><button className="icon-button mobile-close" aria-label="Close menu" onClick={() => setMobileNav(false)}><X size={18} /></button></div>
+      <div className="brand"><BrandLogo /><button className="icon-button mobile-close" aria-label="Close menu" onClick={() => setMobileNav(false)}><X size={18} /></button></div>
       <div className="family-switch"><span className="family-avatar">M</span><span><strong>Family account</strong><small>Family account</small></span><ChevronDown size={16} /></div>
       <div className="nav-label">WORKSPACE</div>
       <nav aria-label="Main navigation">{nav.map(({ id, label, icon: Icon, count }) => <button key={id} className={`nav-item ${view === id ? 'selected' : ''}`} onClick={() => { setView(id); setMobileNav(false); }}><Icon size={17} /><span>{label}</span>{id === 'shopping' && count ? <span className="nav-count">{count}</span> : null}</button>)}</nav>

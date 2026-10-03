@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Snowflake, Wifi } from 'lucide-react';
 import '../simple/openai-tokens.css';
@@ -74,7 +75,7 @@ export default function CardSetup() {
 
   return <div className="m2">
     <header className="m2-top">
-      <a className="m2-brand m2-back" href="./"><ArrowLeft size={18} />Mandate</a>
+      <a className="m2-brand m2-back" href="./"><ArrowLeft size={18} /><BrandLogo /></a>
       <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
     </header>
 

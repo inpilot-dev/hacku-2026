@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import type { ReactNode } from 'react';
 import { ArrowRight, Ban, CreditCard, EyeOff, Lock, Snowflake, Tag } from 'lucide-react';
 import '../simple/openai-tokens.css';
@@ -34,7 +35,7 @@ const CANNOT: { icon: ReactNode; text: string }[] = [
 export default function Landing() {
   return <div className="lp">
     <header className="lp-top">
-      <span className="lp-brand">Mandate</span>
+      <span className="lp-brand"><BrandLogo /></span>
       <nav>
         <a href="#how">How it works</a>
         <a href="#checked">Evidence</a>

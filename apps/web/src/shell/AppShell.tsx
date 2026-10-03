@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import { useEffect, useState } from 'react';
 import { Moon, Sun, ShoppingBag, ShoppingBasket, UserRound, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -69,7 +70,7 @@ function Shell() {
     <Tabs value={tab} onValueChange={go} className="min-h-dvh gap-0">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur no-print">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 sm:gap-4 px-4">
-          <span className="text-[15px] font-semibold tracking-tight">Mandate</span>
+          <span className="text-[17px] font-semibold tracking-tight"><BrandLogo /></span>
           <TabsList className="hidden md:inline-flex">
             {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id} className="gap-1.5 px-3"><Icon />{label}</TabsTrigger>)}
           </TabsList>

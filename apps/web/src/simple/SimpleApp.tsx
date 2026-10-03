@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
@@ -762,7 +763,7 @@ export default function SimpleApp() {
 
   return <div className={`m2 conversation-app${docked ? ' docked' : ''}`}>
     <header className="m2-top">
-      <div className="m2-brand">Mandate</div>
+      <div className="m2-brand"><BrandLogo /></div>
       <div className="m2-top-right">
         <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
         {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} disabled={recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}

@@ -1,0 +1,10 @@
+@font-face{font-family:MandateWordmark;src:url('/brand/Manrope-Variable.ttf') format('truetype');font-style:normal;font-weight:200 800;font-display:swap}
+.brand-logo{display:inline-flex;align-items:center;gap:8px;flex-shrink:0;white-space:nowrap;vertical-align:middle;color:inherit}
+.brand-logo-mark{display:block;flex:none;overflow:visible}
+.brand-logo-wordmark{font-family:MandateWordmark,Manrope,system-ui,sans-serif;font-size:1.04em;font-weight:750;letter-spacing:-.045em;line-height:1.15}
+@media(prefers-reduced-motion:no-preference){
+  .brand-logo-clasp{animation:brand-logo-reveal .3s ease-out both}
+  .brand-logo-clasp-2{animation-delay:.08s}
+  .brand-logo-clasp-3{animation-delay:.16s}
+}
+@keyframes brand-logo-reveal{from{opacity:0}to{opacity:1}}
