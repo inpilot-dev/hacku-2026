@@ -81,8 +81,8 @@ function nextSundayIso() {
   return `${end.toISOString().slice(0, 10)}T23:59:59+08:00`;
 }
 
-function Avatar({ name, state, size = 64, bob = false }: { name: Mascot; state: string; size?: number; bob?: boolean }) {
-  return <img className={`m2-avatar${bob ? ' m2-bob' : ''}`} src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
+function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
+  return <img className="m2-avatar" src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
 }
 
 function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
@@ -186,6 +186,8 @@ export default function SimpleApp() {
   const [receiptsLoading, setReceiptsLoading] = useState(false);
   const [receiptsError, setReceiptsError] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+  const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
+  const [receiptDetailError, setReceiptDetailError] = useState('');
   const receiptsLoaded = useRef(false);
   const shopRef = useRef<HTMLElement>(null);
 
@@ -538,28 +540,14 @@ export default function SimpleApp() {
     if (receiptsLoading || (receiptsLoaded.current && !force)) return;
     setReceiptsLoading(true); setReceiptsError('');
     try {
-      const paymentEvents: AuditEvent[] = [];
-      let after = 0;
-      for (let page = 0; page < 10; page += 1) {
-        const result = await api.events(TOKEN, after, 200);
-        paymentEvents.push(...result.events.filter((event) => event.type === 'payment_completed' && event.transaction_id));
-        if (!result.has_more || result.next_after <= after) break;
-        after = result.next_after;
-      }
-      const transactionEvents = [...new Map(paymentEvents.map((event) => [event.transaction_id!, event])).values()].slice(-50);
+      const audit = await api.auditExport(TOKEN);
+      const paymentEvents = audit.events.filter((event) => event.type === 'payment_completed' && event.transaction_id);
+      const transactionEvents = [...new Map(paymentEvents.map((event) => [event.transaction_id!, event])).values()];
       const records = await Promise.all(transactionEvents.map(async (event): Promise<ReceiptRecord | null> => {
         const payloadReceipt = event.payload.receipt as Receipt | undefined;
-        try {
-          const receipt = await api.paymentByTransaction(TOKEN, event.transaction_id!);
-          const quote = await api.quoteById(TOKEN, receipt.quote_id).catch(() => null);
-          return { receipt, quote, occurredAt: event.occurred_at };
-        } catch {
-          if (payloadReceipt?.status === 'paid' && payloadReceipt.transaction_id === event.transaction_id) {
-            const quote = await api.quoteById(TOKEN, payloadReceipt.quote_id).catch(() => null);
-            return { receipt: payloadReceipt, quote, occurredAt: event.occurred_at };
-          }
-          return null;
-        }
+        if (payloadReceipt?.status === 'paid' && payloadReceipt.transaction_id === event.transaction_id) return { receipt: payloadReceipt, quote: null, occurredAt: event.occurred_at };
+        try { return { receipt: await api.paymentByTransaction(TOKEN, event.transaction_id!), quote: null, occurredAt: event.occurred_at }; }
+        catch { return null; }
       }));
       const ordered = records.filter((record): record is ReceiptRecord => record !== null).sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt));
       setReceipts(ordered); receiptsLoaded.current = true;
@@ -569,7 +557,19 @@ export default function SimpleApp() {
   }
 
   function showReceipts() {
-    setReceiptsOpen(true); setSelectedReceipt(null); void loadReceipts();
+    setReceiptsOpen(true); setSelectedReceipt(null); setReceiptDetailError(''); void loadReceipts();
+  }
+
+  async function openReceipt(record: ReceiptRecord) {
+    setSelectedReceipt(record.receipt.id); setReceiptDetailError('');
+    if (record.quote) return;
+    setReceiptDetailLoading(true);
+    try {
+      const quote = await api.quoteById(TOKEN, record.receipt.quote_id);
+      setReceipts((current) => current.map((entry) => entry.receipt.id === record.receipt.id ? { ...entry, quote } : entry));
+    } catch (err) {
+      setReceiptDetailError(err instanceof Error ? err.message : 'Item details are unavailable right now.');
+    } finally { setReceiptDetailLoading(false); }
   }
 
   useEffect(() => {
@@ -590,7 +590,7 @@ export default function SimpleApp() {
     };
     window.addEventListener('keydown', handleKeys);
     return () => { window.removeEventListener('keydown', handleKeys); document.body.style.overflow = oldOverflow; previous?.focus(); };
-  }, [editingPreset, receiptsOpen]);
+  }, [editingPreset, receiptsOpen, selectedReceipt]);
 
   const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
@@ -606,7 +606,7 @@ export default function SimpleApp() {
 
     {error && <div className="m2-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">Dismiss</button></div>}
 
-    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} bob /></div> : showSetup ? (
+    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} /></div> : showSetup ? (
       <section className="m2-setup">
         <div className="m2-setup-copy">
           <p className="m2-kicker">For the person who does Mum’s shopping</p>
@@ -794,13 +794,13 @@ export default function SimpleApp() {
           <article className="m2-paper-receipt" id="printable-receipt">
             <div className="m2-paper-brand">WELLCOME <span>MANDATE · SANDBOX</span></div>
             <p className="m2-paper-date">{new Date(selectedReceiptRecord.receipt.paid_at || selectedReceiptRecord.occurredAt).toLocaleString('en-HK', { dateStyle: 'long', timeStyle: 'short' })}</p>
-            {selectedReceiptRecord.quote ? <ul>{selectedReceiptRecord.quote.items.map((item) => <li key={item.product_id}><span>{item.quantity}× {item.title}</span><b>{money(item.line_total_minor)}</b></li>)}{selectedReceiptRecord.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`}><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}</ul> : <p className="m2-muted">Item details are no longer available for this purchase.</p>}
+            {receiptDetailLoading ? <p className="m2-muted">Loading item details…</p> : selectedReceiptRecord.quote ? <ul>{selectedReceiptRecord.quote.items.map((item) => <li key={item.product_id}><span>{item.quantity}× {item.title}</span><b>{money(item.line_total_minor)}</b></li>)}{selectedReceiptRecord.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`}><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}</ul> : <p className="m2-muted">{receiptDetailError || 'Item details are no longer available for this purchase.'}{receiptDetailError && <button className="m2-back-link" onClick={() => void openReceipt(selectedReceiptRecord)}>Try again</button>}</p>}
             <div className="m2-paper-total"><span>Paid</span><b>{money(selectedReceiptRecord.receipt.amount_minor)}</b></div>
             <dl><dt>Payment route</dt><dd>{selectedReceiptRecord.receipt.payment_route?.label ?? 'Sandbox wallet'}</dd><dt>Receipt ID</dt><dd>{selectedReceiptRecord.receipt.id}</dd><dt>Transaction</dt><dd>{selectedReceiptRecord.receipt.transaction_id}</dd></dl>
           </article>
           <button className="m2-cta m2-print-button" onClick={() => window.print()}><Printer size={17} />Print / Save PDF</button>
         </> : <>
-          {receiptsLoading ? <div className="m2-receipt-loading"><Avatar name="stella" state="idle" size={64} bob /><p>Finding your receipts…</p></div> : receiptsError ? <div className="m2-receipts-state"><p role="alert">{receiptsError}</p><button className="m2-ghost" onClick={() => void loadReceipts(true)}>Try again</button></div> : receipts.length ? <div className="m2-receipt-list">{receipts.map((record) => <button className="m2-receipt-row" key={record.receipt.transaction_id} onClick={() => setSelectedReceipt(record.receipt.id)}>
+          {receiptsLoading ? <div className="m2-receipt-loading"><Avatar name="stella" state="idle" size={64} /><p>Finding your receipts…</p></div> : receiptsError ? <div className="m2-receipts-state"><p role="alert">{receiptsError}</p><button className="m2-ghost" onClick={() => void loadReceipts(true)}>Try again</button></div> : receipts.length ? <div className="m2-receipt-list">{receipts.map((record) => <button className="m2-receipt-row" key={record.receipt.transaction_id} onClick={() => void openReceipt(record)}>
             <span className="m2-receipt-icon"><ReceiptText size={19} /></span><span className="m2-receipt-row-text"><b>Wellcome groceries</b><small>{new Date(record.receipt.paid_at || record.occurredAt).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b className="m2-receipt-row-amount">{money(record.receipt.amount_minor)}</b><ArrowRight size={17} />
           </button>)}</div> : <div className="m2-receipts-state"><Sticker name="stella" state="idle" size={104} tilt={-5} /><h3>No paid receipts yet</h3><p>Completed sandbox purchases will appear here. Refused orders are not receipts.</p></div>}
           {!receiptsLoading && receipts.length > 0 && <button className="m2-refresh-receipts" onClick={() => void loadReceipts(true)}>Refresh history</button>}

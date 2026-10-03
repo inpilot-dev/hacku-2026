@@ -14,8 +14,6 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .m2-pill i{width:7px;height:7px;border-radius:50%;background:var(--green-500)}.m2-pill.off i{background:var(--red-500)}
 
 .m2-avatar{display:block;flex:none;object-fit:contain}
-.m2-bob{animation:m2-bob 2.8s ease-in-out infinite}
-@keyframes m2-bob{50%{transform:translateY(-4px)}}
 .m2-sticker{display:grid;place-items:center;flex:none;border-radius:50%;background:var(--color-surface-secondary);transform:none!important}
 .m2-sticker img{width:84%;height:84%;object-fit:contain}
 .m2-loading{display:grid;place-items:center;min-height:60vh}
@@ -175,7 +173,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
   .m2-cta,.m2-ghost,.m2-freeze,.m2-pick{transition:background .15s,transform .1s}
   :is(.m2-cta,.m2-ghost,.m2-freeze,.m2-pick):not(:disabled):active{transform:scale(.98)}
 }
-@media(prefers-reduced-motion:reduce){.m2-bob,.m2-dots i,.m2-stamp{animation:none}}
+@media(prefers-reduced-motion:reduce){.m2-dots i,.m2-stamp{animation:none}}
 
 /* On/off switch */
 .m2-switch{position:relative;flex:none;width:52px;height:30px;border-radius:var(--radius-full);background:var(--gray-200);transition:background .2s}

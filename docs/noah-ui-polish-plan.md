@@ -11,7 +11,7 @@ Use Timmy's default `SimpleApp` as the product design foundation: generous white
 
 The source and saved `docs/ui-redesign/before-after-desktop.png` were inspected. Live browser inspection was blocked by the browser URL policy in this planning turn; the saved image predates typed/voice shopping. Current source is the authority for available features.
 
-Existing character assets include Kumi (shopping bag), Kip (wallet), Bean (request interpretation), and Stella (audit). They have transparent PNGs and multiple expressions. `source/agents.html` contains a Three.js scene that renders a static frame. The simple UI currently changes images by outcome, with a small loading bob and dots. It does not yet animate character parts.
+Existing character assets include Kumi (shopping bag), Kip (wallet), Bean (request interpretation), and Stella (audit). They have transparent PNGs and multiple expressions. `source/agents.html` contains a Three.js scene that renders a static frame. The simple UI changes expressions by outcome. Character movement is paused in this release; only the existing non-character loading/status effects remain.
 
 ## Today's ownership
 
@@ -40,9 +40,9 @@ Add **Receipts** near the wallet and a compact latest-receipt preview. Selecting
 
 The receipt already contains `transaction_id`, `quote_id`, `mandate_id`, merchant, amount, currency, paid timestamp and payment route. It does not contain line items. Load the related quote for the immutable purchased basket and fees.
 
-There is no receipt-list route on current main. Existing `GET /events` has `next_after` and `has_more`, and completed-payment events contain a transaction ID and receipt. Discover transactions through paginated owner-scoped events, deduplicate transaction IDs, then read each receipt through `GET /payments/{transaction_id}`. Get item details through `GET /quotes/{quote_id}`. If this becomes a large collection, propose a wallet-owned paginated receipt-list contract to Timmy.
+There is no receipt-list route on current main. `GET /audit/export` returns the authenticated owner's audit stream; completed-payment events contain the signed transaction reference and receipt. The UI deduplicates transactions and reads receipt records from those events (falling back to `GET /payments/{transaction_id}` if a receipt payload is missing). It fetches item details from `GET /quotes/{quote_id}` only when a receipt is opened. This keeps the list complete without one request per purchase. If audit streams become large, propose a wallet-owned paginated receipt-list contract to Timmy.
 
-Local storage may cache transaction IDs for faster display, but the wallet remains the source for payment status and amounts. History must survive page reload and new orders, and should show earlier mandates belonging to the owner. A new ephemeral demo ledger has no previous receipts; stale local IDs should not appear as successfully verified purchases.
+Receipt history is reloaded from the authenticated backend, survives page reload and new orders, and includes prior mandates in that owner's stream. Quotes are loaded on demand for each opened record. A new ephemeral demo ledger has no previous receipts; stale local IDs should not appear as successfully verified purchases.
 
 Provide loading, empty, unavailable, partial-details and retry states. A paid receipt remains accessible if its quote details fail to load; show that detail gap. Refused or pending orders have their own states and are not paid receipts. Replayed checkout results create one history record per transaction. Audit verification is shown only when an independent checkpoint verifier actually returns it.
 
