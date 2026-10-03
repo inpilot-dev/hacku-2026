@@ -151,7 +151,7 @@ type Spoken = { kind: 'list'; items: ShoppingItem[] };
 export default function SimpleApp() {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const say = useCallback((speaker: ConversationMessage['speaker'], text: string, tone: ConversationMessage['tone'] = 'info') => {
-    setMessages((current) => [...current, { id: crypto.randomUUID(), speaker, text, tone }]);
+    setMessages((current) => current[current.length - 1]?.speaker === speaker && current[current.length - 1]?.text === text ? current : [...current, { id: crypto.randomUUID(), speaker, text, tone }]);
   }, []);
   const [online, setOnline] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
@@ -176,6 +176,7 @@ export default function SimpleApp() {
   const [routeId, setRouteId] = useState<string | null>(null);
   const [routeLabel, setRouteLabel] = useState('');
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [ruleTestBasket, setRuleTestBasket] = useState(false);
   const [agentNote, setAgentNote] = useState('');
   const [listText, setListText] = useState('');
   const [voice, setVoice] = useState<'' | 'recording' | 'transcribing'>('');
@@ -307,7 +308,7 @@ export default function SimpleApp() {
   }
 
   function resetShop() {
-    setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
+    setRuleTestBasket(false); setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
   }
 
   /** Ask the agent service first; if it isn't mounted, use the preset basket and say so. */
@@ -393,6 +394,7 @@ export default function SimpleApp() {
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
     if (!spoken && !lines.length) { setError('That basket is empty in the current catalog.'); return; }
+    setRuleTestBasket(false);
     setError(''); setVerdict(null); setPick(chosen === 'custom' || spoken ? null : chosen); setPhase('packing');
     try {
       let result: Quote | null = null;
@@ -406,6 +408,7 @@ export default function SimpleApp() {
           return;
         }
         if (!result) {
+          setRuleTestBasket(true);
           // The preset still goes to Kip, so the wallet's own check is shown either way.
           if (packed.message) note('kumi', packed.message, 'bad');
           setAgentNote(packed.message ? 'Kumi wouldn’t pack it · preset basket sent to Kip as a rule test' : 'Preset basket · agent not connected here');
@@ -416,7 +419,7 @@ export default function SimpleApp() {
         result = await api.quote(TOKEN, { merchant_id: STORE_ID, delivery_context_id: PICKUP_CONTEXT_ID, items: lines });
       }
       setQuote(result);
-      note('kumi', `Kumi packed ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}`, 'info');
+      note('kumi', `Quote ready: ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}. Review the basket below.`, 'info');
       try {
         const options = await api.paymentOptions(TOKEN, result.id);
         const chosenRoute = options.options.find((o) => o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
@@ -778,7 +781,7 @@ export default function SimpleApp() {
                 {phase === 'verdict' && verdict && <div className={`m2-stamp ${verdict.kind}`}>{stamp}</div>}
               </div>
               {phase === 'basket' && <>
-                <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />
+                {ruleTestBasket ? <p className="m2-muted" role="status">Policy test only: the agent did not build this basket. The preset is shown to demonstrate the wallet’s checks. It cannot be added to a retailer cart here.</p> : <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />}
                 <button className="m2-cta" onClick={() => void checkout()}>Confirm sandbox payment · {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
                 {routeLabel && <p className="m2-route">Kip will use <b>{routeLabel}</b>, the cheapest route it found.</p>}
                 <button className="m2-link" onClick={resetShop}>Start over</button>
