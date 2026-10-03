@@ -1,14 +1,14 @@
 # Evaluation (owner: Seungbin)
 
 Measures the wallet against an unsafe baseline over real HTTP (C1), through 20 deterministic gateway
-scenarios (C2) and through 10 model-dependent shopping scenarios run on Mandate and on a prompt-only baseline. Uses the wallet's venv (`services/api/.venv`, see `services/api/requirements-wallet.txt`).
+scenarios (C2) and through 10 model-dependent shopping scenarios run on Mandate and on a prompt-only baseline. Uses the repository venv from `just install` (`.venv`); any venv with the API and verification requirements works.
 
 ```bash
 # from the repo root
-services/api/.venv/bin/python -m evaluation.run            # C1 + C2, prints a summary, writes results/latest.json
-services/api/.venv/bin/python -m evaluation.live           # C1 only
-services/api/.venv/bin/python -m evaluation.model_eval     # model-dependent scenarios only
-services/api/.venv/bin/python -m pytest evaluation -q      # all of it as tests; the model test uses scripted Jev answers
+.venv/bin/python -m evaluation.run            # C1 + C2, prints a summary, writes results/latest.json
+.venv/bin/python -m evaluation.live           # C1 only
+.venv/bin/python -m evaluation.model_eval     # model-dependent scenarios only
+.venv/bin/python -m pytest evaluation -q      # all of it as tests; the model test uses scripted Jev answers
 ```
 
 The model-dependent section needs `TYPESAFE_API_KEY` (environment or repo `.env`). Without it `run.py` still

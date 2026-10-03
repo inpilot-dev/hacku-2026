@@ -12,7 +12,7 @@ from datetime import datetime
 
 from .clock import parse
 
-REVIEW_CODES = {"CATEGORY_REVIEW_REQUIRED", "APPROVAL_REQUIRED"}
+REVIEW_CODES = {"CATEGORY_REVIEW_REQUIRED", "APPROVAL_REQUIRED", "RISK_REVIEW_REQUIRED"}
 
 
 def rule_id(mandate: dict, rule: str) -> str:
@@ -71,6 +71,8 @@ def narrowing_problems(child: dict, parent: dict) -> list[str]:
     p_threshold, c_threshold = parent["approval_above_minor"], child["approval_above_minor"]
     if p_threshold is not None and (c_threshold is None or c_threshold > p_threshold):
         problems.append("Child approval threshold must not exceed the parent's.")
+    if parent.get("risk_review") and not child.get("risk_review"):
+        problems.append("Child must keep the parent's risk review on.")
     return problems
 
 
@@ -105,13 +107,15 @@ def mandate_state_violation(mandate: dict, now: datetime) -> dict | None:
 
 
 def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime, *,
-             recent_purchases: dict[str, int] | None = None, waived: frozenset[str] = frozenset()) -> Evaluation:
+             recent_purchases: dict[str, int] | None = None, risk: list[dict] | None = None,
+             waived: frozenset[tuple[str, str]] = frozenset()) -> Evaluation:
     """Check a quote against every mandate in the chain and every applicable budget period.
 
     ``chain`` rows carry a parsed ``policy`` dict. ``budgets`` rows carry
     ``mandate_id, period, limit_minor, paid_minor, reserved_minor``.
     ``recent_purchases`` maps a mandate id to the purchases its subtree made
-    inside that mandate's velocity window. ``waived`` holds review codes a
+    inside that mandate's velocity window. ``risk`` holds review reasons from
+    ``risk.assess``. ``waived`` holds the ``(code, rule_id)`` review reasons a
     person already approved for this exact purchase; hard rules are never waived.
     """
     ev = Evaluation()
@@ -182,5 +186,8 @@ def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime,
                              f"Order total {total_text} is over the {money(available)} left this "
                              f"{'week' if b['period'] == 'calendar_week' else 'month'}.",
                              amount, available))
-    ev.review = [v for v in ev.review if v["code"] not in waived]
+    for v in risk or []:
+        ev.rule_ids.append(v["rule_id"])
+        ev.add(v)
+    ev.review = [v for v in ev.review if (v["code"], v["rule_id"]) not in waived]
     return ev

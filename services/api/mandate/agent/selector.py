@@ -11,14 +11,14 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 import httpx
+
+from .config import env_value
 
 TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
 NONE = "NONE"
 MIN_PROBABILITY = 0.5
-REPO_ENV = Path(__file__).resolve().parents[4] / ".env"
 
 RULES = ("Pick the catalog product a shopper would accept for this shopping-list item. Among products that "
          "match equally well, prefer the lower price. Pick NONE if no product is a reasonable match. "
@@ -45,12 +45,7 @@ class Selection:
 
 
 def typesafe_key() -> str:
-    key = os.environ.get("TYPESAFE_API_KEY")
-    if not key and REPO_ENV.is_file():
-        for line in REPO_ENV.read_text().splitlines():
-            name, sep, value = line.partition("=")
-            if sep and name.strip() == "TYPESAFE_API_KEY":
-                key = value.strip().strip('"').strip("'")
+    key = env_value("TYPESAFE_API_KEY")
     if not key:
         raise SelectorError("TYPESAFE_API_KEY is not set, so Jev cannot choose products.")
     return key

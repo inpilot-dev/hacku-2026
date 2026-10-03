@@ -1,6 +1,6 @@
 """C1: the real wallet vs the unsafe baseline over real HTTP (uvicorn subprocesses on ports 8100-8199).
 
-    services/api/.venv/bin/python -m evaluation.live            (from the repo root)
+    .venv/bin/python -m evaluation.live            (from the repo root)
 
 Setup per server: weekly HK$800, HK$400 already paid, then two HK$300 authorizations
 fired concurrently (asyncio.gather over httpx.AsyncClient). Then, on the wallet only:

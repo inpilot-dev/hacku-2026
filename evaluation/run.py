@@ -1,7 +1,7 @@
 """Run C1 (live HTTP), C2 (20 deterministic scenarios), the extra §11 items and the 10 model-dependent scenarios;
 write results/latest.json; print a summary.
 
-    services/api/.venv/bin/python -m evaluation.run          (from the repo root; the model section needs TYPESAFE_API_KEY)
+    .venv/bin/python -m evaluation.run          (from the repo root; the model section needs TYPESAFE_API_KEY)
 
 Every number is measured in this run. Nothing is estimated or carried over.
 """

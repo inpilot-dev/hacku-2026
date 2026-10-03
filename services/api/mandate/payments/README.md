@@ -61,7 +61,7 @@ month") use the owner's spend this month from `reward_ledger`, so the ranking ca
 
 Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, simulated: true, ref}`.
 
-## Approvals, refunds and velocity
+## Approvals, refunds, velocity and risk review
 
 - **Approval that expires.** A purchase over `approval_above_minor` (or with an unknown category) returns
   `requires_review` with an `approval_request`. The owner approves or denies it; unanswered, it lapses into
@@ -71,5 +71,9 @@ Receipts say `payment_mode: "sandbox"`, and audit payloads record `rail: {name, 
   period, and reverses the reward.
 - **Velocity.** `policy.velocity_limit = {max_purchases, window_minutes}` counts reserved and paid purchases in the
   mandate's subtree.
+- **Risk review.** `risk.py` holds simple, explainable checks that escalate instead of refuse. With
+  `policy.risk_review` on: first purchase on the mandate, first order from a new shop, basket at least 3x the usual, never-bought items, and a price
+  at least 25% over the last price paid. Always on: product listing text aimed at the agent (prompt injection). Each
+  adds a `RISK_REVIEW_REQUIRED` reason with its own rule id, so an approval waives only the reasons the owner read.
 
 See `contracts/README.md` section 11 for the API shapes.

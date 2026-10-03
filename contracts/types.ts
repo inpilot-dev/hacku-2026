@@ -3,7 +3,7 @@
 
 export type Currency = "HKD";
 
-export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID" | "VELOCITY_LIMIT_EXCEEDED" | "APPROVAL_DENIED" | "APPROVAL_EXPIRED";
+export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID" | "VELOCITY_LIMIT_EXCEEDED" | "APPROVAL_DENIED" | "APPROVAL_EXPIRED" | "RISK_REVIEW_REQUIRED";
 
 export type Evidence = {
   "id": string;
@@ -50,6 +50,7 @@ export type Policy = {
   "expires_at": string;
   "approval_above_minor": number | null;
   "velocity_limit"?: VelocityLimit | null;
+  "risk_review"?: boolean;
 };
 
 export type DraftRequest = {
@@ -593,4 +594,25 @@ export type RefundResponse = {
   "refund": Refund;
   "budgets": Array<BudgetPeriod>;
   "event_sequence": number;
+};
+
+export type ShoppingListParseRequest = {
+  "text": string;
+};
+
+export type ShoppingListParseResponse = {
+  "items": Array<ShoppingItem>;
+  "source": "model" | "rules";
+  "model_id": string | null;
+  "note": string;
+};
+
+export type TranscriptionRequest = {
+  "audio_base64": string;
+  "format": "ogg" | "webm" | "wav" | "mp3" | "m4a" | "aac" | "flac";
+};
+
+export type TranscriptionResponse = {
+  "text": string;
+  "model_id": string;
 };

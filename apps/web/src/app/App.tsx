@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BadgeCheck, Ban, ChevronDown, CircleHelp, Clock3, ExternalLink, Eye, FileCheck2, Leaf, LockKeyhole, Menu, MoreHorizontal, RefreshCw, Shield, ShieldAlert, ShoppingBasket, Sparkles, WalletCards, X } from 'lucide-react';
 import type { AgentRun, AgentRunRequest, ApprovalRequest, AuditEvent, AuditExport, BudgetResponse, CatalogResponse, DraftResponse, Evidence, Mandate, PaymentCompleted, PaymentOptionsResponse, Policy, Product, Quote, Receipt, RuleViolation, VerificationResult, VerifierResult } from '../../../../contracts/types';
 import placeholderCatalog from '../../../../services/api/mandate/payments/fixtures/placeholder_catalog.json';
+// Read-only: written by `python -m evaluation.run` (owner: Seungbin). Not a contract; Vite inlines only these keys.
+import { generated_at as evalGeneratedAt, git_commit as evalCommit, live_http as evalLive } from '../../../../evaluation/results/latest.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
 import { matchScriptedCatalogBasket } from './scriptedCatalogMatcher';
@@ -49,6 +51,7 @@ const initialPolicy = {
   blocked_categories: ['alcohol' as const],
   expires_at: '2026-10-31T23:59:59+08:00',
   approval_above_minor: null,
+  risk_review: false,
 };
 
 type View = 'overview' | 'shopping' | 'wallet' | 'activity';
@@ -854,6 +857,21 @@ function WalletView({ mandate, budget, currentBudget, spentRatio, busy, onRevoke
   return <><div className="page-heading"><div><div className="eyebrow">FAMILY WALLET</div><h1>Your rules, at a glance.</h1><p>Every amount reflects the latest state returned by the wallet service.</p></div><button className="button button-secondary" onClick={onRefresh}><RefreshCw size={16} /> Refresh wallet</button></div><section className="wallet-hero panel"><div><div className="eyebrow">AVAILABLE THIS WEEK</div><strong>{currentBudget ? money(currentBudget.available_minor) : '—'}</strong><span>{currentBudget ? `of ${money(currentBudget.limit_minor)} weekly allowance` : 'Confirm a mandate to activate your wallet'}</span><div className="progress-track"><span style={{ width: `${spentRatio}%` }} /></div><div className="wallet-breakdown"><span><i className="legend-dot paid-dot" />Paid <strong>{money(currentBudget?.paid_minor ?? 0)}</strong></span><span><i className="legend-dot reserved-dot" />Reserved <strong>{money(currentBudget?.reserved_minor ?? 0)}</strong></span><span><i className="legend-dot available-dot" />Available <strong>{money(currentBudget?.available_minor ?? 0)}</strong></span></div></div><div className="wallet-decoration"><WalletCards size={54} strokeWidth={1.1} /><span>FAMILY<br />ALLOWANCE</span><i>••••  2026</i></div></section><div className="wallet-detail-grid"><section className="panel"><div className="panel-heading"><div><div className="eyebrow">CURRENT PERMISSIONS</div><h2>Who can spend</h2></div><span className={`status-tag ${mandate?.status === 'active' ? 'status-green' : 'status-muted'}`}><i />{mandate?.status ?? 'Not set up'}</span></div>{mandate ? <div className="wallet-rule-list"><Rule icon={<WalletCards size={17} />} label="Per order limit" value={money(mandate.policy.per_order_limit_minor)} detail="Includes delivery fees" /><Rule icon={<Activity size={17} />} label="Weekly limit" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Calendar week · Hong Kong time" /><Rule icon={<ShoppingBasket size={17} />} label="Allowed stores" value={mandate.policy.allowed_merchant_ids.join(", ")} detail="Other stores are refused" />{mandate.policy.approval_above_minor !== null && <Rule icon={<CircleHelp size={17} />} label="Needs approval above" value={money(mandate.policy.approval_above_minor)} detail="Wallet pauses for your decision" />}{mandate.policy.velocity_limit && <Rule icon={<Clock3 size={17} />} label="Purchase frequency" value={`${mandate.policy.velocity_limit.max_purchases} per ${mandate.policy.velocity_limit.window_minutes} minutes`} detail="Reserved and paid orders count" />}<Rule icon={<Ban size={17} />} label="Blocked" value={mandate.policy.blocked_categories.join(', ')} detail="Always refused" /><Rule icon={<Clock3 size={17} />} label="Expires" value={shortDate(mandate.policy.expires_at)} detail="No automatic renewal" /></div> : <div className="empty-small">No active spending mandate has been confirmed yet.</div>}{mandate?.status === 'active' && <button className="button button-danger-outline" onClick={onRevoke} disabled={busy === 'revoke'}><Ban size={16} />{busy === 'revoke' ? 'Revoking access…' : 'Revoke spending access'}</button>}</section><section className="panel budget-panel"><div className="eyebrow">BUDGET PERIODS</div><h2>Spending by week</h2>{budget?.applicable_budgets.map((period) => <div className="budget-period" key={period.period_id}><div className="budget-period-head"><span><strong>{shortDate(period.starts_at)}</strong><small>Ends {shortDate(period.ends_at)}</small></span><strong>{money(period.available_minor)} <small>left</small></strong></div><div className="progress-track"><span style={{ width: `${Math.min(100, Math.round((period.paid_minor + period.reserved_minor) / period.limit_minor * 100))}%` }} /></div><div className="budget-period-meta"><span>{money(period.paid_minor + period.reserved_minor)} used</span><span>{money(period.limit_minor)} total</span></div></div>) ?? <div className="empty-small">Budget periods will appear after confirmation.</div>}</section></div></>;
 }
 
+// Same setup as evaluation/live.py race: the model and the HTTP run share budget and request sizes.
+const MODEL_RUN = { initial_available_minor: 40000, purchase_amounts_minor: [30000, 30000], max_steps: 8, timeout_ms: 3000 };
+
+function MeasuredRace() {
+  return <div className="race-measured">
+    <div className="race-label"><span className="eyebrow">MEASURED · REAL HTTP</span><small>{evalLive.race[0].concurrent_requests}× {money(evalLive.race[0].request_amount_minor)} sent at once against {money(evalLive.race[0].available_before_minor)} left</small></div>
+    <div className="race-grid">{evalLive.race.map((run) => <div className="model-result" key={run.server}>
+      <div><strong>{run.server === 'wallet' ? 'Mandate wallet' : 'Unsafe baseline'}</strong><span className={`solver-tag ${run.overspend_minor > 0 ? 'solver-bad' : 'solver-good'}`}>{run.approved} approved · {run.refused} refused</span></div>
+      <p>{run.refusals.length ? `Refused: ${[...new Set(run.refusals.map((item) => item.code))].join(', ')}.` : 'No refusal.'} {run.completed_payments} payment(s) completed.</p>
+      <small>Week paid {money(run.week_after.paid_minor)} of {money(run.week_after.limit_minor)} · over by {money(run.overspend_minor)}</small>
+    </div>)}</div>
+    <small className="race-note">The unsafe baseline is evaluation-only: it adds an artificial {evalLive.unsafe_artificial_delay_s}s pause between reading and reserving the budget. The real wallet has no such path. Recorded {new Date(evalGeneratedAt).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong', dateStyle: 'medium', timeStyle: 'short' })} HKT · commit {evalCommit} · evaluation/results/latest.json</small>
+  </div>;
+}
+
 function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: string; mandate: Mandate | null; health: 'checking' | 'online' | 'offline'; catalogIsPlaceholder: boolean }) {
   const auditRequestVersion = useRef(0);
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -941,7 +959,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
 
   async function runModelComparison() {
     setVerifyBusy('model'); setActionError(''); setModels([]);
-    const shared = { initial_available_minor: 40000, purchase_amounts_minor: [30000, 30000], max_steps: 8, timeout_ms: 3000 };
+    const shared = MODEL_RUN;
     try {
       const results = await Promise.all([
         api.verifyModel(token, { ...shared, variant: 'unsafe' }),
@@ -973,7 +991,9 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
         {auditState === 'connected' && !checkpointAvailable && <div className="checkpoint-row"><Clock3 size={15} /><span>No checkpoint exists for this export.</span><button className="text-button" onClick={() => void createCheckpoint()} disabled={verifyBusy !== ''}>{verifyBusy === 'audit' ? 'Creating…' : 'Create checkpoint'}</button></div>}
         {verifier && <div className={`result-banner ${verifier.valid ? 'result-good' : 'result-warn'}`}><AgentCharacter name="stella" state={verifier.valid ? 'pass' : 'fail'} label={verifier.valid ? 'Stella reports the audit check passed' : 'Stella reports the audit check failed'} size={40} /><strong>{verifier.status.replace(/_/g, ' ')}</strong><span>{verifier.message}</span><small>{tamperNote && `${tamperNote} `}{verifier.failures.length ? `Failures: ${[...new Set(verifier.failures.map((failure) => `${failure.code}${failure.sequence ? ` @${failure.sequence}` : ''}`))].join(', ')}.` : `Checked through sequence ${verifier.checked_through_sequence}; ${verifier.unanchored_event_count} later event(s) unanchored.`}</small></div>}
       </section>
-      <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">SAFETY LAB</div><h2>Can two agents overspend?</h2></div><AgentCharacter name="stella" state={models.some((result) => result.status === 'counterexample_found') ? 'fail' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'pass' : 'idle'} label={models.some((result) => result.status === 'counterexample_found') ? 'Stella found a counterexample' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'Stella completed the bounded check' : 'Stella, checker'} /></div><p className="lab-description">Compare formal unsafe and atomic models under one HK$400 budget and two HK$300 requests. This runs the solver model; live competing wallet requests are a separate evaluation.</p><button className="button button-secondary lab-run" onClick={() => void runModelComparison()} disabled={verifyBusy !== ''}>{verifyBusy === 'model' ? <span className="spinner spinner-green" /> : <Activity size={15} />}{verifyBusy === 'model' ? 'Running bounded models…' : 'Run unsafe vs atomic models'}</button>
+      <section className="panel lab-panel"><div className="panel-heading"><div><div className="eyebrow">SAFETY LAB</div><h2>Can two agents overspend?</h2></div><AgentCharacter name="stella" state={models.some((result) => result.status === 'counterexample_found') ? 'fail' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'pass' : 'idle'} label={models.some((result) => result.status === 'counterexample_found') ? 'Stella found a counterexample' : models.length === 2 && models.every((result) => result.status === 'no_counterexample_within_bound') ? 'Stella completed the bounded check' : 'Stella, checker'} /></div><p className="lab-description">Two {money(MODEL_RUN.purchase_amounts_minor[0])} requests compete for {money(MODEL_RUN.initial_available_minor)}. Measured HTTP results from the evaluation run come first; the solver model below checks the same setup.</p>
+        <MeasuredRace />
+        <div className="race-label"><span className="eyebrow">MODEL · BOUND {MODEL_RUN.max_steps}</span><small>Z3 bounded check, run on demand</small></div><button className="button button-secondary lab-run" onClick={() => void runModelComparison()} disabled={verifyBusy !== ''}>{verifyBusy === 'model' ? <span className="spinner spinner-green" /> : <Activity size={15} />}{verifyBusy === 'model' ? 'Running bounded models…' : 'Run unsafe vs atomic models'}</button>
         {models.length > 0 && <div className="model-results">{models.map((result) => <div className="model-result" key={`${result.id}-${result.variant}`}><div><strong>{result.variant === 'unsafe' ? 'Unsafe' : 'Atomic reservation'}</strong><span className={`solver-tag ${result.status === 'inconclusive' ? 'solver-unknown' : result.status === 'counterexample_found' ? 'solver-bad' : 'solver-good'}`}>{result.status.replace(/_/g, ' ')}</span></div><p>{result.message}</p><small>{result.solver_result.toUpperCase()} · bound {result.max_steps} · {result.runtime_ms} ms</small>{result.counterexample.length > 0 && <div className="counterexample">{result.counterexample.map((step) => <div key={`${result.id}-${step.step}`}><b>{step.step}.</b> {step.actor}: {step.action}<small>{step.explanation}</small></div>)}</div>}</div>)}</div>}
         {actionError && <div className="form-error" role="alert">{actionError}</div>}
         <div className="model-limit"><CircleHelp size={14} /><span>Bounded result applies only to this model, bound and listed assumptions. It does not prove the deployed wallet correct.</span></div>
@@ -990,6 +1010,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
   const [blockAlcohol, setBlockAlcohol] = useState(initial.blocked_categories.includes('alcohol'));
   const [approvalAbove, setApprovalAbove] = useState(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
   const [velocityEnabled, setVelocityEnabled] = useState(Boolean(initial.velocity_limit));
+  const [riskReview, setRiskReview] = useState(Boolean(initial.risk_review));
   const [maxPurchases, setMaxPurchases] = useState(String(initial.velocity_limit?.max_purchases ?? 3));
   const [windowMinutes, setWindowMinutes] = useState(String(initial.velocity_limit?.window_minutes ?? 60));
   const [basePolicy, setBasePolicy] = useState(initial);
@@ -1009,6 +1030,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
     setBlockAlcohol(initial.blocked_categories.includes('alcohol'));
     setApprovalAbove(initial.approval_above_minor === null ? '' : String(initial.approval_above_minor / 100));
     setVelocityEnabled(Boolean(initial.velocity_limit));
+    setRiskReview(Boolean(initial.risk_review));
     setMaxPurchases(String(initial.velocity_limit?.max_purchases ?? 3));
     setWindowMinutes(String(initial.velocity_limit?.window_minutes ?? 60));
   }
@@ -1031,6 +1053,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
         setBlockAlcohol(proposed.blocked_categories.includes('alcohol'));
         setApprovalAbove(proposed.approval_above_minor === null ? '' : String(proposed.approval_above_minor / 100));
         setVelocityEnabled(Boolean(proposed.velocity_limit));
+        setRiskReview(Boolean(proposed.risk_review));
         setMaxPurchases(String(proposed.velocity_limit?.max_purchases ?? 3));
         setWindowMinutes(String(proposed.velocity_limit?.window_minutes ?? 60));
       }
@@ -1062,7 +1085,7 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
     if (!expires || new Date(`${expires}T23:59:59+08:00`) <= new Date()) { setError('Choose an expiry date in the future.'); return; }
     const blockedCategories: Policy['blocked_categories'] = basePolicy.blocked_categories.filter((category) => category !== 'alcohol');
     if (blockAlcohol) blockedCategories.push('alcohol');
-    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null };
+    const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null, risk_review: riskReview };
     setError('');
     let confirmDraftId = draftId;
     if (!draftResponse) {
@@ -1094,8 +1117,9 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
       <label className="check-option"><input type="checkbox" checked={blockAlcohol} onChange={(event) => setBlockAlcohol(event.target.checked)} /><span><strong>Block alcohol</strong><small>Items in this category will be refused by the wallet.</small></span></label>
       <label>Require approval above (optional)<span className="money-input"><i>HK$</i><input aria-label="Require approval for purchases above this amount in HKD" type="number" min="0.01" step="0.01" value={approvalAbove} onChange={(event) => setApprovalAbove(event.target.value)} placeholder="No threshold" /></span></label>
       <label className="check-option"><input type="checkbox" checked={velocityEnabled} onChange={(event) => setVelocityEnabled(event.target.checked)} /><span><strong>Limit purchase frequency</strong><small>Count reserved or paid purchases made under this mandate and its descendants.</small></span></label>
+      <label className="check-option"><input type="checkbox" checked={riskReview} onChange={(event) => setRiskReview(event.target.checked)} /><span><strong>Review unusual purchases</strong><small>Pause first purchases, much larger baskets, new items or sharp price rises. Listings that try to instruct the agent are always reviewed.</small></span></label>
       {velocityEnabled && <div className="limit-fields"><label>Purchases in window<input aria-label="Maximum purchases in velocity window" type="number" min="1" max="1000" step="1" value={maxPurchases} onChange={(event) => setMaxPurchases(event.target.value)} /></label><label>Window in minutes<input aria-label="Velocity window in minutes" type="number" min="1" max="10080" step="1" value={windowMinutes} onChange={(event) => setWindowMinutes(event.target.value)} /></label></div>}
-      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span></div>
+      <div className="draft-policy-details"><span>Budget periods: {basePolicy.period_limits.map((period) => `${period.period.replace(/_/g, ' ')} ${money(period.limit_minor)} · ${period.timezone}`).join('; ') || 'none'}</span><span>Other blocked categories: {basePolicy.blocked_categories.filter((category) => category !== 'alcohol').join(', ') || 'none'}</span><span>Extra approval above: {approvalAbove.trim() ? `HK$${approvalAbove}` : 'none'}</span><span>Purchase frequency: {velocityEnabled ? `${maxPurchases} purchases per ${windowMinutes} minutes` : 'unlimited'}</span><span>Unusual-purchase review: {riskReview ? 'on' : 'off'}</span></div>
       {!supportedPolicy && <div className="settings-note"><ShieldAlert size={16} /><span>This prototype can confirm one Asia/Hong_Kong weekly limit for {storeLabel}. This proposal needs a matching store policy before it can be activated.</span></div>}
       <div className="settings-note"><ShieldAlert size={16} /><span>Prototype allowance for the local sandbox only. Confirming activates the exact structured rules shown here.</span></div>
       {error && <div className="form-error" role="alert">{error}</div>}

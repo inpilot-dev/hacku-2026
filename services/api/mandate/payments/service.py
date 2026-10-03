@@ -20,6 +20,7 @@ from typing import Callable
 from mandate.storage.db import Database
 
 from . import policy as rules
+from . import risk
 from .audit_shim import append_event, sha256_hex, stream_for_owner
 from .auth import Actor
 from .catalog import Catalog, CatalogError
@@ -31,6 +32,9 @@ from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
 
 PAYLOAD_VERSION = 1
+# An agent may keep only this many purchases waiting on one mandate's owner, so it cannot
+# wear the owner down with a stream of approval requests until one is tapped through.
+MAX_PENDING_APPROVALS = 3
 
 
 def _id(prefix: str) -> str:
@@ -147,7 +151,8 @@ class Wallet:
         if actor.role == "user":
             return m["owner_id"] == actor.actor_id
         if actor.role == "agent":
-            return m["delegatee_id"] == actor.actor_id
+            # Zero trust: the agent's token names the user it works for; a mandate from anyone else is invisible.
+            return m["delegatee_id"] == actor.actor_id and m["owner_id"] == actor.family_id
         return False
 
     @staticmethod
@@ -335,6 +340,26 @@ class Wallet:
                 "SELECT COUNT(*) FROM reservations WHERE mandate_id IN (SELECT id FROM tree) "
                 "AND status IN ('reserved', 'paid') AND created_at > ?", (m["id"], since)).fetchone()[0]
         return counts
+
+    # risk
+
+    def _risk_reasons(self, conn, chain: list[dict], quote: dict) -> list[dict]:
+        """Review reasons for purchases that fit the rules but look unusual for this owner (risk.py)."""
+        leaf = chain[0]
+        history = [
+            risk.PastPurchase(row[0], row[1], {i["product_id"]: i["unit_price_minor"]
+                                               for i in json.loads(row[2])["items"]})
+            for row in conn.execute(
+                "SELECT r.merchant_id, r.amount_minor, q.body_json FROM reservations r JOIN quotes q ON q.id = r.quote_id "
+                "JOIN mandates m ON m.id = r.mandate_id WHERE m.owner_id = ? AND r.status = 'paid' "
+                "ORDER BY r.created_at", (leaf["owner_id"],))
+        ]
+        mandate_purchases = conn.execute(
+            "SELECT COUNT(*) FROM reservations WHERE mandate_id = ? AND status IN ('reserved', 'paid')",
+            (leaf["id"],)).fetchone()[0]
+        listings = {i["product_id"]: self.catalog.listing_text(i["product_id"]) for i in quote["items"]}
+        return risk.assess(leaf, quote, history=history, mandate_purchases=mandate_purchases, listings=listings,
+                           habits=any(m["policy"].get("risk_review") for m in chain))
 
     # quotes
 
@@ -539,7 +564,7 @@ class Wallet:
                     return 200, body
 
             leaf = self._load_mandate(conn, req["mandate_id"])
-            if leaf is None or leaf["delegatee_id"] != actor.actor_id:
+            if leaf is None or not self._can_see_mandate(actor, leaf):
                 raise not_found("Mandate")
             qrow = self._load_quote(conn, req["quote_id"], actor)
             if qrow is None:
@@ -549,12 +574,13 @@ class Wallet:
             # An approval waives exactly the review reasons the person saw, for the mandate version they saw.
             waived = frozenset()
             if approval is not None and approval["mandate_version"] == leaf["version"]:
-                waived = frozenset(v["code"] for v in json.loads(approval["reasons_json"]))
+                waived = frozenset((v["code"], v["rule_id"]) for v in json.loads(approval["reasons_json"]))
 
             chain = self._chain(conn, leaf)
             budgets = self._ensure_periods(conn, chain, now)
             ev = rules.evaluate(chain, quote, budgets, now,
-                                recent_purchases=self._recent_purchases(conn, chain, now), waived=waived)
+                                recent_purchases=self._recent_purchases(conn, chain, now),
+                                risk=self._risk_reasons(conn, chain, quote), waived=waived)
             decision_id = _id("dec")
             base = {
                 "decision_id": decision_id,
@@ -567,10 +593,24 @@ class Wallet:
             snapshot = [{"mandate_id": m["id"], "version": m["version"], "policy": m["policy"]} for m in chain]
             reservation_id = None
             if approval is not None and ev.status == "requires_review":
-                # The mandate changed after the person approved; their answer no longer covers this purchase.
-                ev.hard.append(rules.violation("MANDATE_VERSION_CHANGED", leaf, "version",
-                                               "The mandate changed after this purchase was approved; "
-                                               "start a new purchase."))
+                if approval["mandate_version"] != leaf["version"]:
+                    # The mandate changed after the person approved; their answer no longer covers this purchase.
+                    ev.hard.append(rules.violation("MANDATE_VERSION_CHANGED", leaf, "version",
+                                                   "The mandate changed after this purchase was approved; "
+                                                   "start a new purchase."))
+                else:
+                    # A reason the person never saw appeared after they approved (e.g. history moved).
+                    ev.hard += [{**v, "message": f"New since the approval: {v['message']} Start a new purchase "
+                                                 f"so it can be reviewed."} for v in ev.review]
+                    ev.review = []
+            elif ev.status == "requires_review":
+                pending = conn.execute("SELECT COUNT(*) FROM approval_requests WHERE mandate_id = ? AND status = 'pending'",
+                                       (leaf["id"],)).fetchone()[0]
+                if pending >= MAX_PENDING_APPROVALS:
+                    ev.hard.append(rules.violation(
+                        "RISK_REVIEW_REQUIRED", leaf, "risk:pending_approvals",
+                        f"{pending} purchases are already waiting for {leaf['owner_id']} to answer; the agent "
+                        f"must wait for those before asking again."))
 
             if ev.status == "approved":
                 amount = quote["total_minor"]
@@ -736,7 +776,7 @@ class Wallet:
                 raise not_found("Authorized transaction")
             r = dict(row)
             leaf = self._load_mandate(conn, r["mandate_id"])
-            if leaf["delegatee_id"] != actor.actor_id:
+            if not self._can_see_mandate(actor, leaf):
                 raise not_found("Authorized transaction")
 
             def refuse(code: str, rule: str, message: str, release: bool, mandate: dict | None = None) -> tuple[int, dict]:

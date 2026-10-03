@@ -30,7 +30,8 @@ def build_app():
     app.version = "0.1.0"
     app.include_router(build_demo_router(wallet), prefix="/api/v1")
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
-    app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts)), prefix="/api/v1")
+    app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts), warm_transcription=True),
+                       prefix="/api/v1")
     # Audit forwards checkpoints/checks to the separate verifier process (MANDATE_VERIFIER_URL).
     app.include_router(build_audit_router(wallet.db), prefix="/api/v1")
     app.include_router(build_verification_router(), prefix="/api/v1")
