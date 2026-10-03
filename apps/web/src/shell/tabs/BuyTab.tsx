@@ -72,7 +72,7 @@ export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void })
 
     {/* The composer sits above the phone tab bar; while a purchase is open it stays in the flow so it never covers
         the approval buttons. */}
-    <div className={cn('z-10 mt-6', !p.busy && 'sticky bottom-20 md:bottom-4')}>
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
       <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40"
         onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={1000}
@@ -83,7 +83,7 @@ export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void })
         <Button type="submit" size="icon" className="absolute right-2 bottom-2 size-10 rounded-full"
           disabled={!text.trim() || p.sending || p.busy} aria-label="Send"><ArrowUp /></Button>
       </form>
-    </div>
+    </div></div>
   </div>;
 }
 

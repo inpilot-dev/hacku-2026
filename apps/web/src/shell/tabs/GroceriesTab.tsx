@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Carrot, Cherry, Mic, Minus, Pencil, Plus, Square, Wine, XCircle } from 'lucide-react';
+import { ArrowUp, Store, Carrot, Cherry, Mic, Minus, Pencil, Plus, Square, Wine, XCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import Basket from '../components/Basket';
 import { Bubble, PageHeader, present, Sticker, Working } from '../components/chat';
 import PresetEditor from '../components/PresetEditor';
+import StoreAccounts from '../components/StoreAccounts';
 import { useAccount } from '../data/account';
 import { useGroceries, type Preset } from '../data/useGroceries';
 
@@ -110,23 +111,29 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
     </div>}
 
     {/* The list box only while picking: once a basket is up, its own buttons are the next step. */}
-    {g.canSpend && g.phase === 'pick' && <div className="sticky bottom-20 z-10 mt-6 md:bottom-4">
+    {g.canSpend && <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
       <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40" onSubmit={(e) => { e.preventDefault(); void g.shopFromText(); }}>
         <Textarea value={g.listText} onChange={(e) => g.setListText(e.target.value)} rows={2}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !g.voice) { e.preventDefault(); void g.shopFromText(); } }}
           placeholder="Type or say the list: rice, two litres of milk, 3 apples"
-          aria-label="Shopping list" disabled={g.busy === 'parse' || g.voice === 'transcribing'}
+          aria-label="Shopping list" disabled={g.phase !== 'pick' || g.busy === 'parse' || g.voice === 'transcribing'}
           className="min-h-14 resize-none border-0 bg-transparent pr-28 shadow-none focus-visible:ring-0" />
         <div className="absolute right-2 bottom-2 flex gap-1.5">
           <Button type="button" variant={g.voice === 'recording' ? 'destructive' : 'outline'} size="icon" className={cn('size-10 rounded-full', g.voice === 'recording' && 'animate-pulse')}
             onClick={() => void g.toggleRecording()} disabled={g.voice === 'transcribing' || g.busy === 'parse'}
             aria-label={g.voice === 'recording' ? 'Stop recording' : 'Speak the list'}>{g.voice === 'recording' ? <Square /> : <Mic />}</Button>
           <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Send list"
-            disabled={!g.listText.trim() || g.busy === 'parse' || Boolean(g.voice) || !g.products.length}><ArrowUp /></Button>
+            disabled={g.phase !== 'pick' || !g.listText.trim() || g.busy === 'parse' || Boolean(g.voice) || !g.products.length}><ArrowUp /></Button>
         </div>
       </form>
       {g.voice === 'transcribing' && <p className="mt-1 text-xs text-muted-foreground">Transcribing…</p>}
-    </div>}
+    </div></div>}
+
+    <Card className="mt-8">
+      <CardHeader><CardTitle className="flex items-center gap-2"><Store className="size-4" />Your stores</CardTitle>
+        <CardDescription>Sign in so Kumi can fill your real cart. It never checks out.</CardDescription></CardHeader>
+      <CardContent><StoreAccounts online={account.online} allowedIds={m.policy.allowed_merchant_ids} /></CardContent>
+    </Card>
 
     <p className="mt-6 text-xs text-muted-foreground">Prices from a Wellcome snapshot{g.snapshotAt ? ` taken ${g.snapshotAt}` : ''}. Click &amp; Collect, free above HK$50. Payments run in a sandbox.</p>
     <PresetEditor g={g} preset={editing} onClose={() => setEditing(null)} />
