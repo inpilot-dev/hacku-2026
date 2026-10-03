@@ -17,7 +17,7 @@ number plus SMS code). Observed on 2026-10-03:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,17 @@ class SuperwebStore:
         callback = f"{self.origin}/api/login/callback?target_url={quote(self.origin + '/en/cart', safe='')}"
         return (f"https://www.yuurewards.com/en/super/login-info?callbackUrl={callback}"
                 f"&domain={self.domain}&venderId={self.vender_id}")
+
+    def owns_url(self, url: str) -> bool:
+        """True only for an https page on the shop's exact origin host (not a look-alike such as
+        `www.wellcome.com.hk.evil.example`)."""
+        page, own = urlsplit(url), urlsplit(self.origin)
+        return page.scheme == "https" and page.hostname == own.hostname and page.port == own.port
+
+    def owns_cookie(self, cookie_domain: str) -> bool:
+        """True for a cookie set by the shop's domain or one of its subdomains (not `notwellcome.com.hk`)."""
+        domain = cookie_domain.lstrip(".").lower()
+        return domain == self.domain or domain.endswith("." + self.domain)
 
     def sku(self, product_id: str) -> int | None:
         """The shop's SKU behind a catalog product ID such as `wellcome_101355093`."""
