@@ -25,9 +25,10 @@ type Props = {
   /** Profile: the stores the current allowance includes, shown as a tag. */
   allowedIds?: string[];
   onStores?: (stores: StoreConnection[]) => void;
+  onMessage?: (text: string, isError: boolean) => void;
 };
 
-export default function StoresPanel({ token, online, picked, onPick, allowedIds, onStores }: Props) {
+export default function StoresPanel({ token, online, picked, onPick, allowedIds, onStores, onMessage }: Props) {
   const [stores, setStores] = useState<StoreConnection[] | null>(null);
   const [signingIn, setSigningIn] = useState<StoreConnection | null>(null);
   const [busy, setBusy] = useState('');
@@ -58,8 +59,13 @@ export default function StoresPanel({ token, online, picked, onPick, allowedIds,
     setError('');
     if (store.status === 'awaiting_login') { setSigningIn(store); return; }  // resume, don't restart
     setBusy(store.store_id);
-    try { setSigningIn(await api.connectStore(token, store.store_id)); } catch (err) {
-      setError(err instanceof Error ? err.message : `Could not open ${store.name}.`);
+    try {
+      const connection = await api.connectStore(token, store.store_id);
+      setSigningIn(connection);
+      if (connection.message) onMessage?.(connection.message, false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Could not open ${store.name}.`;
+      setError(message); onMessage?.(message, true);
     } finally { setBusy(''); }
   }
 
@@ -75,7 +81,7 @@ export default function StoresPanel({ token, online, picked, onPick, allowedIds,
     setSigningIn(null);
     if (!store) return;
     const next = await api.store(token, store.store_id).catch(() => null);
-    if (next) replace(next);
+    if (next) { replace(next); if (next.message) onMessage?.(next.message, status !== 'connected'); }
     if (status !== 'connected') setError(next?.message ?? `${store.name} sign-in didn’t finish.`);
   }
 

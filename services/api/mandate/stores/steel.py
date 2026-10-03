@@ -11,6 +11,14 @@ Two jobs, each in its own isolated browser context (separate cookie jar):
   and the shop's own cart API is called from its page with `fetch`, exactly as
   the shop's site does. No model runs in these contexts.
 
+Before a signed-in session is saved, and before any cart call, the page the
+browser is on must be on the shop's exact host, and is then classified by Jev
+(mandate.sitecheck). The host check is plain code, so text on a page cannot
+talk its way past it: Jev can only add a refusal, never vouch for another host.
+An off-site page or one Jev calls a scam raises `ScamSiteError` and nothing is
+saved or added; a page that could not be classified is treated as not checked,
+never as safe.
+
 Steel is one browser for the whole machine (Jev's catalog capture uses it too);
 contexts keep each user's cookies apart. A shared deployment should still give
 each user their own short-lived browser.
@@ -27,6 +35,8 @@ from dataclasses import dataclass
 from typing import Iterator
 
 from websockets.sync.client import connect
+
+from mandate.sitecheck import PAGE_JS, JevSiteClassifier, Page, SiteCheckError, Verdict
 
 from .registry import SuperwebStore
 
@@ -46,6 +56,14 @@ CALL_JS = """(async (path, param, flag) => {
 
 class StoreBrowserError(Exception):
     """The browser or the shop could not be reached; nothing is known to have changed."""
+
+
+class ScamSiteError(StoreBrowserError):
+    """The browser is off the shop's site, or on a page Jev classified as a scam; the session was not used."""
+
+    def __init__(self, reason: str, verdict: Verdict | None = None):
+        super().__init__(reason)
+        self.verdict = verdict  # None when the host check refused the page before Jev saw it
 
 
 class _Cdp:
@@ -115,9 +133,8 @@ class SteelCart:
     def signed_in(self) -> bool:
         cookies = self.cdp.call("Storage.getCookies", browserContextId=self.context_id)["cookies"]
         url = self.cdp.evaluate(self.session, "location.href") or ""
-        return url.startswith(self.store.origin) and any(
-            c["name"] == self.store.login_flag_cookie and c["domain"].lstrip(".").endswith(self.store.domain)
-            for c in cookies)
+        return self.store.owns_url(url) and any(
+            c["name"] == self.store.login_flag_cookie and self.store.owns_cookie(c["domain"]) for c in cookies)
 
     def _post(self, path: str, param: dict) -> dict:
         args = ", ".join(json.dumps(a) for a in (path, param, self.store.domain_flag))
@@ -141,8 +158,22 @@ class SteelCart:
 
 
 class SteelStoreBrowser:
-    def __init__(self, cdp_url: str = CDP_URL):
+    def __init__(self, cdp_url: str = CDP_URL, classifier: JevSiteClassifier | None = None):
         self.cdp_url = cdp_url
+        self.classifier = classifier or JevSiteClassifier()
+
+    def _check_site(self, cdp: _Cdp, session: str, store: SuperwebStore) -> None:
+        """Raise unless the tab is on the shop's own host and Jev calls the page legitimate."""
+        page = Page.from_json(cdp.evaluate(session, PAGE_JS))
+        if not store.owns_url(page.url):
+            raise ScamSiteError(f"The browser is on {page.url or 'an unknown page'}, not {store.name}'s own site "
+                                f"({store.origin}).")
+        try:
+            verdict = self.classifier.classify(page)
+        except SiteCheckError as exc:
+            raise StoreBrowserError(f"Could not check {page.url} for scams ({exc}).") from None
+        if verdict.scam:
+            raise ScamSiteError(verdict.reason, verdict)
 
     # ---------------------------------------------------------------- sign-in
 
@@ -161,15 +192,16 @@ class SteelStoreBrowser:
         try:
             cookies = cdp.call("Storage.getCookies", browserContextId=window.context_id)["cookies"]
             mine = [{k: c[k] for k in COOKIE_FIELDS if k in c} for c in cookies
-                    if c["domain"].lstrip(".").endswith(store.domain)]
+                    if store.owns_cookie(c["domain"])]
             if not any(c["name"] == store.login_flag_cookie for c in mine):
                 return None
             session = cdp.attach(window.target_id)
-            if not (cdp.evaluate(session, "location.href") or "").startswith(store.origin):
+            if not store.owns_url(cdp.evaluate(session, "location.href") or ""):
                 return None
             local = json.loads(cdp.evaluate(session, "JSON.stringify(Object.fromEntries(Object.entries(localStorage)))"))
             if "commData" not in local:
                 return None  # the shop has not finished setting up the signed-in page yet
+            self._check_site(cdp, session, store)  # only now, so each sign-in is classified once, not every poll
             return {"cookies": mine, "local_storage": local}
         finally:
             cdp.close()
@@ -206,6 +238,7 @@ class SteelStoreBrowser:
             cdp.call("Page.addScriptToEvaluateOnNewDocument", session, source=restore)
             cdp.call("Page.navigate", session, url=f"{store.origin}/en")
             cdp.wait_loaded(session)
+            self._check_site(cdp, session, store)
             yield SteelCart(cdp, session, context, store)
         finally:
             if context is not None:

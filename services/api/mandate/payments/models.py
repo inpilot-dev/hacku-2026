@@ -292,6 +292,17 @@ class PaymentOptionsResponse(Strict):
     evaluated_at: str
 
 
+class RiskSignal(Strict):
+    check: str
+    points: NonNegInt
+
+
+class RiskAssessment(Strict):
+    score: NonNegInt
+    threshold: PosInt
+    signals: list[RiskSignal]
+
+
 class _DecisionBase(Strict):
     decision_id: str
     transaction_id: str
@@ -301,6 +312,7 @@ class _DecisionBase(Strict):
     message: str
     evaluated_at: str
     event_sequence: PosInt
+    risk_assessment: RiskAssessment | None = None
 
 
 class AuthorizationApproved(_DecisionBase):

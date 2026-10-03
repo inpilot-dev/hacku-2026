@@ -369,23 +369,24 @@ class Wallet:
 
     # risk
 
-    def _risk_reasons(self, conn, chain: list[dict], quote: dict) -> list[dict]:
-        """Review reasons for purchases that fit the rules but look unusual for this owner (risk.py)."""
+    def _risk(self, conn, chain: list[dict], quote: dict, budgets: list[dict], now: datetime) -> risk.Assessment:
+        """Risk score and review reasons for purchases that fit the rules but look unusual for this owner (risk.py)."""
         leaf = chain[0]
         history = [
             risk.PastPurchase(row[0], row[1], {i["product_id"]: i["unit_price_minor"]
-                                               for i in json.loads(row[2])["items"]})
+                                               for i in json.loads(row[2])["items"]}, parse(row[3]))
             for row in conn.execute(
-                "SELECT r.merchant_id, r.amount_minor, q.body_json FROM reservations r JOIN quotes q ON q.id = r.quote_id "
-                "JOIN mandates m ON m.id = r.mandate_id WHERE m.owner_id = ? AND r.status = 'paid' "
-                "ORDER BY r.created_at", (leaf["owner_id"],))
+                "SELECT r.merchant_id, r.amount_minor, q.body_json, r.created_at FROM reservations r "
+                "JOIN quotes q ON q.id = r.quote_id JOIN mandates m ON m.id = r.mandate_id "
+                "WHERE m.owner_id = ? AND r.status = 'paid' ORDER BY r.created_at", (leaf["owner_id"],))
         ]
-        mandate_purchases = conn.execute(
-            "SELECT COUNT(*) FROM reservations WHERE mandate_id = ? AND status IN ('reserved', 'paid')",
-            (leaf["id"],)).fetchone()[0]
+        recent = [risk.RecentPurchase(parse(row[0]), row[1]) for row in conn.execute(
+            "SELECT created_at, amount_minor FROM reservations WHERE mandate_id = ? AND status IN ('reserved', 'paid')",
+            (leaf["id"],))]
         listings = {i["product_id"]: self.catalog.listing_text(i["product_id"]) for i in quote["items"]}
-        return risk.assess(leaf, quote, history=history, mandate_purchases=mandate_purchases, listings=listings,
-                           habits=any(m["policy"].get("risk_review") for m in chain))
+        return risk.assess(leaf, quote, history=history, listings=listings,
+                           habits=any(m["policy"].get("risk_review") for m in chain), recent=recent,
+                           budgets=[b for b in budgets if b["mandate_id"] == leaf["id"]], now=now)
 
     # quotes
 
@@ -607,9 +608,10 @@ class Wallet:
 
             chain = self._chain(conn, leaf)
             budgets = self._ensure_periods(conn, chain, now)
+            assessment = self._risk(conn, chain, quote, budgets, now)
             ev = rules.evaluate(chain, quote, budgets, now,
                                 recent_purchases=self._recent_purchases(conn, chain, now),
-                                risk=self._risk_reasons(conn, chain, quote), waived=waived)
+                                risk=assessment.reasons, waived=waived)
             self._ensure_cards(conn, chain, now)
             frozen = self._frozen_card_violation(conn, chain)
             if frozen:
@@ -623,6 +625,8 @@ class Wallet:
                 "rule_ids": ev.rule_ids,
                 "evaluated_at": iso(now),
             }
+            if assessment.summary() is not None:
+                base["risk_assessment"] = assessment.summary()
             snapshot = [{"mandate_id": m["id"], "version": m["version"], "policy": m["policy"]} for m in chain]
             reservation_id = None
             if approval is not None and ev.status == "requires_review":
@@ -717,7 +721,7 @@ class Wallet:
                     "payment_route": route, "payment_options": options,
                     "credential": {k: credential[k] for k in ("credential_id", "last4", "merchant_id",
                                                               "amount_minor", "expires_at", "single_use")},
-                    "rail": rail_info(rail, credential["credential_id"]),
+                    "rail": rail_info(rail, credential["credential_id"], rail.funding_for(conn, r["id"])),
                 }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=req["transaction_id"])
                 body = {
                     **base,
@@ -941,7 +945,7 @@ class Wallet:
             }
             seq = self._event(conn, leaf["owner_id"], "payment_completed", {
                 "decision_id": decision_id, "receipt": receipt, "mandate_version": leaf["version"],
-                "rail": rail_info(rail, capture_ref),
+                "rail": rail_info(rail, capture_ref, rail.funding_for(conn, r["id"])),
             }, actor=actor, now=now, mandate_id=leaf["id"], transaction_id=r["transaction_id"])
             conn.execute("INSERT INTO payments VALUES (?,?,?,?,?,?,?)",
                          (receipt["id"], r["transaction_id"], r["id"], decision_id, seq, json.dumps(receipt),
@@ -1134,7 +1138,7 @@ class Wallet:
             }
             seq = self._event(conn, row["owner_id"], "payment_refunded", {
                 "refund": refund, "reservation_id": r["id"], "released_paid_minor": amount,
-                "affected_period_ids": period_ids, "rail": rail_info(rail, rail_ref),
+                "affected_period_ids": period_ids, "rail": rail_info(rail, rail_ref, rail.funding_for(conn, r["id"])),
             }, actor=actor, now=now, mandate_id=r["mandate_id"], transaction_id=transaction_id)
             body = {"refund": refund, "budgets": self._budgets_by_ids(conn, period_ids), "event_sequence": seq}
             conn.execute("INSERT INTO refunds VALUES (?,?,?,?,?,?,?,?,?,?)",

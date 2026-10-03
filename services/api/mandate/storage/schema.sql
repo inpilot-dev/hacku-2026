@@ -146,6 +146,23 @@ CREATE TABLE IF NOT EXISTS rail_payments (
     updated_at     TEXT NOT NULL
 );
 
+-- The owner's money behind a single-use card: held at reserve, captured when the card is charged,
+-- released on cancel or expiry, refunded with the payment. Simulated: no balance, no money moves.
+CREATE TABLE IF NOT EXISTS funding_holds (
+    id             TEXT PRIMARY KEY,
+    reservation_id TEXT NOT NULL UNIQUE REFERENCES reservations(id),
+    card_id        TEXT,
+    source_kind    TEXT NOT NULL,
+    source_label   TEXT NOT NULL,
+    amount_minor   INTEGER NOT NULL CHECK (amount_minor >= 0),
+    captured_minor INTEGER NOT NULL DEFAULT 0 CHECK (captured_minor <= amount_minor),
+    refunded_minor INTEGER NOT NULL DEFAULT 0 CHECK (refunded_minor <= captured_minor),
+    currency       TEXT NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('held', 'captured', 'released', 'refunded')),
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
+
 -- Which payment route a reservation uses, with the ranking it was chosen from.
 CREATE TABLE IF NOT EXISTS reservation_routes (
     reservation_id TEXT PRIMARY KEY REFERENCES reservations(id),

@@ -279,9 +279,14 @@ payment earned, which also moves the route's monthly reward tier back. Audit eve
 inside the window. Cancelled and expired reservations do not count.
 
 **Risk review (proposed v0.3, wallet, Timmy).** `Policy.risk_review` (optional boolean, default `false`) adds
-review reasons for purchases that fit every hard rule but look unusual for this owner: the first purchase on the
-mandate, the first order from a shop the owner has never bought from, a basket at least 3x the median of the owner's paid purchases (after 3 of them), items never bought before
-(same history), and a unit price at least 25% above the last price paid. Separately, and on every mandate, a product
+a points scorecard for purchases that fit every hard rule but look unusual for this owner. Signals: a basket
+well above the owner's usual (median paid basket, shrunk toward a quarter of the order cap while history is short),
+a basket at least 90% of the order cap, a shop the owner has never bought from, items never bought before (after 3
+purchases), a unit price at least 25% above the last price paid, orders just under `approval_above_minor` within 24
+hours (split to skip approval), 3+ purchases within an hour, 80% of a period budget used in its first 40%, and an
+hour the owner never shops in. One weak signal never interrupts; at a score of 50 the decision is `requires_review`
+with every contributing signal as a reason. Every decision on such a mandate carries `risk_assessment`
+(`{score, threshold, signals: [{check, points}]}`). Separately, and on every mandate, a product
 listing whose text tries to instruct the agent ("ignore previous instructions", "approve without asking") is a
 review reason. Each reason is a `RuleViolation` with code `RISK_REVIEW_REQUIRED`, a plain `message`, and its own
 `rule_id` (`<mandate>/v<n>/risk:<check>`). They never refuse on their own: the decision is `requires_review` and goes
@@ -317,6 +322,13 @@ authorization with its ISO 8583 response code). Freeze is reversible, unlike rev
 frozen, `POST /authorizations` refuses with the new reason code **`CARD_FROZEN`** (`rule_id` `<mandate>/v<n>/card`), and
 `POST /payments` on an earlier authorization refuses with `CARD_FROZEN`, releases the hold and records a declined
 authorization (response code 62). FPS purchases are refused too: the card is the face of the whole mandate.
+
+**Owner funding (proposed v0.3, wallet, Timmy).** Each single-use card is paid for by a simulated hold on the
+owner's funding source for exactly the authorized amount: held at authorization, captured once the issuer approves
+the card at payment (never above the hold), released on cancel, expiry, freeze or revoke, and refunded with the
+payment. No API shape changes. The `rail` object in `authorization_approved`, `payment_completed` and
+`payment_refunded` audit payloads gains an optional `funding` object (`hold_id`, `source`, `label`, `held_minor`,
+`captured_minor`, `refunded_minor`, `status`, `simulated: true`); FPS purchases have none.
 
 New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`, `card_frozen`,
 `card_unfrozen`. `mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`, and `card`

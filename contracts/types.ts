@@ -262,6 +262,7 @@ export type AuthorizationApproved = {
   "budgets": Array<BudgetPeriod>;
   "payment_route"?: PaymentRouteSummary | null;
   "payment_credential"?: PaymentCredential | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type AuthorizationRefused = {
@@ -277,6 +278,7 @@ export type AuthorizationRefused = {
   "violations": Array<RuleViolation>;
   "budgets": Array<BudgetPeriod>;
   "approval_request"?: ApprovalRequest | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type AuthorizationDecision = AuthorizationApproved | AuthorizationRefused;
@@ -468,6 +470,7 @@ export type DemoAuthorizationApproved = {
   "claims": AuthorizationClaims;
   "budgets": Array<BudgetPeriod>;
   "payment_route"?: PaymentRouteSummary | null;
+  "risk_assessment"?: RiskAssessment | null;
 };
 
 export type VelocityLimit = {
@@ -772,6 +775,71 @@ export type CartSyncResult = {
   "quote_subtotal_minor": number;
   "checkout_ready": boolean;
   "message": string;
+};
+
+export type AttackSummary = {
+  "id": string;
+  "title": string;
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "threat": string;
+  "defence": string;
+};
+
+export type AttackList = {
+  "attacks": Array<AttackSummary>;
+};
+
+export type AttackStep = {
+  "phase": "setup" | "attack";
+  "actor": string;
+  "title": string;
+  "method": string;
+  "path": string;
+  "request": Record<string, unknown> | null;
+  "http_status": number;
+  "outcome": string;
+  "response": Record<string, unknown>;
+};
+
+export type AttackLedger = {
+  "completed_payments": number;
+  "paid_total_minor": number;
+  "week_limit_minor": number | null;
+  "week_paid_minor": number | null;
+  "week_reserved_minor": number | null;
+};
+
+export type AttackSandbox = {
+  "isolated": boolean;
+  "simulated_time": string;
+  "catalog": string;
+};
+
+export type AttackResult = {
+  "id": string;
+  "title": string;
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "threat": string;
+  "defence": string;
+  "expected": string;
+  "observed": string;
+  "held": boolean;
+  "error": string | null;
+  "ran_at": string;
+  "sandbox": AttackSandbox;
+  "ledger": AttackLedger | null;
+  "steps": Array<AttackStep>;
+};
+
+export type RiskSignal = {
+  "check": string;
+  "points": number;
+};
+
+export type RiskAssessment = {
+  "score": number;
+  "threshold": number;
+  "signals": Array<RiskSignal>;
 };
 
 export type ProfileInput = {

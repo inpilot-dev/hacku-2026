@@ -3,13 +3,16 @@ import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
 import ReactiveCharacter from '../components/ReactiveCharacter';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, PaymentOptionsResponse, Product, Quote, Receipt, RiskAssessment, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { categoryLabel, money, periodWord } from '../lib/format';
 import { holderName, possessive, saveHolderName } from './holder';
 import CartSyncPanel from './CartSyncPanel';
 import Onboarding, { storeName } from './Onboarding';
 import ProfileSheet from './ProfileSheet';
+import PaymentRouteCard from '../shopping/PaymentRouteCard';
+import MessageList, { type ConversationMessage } from '../shopping/MessageList';
+import '../shopping/conversation.css';
 
 /*
  * A single-screen take on the core Mandate flow, for whoever the shopping is for (a parent, a teen, a flat or yourself):
@@ -22,6 +25,7 @@ const TOKEN = 'dev-user-token';
 const STORE_ID = 'wellcome';
 const PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
 const MANDATE_KEY = 'mandate-id';
+const PENDING_CHECKOUT_KEY = 'mandate-pending-checkout-v1';
 const PRESETS_KEY = 'mandate-shopping-presets-v1';
 
 type Mascot = 'kumi' | 'kip' | 'bean' | 'stella';
@@ -32,7 +36,7 @@ type ReceiptRecord = { receipt: Receipt; quote: Quote | null; occurredAt: string
 type Verdict =
   | { kind: 'paid'; receipt: Receipt; replayed: boolean }
   | { kind: 'refused'; message: string; violations: RuleViolation[] }
-  | { kind: 'review'; message: string; violations: RuleViolation[]; approval: ApprovalRequest }
+  | { kind: 'review'; message: string; violations: RuleViolation[]; approval: ApprovalRequest; risk?: RiskAssessment | null }
   | { kind: 'uncertain'; message: string };
 type Phase = 'pick' | 'packing' | 'basket' | 'paying' | 'verdict';
 type LogEntry = { id: string; at: string; who: Mascot; text: string; tone: 'good' | 'bad' | 'info'; state?: string };
@@ -81,6 +85,37 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
 
+// Risk signals by check name (the part of the rule id after "risk:"), matching services/api/mandate/payments/risk.py.
+const RISK_SIGNALS: Record<string, string> = {
+  large_basket: 'Bigger than usual',
+  near_cap: 'Close to the order limit',
+  new_merchant: 'New shop',
+  new_items: 'Never bought before',
+  price_jump: 'Price jumped',
+  split_order: 'Looks like a split order',
+  burst: 'Many orders at once',
+  budget_burn: 'Budget going fast',
+  odd_hour: 'Unusual time',
+  listing_text: 'Listing talks to the agent',
+};
+
+const riskCheck = (v: RuleViolation) => v.code === 'RISK_REVIEW_REQUIRED' ? v.rule_id.split('/risk:')[1] ?? null : null;
+const reasonTitle = (v: RuleViolation) => {
+  const check = riskCheck(v);
+  const signal = check ? RISK_SIGNALS[check.split(':')[0]] : undefined;
+  return signal ?? REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase();
+};
+
+function RiskMeter({ risk }: { risk: RiskAssessment }) {
+  const scale = Math.max(100, risk.score, risk.threshold);
+  return (
+    <div className="m2-risk" role="img" aria-label={`Risk score ${risk.score}; purchases at ${risk.threshold} or more wait for you`}>
+      <div className="m2-risk-head"><b>Risk score {risk.score}</b><small>reviews from {risk.threshold}</small></div>
+      <div className="m2-risk-bar"><i style={{ width: `${(risk.score / scale) * 100}%` }} /><em style={{ left: `${(risk.threshold / scale) * 100}%` }} /></div>
+    </div>
+  );
+}
+
 function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
   return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
 }
@@ -100,7 +135,9 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
     case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
     case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
-    case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
+    case 'authorization_refused': return event.payload.status === 'requires_review'
+      ? { who: 'kip', text: 'Kip requested user approval', tone: 'info' }
+      : { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };
     case 'payment_refused': return { who: 'kip', text: 'Payment refused', tone: 'bad' };
     default: return null;
@@ -147,12 +184,17 @@ function savedPresets(): Record<string, SavedPreset> {
 type Spoken = { kind: 'list'; items: ShoppingItem[] };
 
 export default function SimpleApp() {
+  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const say = useCallback((speaker: ConversationMessage['speaker'], text: string, tone: ConversationMessage['tone'] = 'info', startsConversation = false) => {
+    setMessages((current) => current[current.length - 1]?.speaker === speaker && current[current.length - 1]?.text === text ? current : [...current, { id: crypto.randomUUID(), speaker, text, tone, startsConversation }]);
+  }, []);
   const [online, setOnline] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [mandateId, setMandateId] = useState(() => localStorage.getItem(MANDATE_KEY) ?? '');
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
   const [card, setCard] = useState<VirtualCard | null>(null);
+  const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -167,9 +209,11 @@ export default function SimpleApp() {
   const [showCustom, setShowCustom] = useState(false);
   const [search, setSearch] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [paymentComparison, setPaymentComparison] = useState<PaymentOptionsResponse | null>(null);
   const [routeId, setRouteId] = useState<string | null>(null);
   const [routeLabel, setRouteLabel] = useState('');
   const [verdict, setVerdict] = useState<Verdict | null>(null);
+  const [ruleTestBasket, setRuleTestBasket] = useState(false);
   const [agentNote, setAgentNote] = useState('');
   const [listText, setListText] = useState('');
   const [voice, setVoice] = useState<'' | 'recording' | 'transcribing'>('');
@@ -197,8 +241,9 @@ export default function SimpleApp() {
   const shopRef = useRef<HTMLElement>(null);
 
   const note = useCallback((who: Mascot, text: string, tone: LogEntry['tone'], state?: string) => {
+    say(who, text, tone);
     setLog((current) => [{ id: crypto.randomUUID(), at: new Date().toISOString(), who, text, tone, state }, ...current].slice(0, 20));
-  }, []);
+  }, [say]);
 
   const refresh = useCallback(async (id = mandateId) => {
     try { await api.health(); setOnline(true); } catch { setOnline(false); }
@@ -220,6 +265,41 @@ export default function SimpleApp() {
   }, [mandateId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!loaded || !mandateId) return;
+    let pending: { mandateId: string; quoteId: string; transactionId: string };
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(PENDING_CHECKOUT_KEY) ?? 'null');
+      if (!stored || stored.mandateId !== mandateId || typeof stored.quoteId !== 'string' || typeof stored.transactionId !== 'string') return;
+      pending = stored;
+    } catch { return; }
+    let cancelled = false;
+    setRecoveryBlocked(true);
+    setBusy('checkout-restore');
+    void (async () => {
+      try {
+        const restoredQuote = await api.quoteById(TOKEN, pending.quoteId);
+        if (cancelled) return;
+        setRecoveryBlocked(false);
+        setQuote(restoredQuote); setPhase('verdict');
+        sessionStorage.setItem(`mandate-tx-${restoredQuote.id}`, pending.transactionId);
+        try {
+          const receipt = await api.paymentByTransaction(TOKEN, pending.transactionId);
+          if (cancelled) return;
+          setVerdict({ kind: 'paid', receipt, replayed: true });
+          setReceipts((current) => [{ receipt, quote: restoredQuote, occurredAt: receipt.paid_at }, ...current.filter((record) => record.receipt.transaction_id !== receipt.transaction_id)]);
+          sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+          note('kip', 'Restored the confirmed receipt for your previous checkout. No new payment was submitted.', 'good');
+        } catch {
+          if (!cancelled) setVerdict({ kind: 'uncertain', message: 'Restored an unfinished checkout. Its payment status is unknown. Check status using the saved transaction before shopping again.' });
+        }
+      } catch {
+        if (!cancelled) setError('An unfinished checkout could not be restored. Check its transaction in the full dashboard before making another purchase.');
+      } finally { if (!cancelled) setBusy(''); }
+    })();
+    return () => { cancelled = true; };
+  }, [loaded, mandateId, note]);
+
   useEffect(() => { api.catalog(TOKEN).then(setCatalog).catch(() => setCatalog(null)); }, []);
 
   const products = useMemo(() => catalog?.products.filter((p) => p.merchant_id === STORE_ID && p.available) ?? [], [catalog]);
@@ -231,7 +311,7 @@ export default function SimpleApp() {
   }, [catalog]);
 
   const active = mandate?.status === 'active';
-  const canSpend = active && card?.status !== 'frozen';
+  const canSpend = active && card?.status !== 'frozen' && !recoveryBlocked && busy !== 'checkout-restore';
   const period = budget?.applicable_budgets[0];
   const available = period?.available_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const limit = period?.limit_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
@@ -300,7 +380,9 @@ export default function SimpleApp() {
   }
 
   function resetShop() {
-    setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
+    // A deliberate new shopping request is distinct from retrying an in-flight request.
+    sessionStorage.removeItem('mandate-idempotency-agent-run');
+    setPaymentComparison(null); setRuleTestBasket(false); setPhase('pick'); setPick(null); setQuote(null); setVerdict(null); setAgentNote(''); setRouteId(null); setRouteLabel('');
   }
 
   /** Ask the agent service first; if it isn't mounted, use the preset basket and say so. */
@@ -309,13 +391,15 @@ export default function SimpleApp() {
     try {
       const run = await api.startAgentRun(TOKEN, { mandate_id: mandate.id, shopping_list: list, auto_purchase: false });
       let current = run;
+      if (run.message) note('kumi', run.message, 'info');
       for (let tries = 0; tries < 20 && !current.quote_id && !['failed', 'refused', 'completed'].includes(current.status); tries += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
-        current = await api.agentRun(TOKEN, run.id);
+        const next = await api.agentRun(TOKEN, run.id);
+        if (next.message && next.message !== current.message) note('kumi', next.message, 'info');
+        current = next;
       }
       if (current.quote_id) {
         setAgentNote(`Packed by ${current.provider === 'jev' ? 'the shopping agent' : current.provider}`);
-        note('kumi', current.message, 'info');
         return { quote: await api.quoteById(TOKEN, current.quote_id), message: current.message };
       }
       return { quote: null, message: current.message || 'Kumi could not build a basket.' };
@@ -360,27 +444,33 @@ export default function SimpleApp() {
   async function shopFromText() {
     const text = listText.trim();
     if (!mandate || !canSpend || !text || busy) return;
+    say('you', text, 'info', true);
+    setListText('');
     setError(''); setBusy('parse');
     try {
       const parsed = await api.parseShoppingList(TOKEN, { text });
-      if (!parsed.items.length) { setError('Kumi couldn’t find any items in that. Try “rice, milk, 3 apples”.'); return; }
+      if (!parsed.items.length) { setError('Kumi couldn’t find any items in that. Try “rice, milk, 3 apples”.'); setListText(text); return; }
       note('kumi', `Heard: ${parsed.items.map((item) => `${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}${parsed.source === 'rules' ? ' (split by simple rules)' : ''}`, 'info');
       await shop({ kind: 'list', items: parsed.items });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kumi could not read that list.');
+      setListText(text);
     } finally { setBusy(''); }
   }
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
-    if (!mandate || !canSpend) return;
+    if (!mandate || !canSpend || phase === 'packing' || phase === 'paying') return;
+    if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.', 'info', true);
+    else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`, 'info', true);
     const spoken = chosen !== 'custom' && 'kind' in chosen;
     const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
     if (!spoken && !lines.length) { setError('That basket is empty in the current catalog.'); return; }
+    setPaymentComparison(null); setRouteId(null); setRouteLabel('');
+    setRuleTestBasket(false);
     setError(''); setVerdict(null); setPick(chosen === 'custom' || spoken ? null : chosen); setPhase('packing');
-    shopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
       let result: Quote | null = null;
       if (chosen !== 'custom') {
@@ -393,6 +483,7 @@ export default function SimpleApp() {
           return;
         }
         if (!result) {
+          setRuleTestBasket(true);
           // The preset still goes to Kip, so the wallet's own check is shown either way.
           if (packed.message) note('kumi', packed.message, 'bad');
           setAgentNote(packed.message ? 'Kumi wouldn’t pack it · preset basket sent to Kip as a rule test' : 'Preset basket · agent not connected here');
@@ -403,10 +494,11 @@ export default function SimpleApp() {
         result = await api.quote(TOKEN, { merchant_id: STORE_ID, delivery_context_id: PICKUP_CONTEXT_ID, items: lines });
       }
       setQuote(result);
-      note('kumi', `Kumi packed ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}`, 'info');
+      note('kumi', `Quote ready: ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}. Review the basket below.`, 'info');
       try {
         const options = await api.paymentOptions(TOKEN, result.id);
-        const chosenRoute = options.options.find((o) => o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
+        setPaymentComparison(options);
+        const chosenRoute = options.options.find((o) => o.eligible && o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
         setRouteId(chosenRoute?.route_id ?? null); setRouteLabel(chosenRoute?.label ?? '');
       } catch { setRouteId(null); setRouteLabel(''); }
       setPhase('basket');
@@ -417,52 +509,82 @@ export default function SimpleApp() {
   }
 
   async function checkout(approvalId?: string) {
-    if (!mandate || !quote) return;
+    if (!mandate || !quote || phase === 'paying') return;
+    say('you', approvalId ? 'Proceed with this approved basket.' : `Check the rules and pay ${money(quote.total_minor)} in the sandbox.`);
     setPhase('paying'); setError('');
     const key = `mandate-tx-${quote.id}`;
     const transactionId = sessionStorage.getItem(key) ?? crypto.randomUUID();
     sessionStorage.setItem(key, transactionId);
+    sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ mandateId: mandate.id, quoteId: quote.id, transactionId }));
     await new Promise((resolve) => window.setTimeout(resolve, 900)); // let Kip's check read as a moment, not a flicker
     try {
       const result = await api.demoPurchase(TOKEN, { mandate_id: mandate.id, quote_id: quote.id, transaction_id: transactionId, payment_route_id: routeId, approval_id: approvalId ?? null });
       const auth = result.authorization;
       if (auth.status === 'requires_review' && auth.approval_request) {
-        setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request });
-        note('kip', `Kip wants your OK for ${money(quote.total_minor)}`, 'info');
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+        setVerdict({ kind: 'review', message: auth.message, violations: auth.violations, approval: auth.approval_request, risk: auth.risk_assessment });
+        note('kip', `Your approval is needed for ${money(quote.total_minor)}: ${auth.message}. Nothing is paid while this waits.`, 'info');
       } else if (auth.status !== 'approved') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'refused', message: auth.message, violations: auth.violations });
-        note('kip', `Kip blocked ${money(quote.total_minor)}`, 'bad');
+        note('kip', `Purchase blocked. ${[...new Set([auth.message, ...auth.violations.map((v) => v.message)])].join(' ')} Nothing was paid.`, 'bad');
       } else if (result.payment?.status === 'completed') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
         rememberReceipt(result.payment.receipt);
-        note('kip', `Kip paid ${money(result.payment.receipt.amount_minor)}`, 'good');
+        note('kip', `Sandbox payment confirmed: ${money(result.payment.receipt.amount_minor)}. Receipt ${result.payment.receipt.id}. No real retailer payment was submitted.`, 'good');
       } else if (result.payment?.status === 'refused') {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
-        note('kip', 'Payment refused', 'bad');
+        note('kip', `Payment refused: ${result.payment.message}. Nothing was paid.`, 'bad');
       } else {
+        note('kip', 'The wallet approved the request, but payment is not confirmed. Check its status before making another purchase.', 'info');
         setVerdict({ kind: 'uncertain', message: 'The wallet approved it but hasn’t confirmed payment yet.' });
       }
     } catch (err) {
-      if (err instanceof ApiError && [401, 403, 404, 422, 503].includes(err.status)) {
-        setVerdict({ kind: 'refused', message: `${err.message} No payment was made.`, violations: [] });
-      } else {
-        try {
-          const receipt = await api.paymentByTransaction(TOKEN, transactionId);
-          setVerdict({ kind: 'paid', receipt, replayed: true });
-          rememberReceipt(receipt);
-        } catch {
-          setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
-        }
+      // A transport/HTTP error is not proof that the wallet did not capture payment.
+      note('kip', `Checkout response unavailable${err instanceof Error ? `: ${err.message}` : ''}. Checking the saved transaction.`, 'info');
+      try {
+        const receipt = await api.paymentByTransaction(TOKEN, transactionId);
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+        setVerdict({ kind: 'paid', receipt, replayed: true });
+        rememberReceipt(receipt);
+        note('kip', `Recovered the confirmed sandbox receipt ${receipt.id}. No second payment was submitted.`, 'good');
+      } catch {
+        setVerdict({ kind: 'uncertain', message: 'Payment status is unknown. Check status to look up the saved transaction; this does not submit another payment. A missing receipt is not proof of failure.' });
       }
     }
     receiptsLoaded.current = false;
     setPhase('verdict');
-    shopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     void refresh(mandate.id);
+  }
+
+  async function checkPaymentStatus() {
+    if (!quote || verdict?.kind !== 'uncertain' || busy) return;
+    const transactionId = sessionStorage.getItem(`mandate-tx-${quote.id}`);
+    if (!transactionId) { setError('The transaction reference is missing. Resolve the purchase in the full dashboard before shopping again.'); return; }
+    setBusy('payment-status'); setError('');
+    try {
+      const receipt = await api.paymentByTransaction(TOKEN, transactionId);
+      sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+      setVerdict({ kind: 'paid', receipt, replayed: true });
+      rememberReceipt(receipt);
+      receiptsLoaded.current = false;
+      note('kip', `Payment confirmed from receipt ${receipt.id}. This status check did not submit a payment.`, 'good');
+      void refresh();
+    } catch (err) {
+      const message = err instanceof ApiError && err.status === 404
+        ? 'No completed receipt is available yet. Payment status remains unknown. No payment was submitted by this check.'
+        : 'Could not retrieve payment status. No payment was submitted by this check.';
+      setVerdict({ kind: 'uncertain', message });
+      note('kip', message, 'info');
+    } finally { setBusy(''); }
   }
 
   async function decide(approve: boolean) {
     if (verdict?.kind !== 'review') return;
+    if (busy === 'decide') return;
+    say('you', approve ? 'Approve this basket once.' : 'Decline this purchase.');
     setBusy('decide');
     try {
       if (approve) {
@@ -484,6 +606,8 @@ export default function SimpleApp() {
   const filtered = products.filter((p) => p.title.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 24);
   const feed = serverLog && serverLog.length ? serverLog : log;
   const showSetup = loaded && (!mandate || setupOpen);
+  // Phones pin Kumi's question and the list box to the bottom while picking (see simple.css).
+  const docked = !showSetup && Boolean(mandate) && active && phase === 'pick';
   const visiblePicks = useMemo(() => PICKS.map((base) => {
     const saved = presets[base.id];
     return saved ? { ...base, title: saved.title, subtitle: saved.items.map((item) => `${item.quantity > 1 ? `${item.quantity} ` : ''}${item.name}${item.unit ? ` ${item.unit}` : ''}`).join(', '), list: saved.items.map((item) => item.name), intent: saved.items, edited: true } : base;
@@ -559,7 +683,14 @@ export default function SimpleApp() {
         catch { return null; }
       }));
       const ordered = records.filter((record): record is ReceiptRecord => record !== null).sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt));
-      setReceipts(ordered); receiptsLoaded.current = true;
+      setReceipts((current) => {
+        const previous = new Map(current.map((record) => [record.receipt.transaction_id, record]));
+        return ordered.map((record) => {
+          const cached = previous.get(record.receipt.transaction_id);
+          return { ...record, quote: cached?.quote?.id === record.receipt.quote_id ? cached.quote : record.quote };
+        });
+      });
+      receiptsLoaded.current = true;
     } catch (err) {
       setReceiptsError(err instanceof Error ? err.message : 'Could not load receipts.');
     } finally { receiptLoadInFlight.current = false; setReceiptsLoading(false); }
@@ -629,34 +760,26 @@ export default function SimpleApp() {
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
   const stamp = verdict?.kind === 'paid' ? 'Paid' : verdict?.kind === 'refused' ? 'Refused' : verdict?.kind === 'review' ? 'Your call' : 'Checking';
 
-  return <div className="m2">
+  return <div className={`m2 conversation-app${docked ? ' docked' : ''}`}>
     <header className="m2-top">
       <div className="m2-brand">Mandate</div>
       <div className="m2-top-right">
         <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
-        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
+        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} disabled={recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
       </div>
     </header>
 
     {error && <div className="m2-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">Dismiss</button></div>}
 
     {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} /></div> : showSetup ? (
-      <section className="m2-setup">
-        <div className="m2-setup-copy">
-          <p className="m2-kicker">For anyone handing the shopping to an agent</p>
-          <h1>Groceries, <em>on a card that can’t go rogue.</em></h1>
-          <p className="m2-lede">For a parent, a teen, a shared flat or yourself. Kumi fills the basket. Kip, the wallet, only pays when your rules say yes. You can freeze it in one tap.</p>
-          <div className="m2-cast">
-            <figure><Sticker name="kumi" state="idle" size={76} tilt={-5} /><figcaption><b>Kumi</b> fills the basket</figcaption></figure>
-            <figure><Sticker name="kip" state="idle" size={76} tilt={4} /><figcaption><b>Kip</b> holds the money</figcaption></figure>
-            <figure><Sticker name="stella" state="idle" size={76} tilt={-3} /><figcaption><b>Stella</b> keeps the log</figcaption></figure>
-          </div>
-        </div>
+      <section className="m2-setup conversation-setup">
+        <div className="conversation-intro"><p className="m2-kicker">YOUR SHOPPING COMPANION</p><h1>What can I find<br /><em>for you?</em></h1><p>Tell Kumi what you need. Kip keeps every purchase within the rules you confirm.</p></div>
+        <MessageList messages={[{ id: 'setup-welcome', speaker: 'kumi', text: 'Hi! Before I shop, let’s agree on who I’m shopping for and what I may spend. Review the setup cards below—nothing is active until you confirm.' }]} />
         <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} initialPolicy={setupOpen && mandate ? mandate.policy : null} initialHolder={setupOpen && mandate ? holder : ''} onActivated={activated}
           onBack={setupOpen && mandate ? () => setSetupOpen(false) : undefined} />
       </section>
     ) : mandate && (
-      <main className="m2-grid">
+      <main className={`m2-grid${phase === 'verdict' ? ' verdict' : ''}`}>
         <section className="m2-col m2-area-card">
           <div className={`m2-card ${canSpend ? '' : 'frozen'}`}>
             <div className="m2-card-top"><span>{owner} grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
@@ -677,9 +800,9 @@ export default function SimpleApp() {
           </dl>
           {active ? card?.status === 'frozen'
             ? <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}><Snowflake size={18} />{busy === 'unfreeze' ? 'Resuming…' : 'Unfreeze the card'}</button>
-            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
+            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze' || recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
-          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke'}>Permanently revoke allowance</button>}
+          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke' || recoveryBlocked || busy === 'checkout-restore' || phase === 'paying' || verdict?.kind === 'uncertain'}>Permanently revoke allowance</button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
           <a className="m2-receipts-trigger" href="?card"><CreditCard size={18} /><span><b>Virtual card</b><small>Set up, freeze or check the card</small></span><ArrowRight size={17} /></a>
           {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
@@ -693,27 +816,33 @@ export default function SimpleApp() {
           </div>
         </section>
 
-        <section className="m2-col m2-area-shop" ref={shopRef}>
+        <section className="m2-col m2-area-shop conversation-thread" ref={shopRef}>
+          <div className="conversation-heading"><p className="m2-kicker">YOUR SHOPPING COMPANION</p><h1>What can I find for you?</h1><p>Shop at your allowed stores. Your confirmed spending rules stay in control.</p></div>
+          <MessageList working={phase === 'packing' || busy === 'parse' ? { speaker: 'kumi', text: busy === 'parse' ? 'Reading your shopping list…' : 'Finding matches for your basket…' } : phase === 'paying' || ['payment-status', 'checkout-restore', 'decide'].includes(busy) ? { speaker: 'kip', text: busy === 'decide' ? 'Checking your approval…' : busy === 'payment-status' || busy === 'checkout-restore' ? 'Checking the saved payment status…' : 'Checking your rules and payment…' } : undefined} messages={[{ id: 'welcome' , speaker: 'kumi', text: `Hi${holder ? `, shopping for ${holder}` : ''}! Tell me what you need. I can search your allowed stores and build a basket for you to review.` }, ...messages]} />
+          <div className="conversation-active-card" aria-label="Current shopping step">
+
           {!canSpend ? (
             <div className="m2-panel m2-center">
               <Sticker name="kip" state="revoked" size={150} tilt={-4} />
-              <h2>{!active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
-              <p className="m2-muted">{!active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
-              {active && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
+              <h2>{recoveryBlocked || busy === 'checkout-restore' ? 'Checking your previous checkout.' : !active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
+              <p className="m2-muted">{recoveryBlocked || busy === 'checkout-restore' ? 'Your previous payment must be resolved before a new purchase. Reload to retry the lookup, or check its saved transaction in the full dashboard. No new payment has been submitted.' : !active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
+              {active && !recoveryBlocked && busy !== 'checkout-restore' && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
-              <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>{holder ? `What does ${holder} need this ${per}?` : `What do you need this ${per}?`}</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
+              <div className="m2-dock">
+              <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>{holder ? `What does ${holder} need?` : `What would you like to buy?`}</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
               <div className="m2-ask">
-                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what’s needed, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
+                <textarea value={listText} onChange={(e) => setListText(e.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !voice) { event.preventDefault(); void shopFromText(); } }} rows={2} placeholder="Tell Kumi what’s needed, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
                 <div className="m2-ask-actions">
                   <button type="button" className={`m2-mic${voice === 'recording' ? ' on' : ''}`} onClick={() => void toggleRecording()} disabled={voice === 'transcribing' || busy === 'parse'} aria-label={voice === 'recording' ? 'Stop recording' : 'Speak the list'}>
                     {voice === 'recording' ? <Square size={16} /> : <Mic size={16} />}{voice === 'recording' ? 'Stop' : voice === 'transcribing' ? 'Transcribing…' : 'Speak'}
                   </button>
-                  <button type="button" className="m2-cta" onClick={() => void shopFromText()} disabled={!listText.trim() || busy === 'parse' || Boolean(voice) || !products.length}>{busy === 'parse' ? 'Reading your list…' : 'Ask Kumi to pack it'}<ArrowRight size={18} /></button>
+                  <button type="button" className="m2-cta" onClick={() => void shopFromText()} disabled={!listText.trim() || busy === 'parse' || Boolean(voice) || !products.length}>{busy === 'parse' ? 'Reading your list…' : 'Send request'}<ArrowRight size={18} /></button>
                 </div>
               </div>
-              <p className="m2-muted m2-or">or start from a preset</p>
+              </div>
+              <p className="m2-muted m2-or">Try a request</p>
               <div className="m2-picks">
                 {visiblePicks.map((p) => { const Icon = p.icon; return <div key={p.id} className="m2-pick-row">
                   <button className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
@@ -751,7 +880,9 @@ export default function SimpleApp() {
                 <div><p className="m2-kicker">{phase === 'verdict' ? 'Kip’s decision' : agentNote}</p><h2>{phase === 'verdict' && verdict ? verdictTitle(verdict, quote.total_minor) : phase === 'paying' ? 'Kip is checking the rules…' : 'Basket’s ready.'}</h2></div>
                 <Sticker name={phase === 'verdict' && verdict?.kind === 'review' ? 'bean' : phase === 'verdict' ? 'kip' : 'kumi'} state={phase === 'verdict' && verdict ? (verdict.kind === 'paid' ? 'approved' : verdict.kind === 'refused' ? 'refused' : 'idle') : phase === 'paying' ? 'idle' : 'happy'} size={phase === 'verdict' ? 112 : 84} tilt={phase === 'verdict' ? -7 : 6} />
               </div>
-              <div className="m2-receipt">
+              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">The sandbox payment completed within the wallet rules. This is not a retailer order confirmation.</p>}
+              {phase === 'verdict' && verdict?.kind === 'refused' && <p className="m2-muted">Nothing was paid.</p>}
+              <div className={`m2-receipt${phase === 'verdict' && verdict ? ` stamped is-${verdict.kind}` : ''}`}>
                 <div className="m2-receipt-head"><span>{storeName(quote.merchant_id).toUpperCase()} · CLICK &amp; COLLECT</span><span>{new Date(quote.created_at).toLocaleDateString('en-HK', { day: '2-digit', month: 'short' })}</span></div>
                 <ul>{quote.items.map((item) => <li key={item.product_id} className={blocked.has(catalogById.get(item.product_id)?.category ?? '') ? 'flag' : ''}><span>{item.quantity}×</span><span data-flag={categoryLabel(catalogById.get(item.product_id)?.category ?? '').toLowerCase()}>{item.title}</span><b>{money(item.line_total_minor)}</b></li>)}
                   {quote.charges.map((charge, i) => <li key={`c${i}`} className="m2-charge"><span /><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}
@@ -761,30 +892,32 @@ export default function SimpleApp() {
                 {phase === 'verdict' && verdict && <div className={`m2-stamp ${verdict.kind}`}>{stamp}</div>}
               </div>
               {phase === 'basket' && <>
-                <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />
-                <button className="m2-cta" onClick={() => void checkout()}>Let Kip pay {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
-                {routeLabel && <p className="m2-route">Kip will use <b>{routeLabel}</b>, the cheapest route it found.</p>}
+                {ruleTestBasket ? <p className="m2-muted" role="status">Policy test only: the agent did not build this basket. The preset is shown to demonstrate the wallet’s checks. It cannot be added to a retailer cart here.</p> : <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />}
+                {paymentComparison && <PaymentRouteCard comparison={paymentComparison} selected={routeId} onSelect={(id, label) => { setRouteId(id); setRouteLabel(label); }} />}
+                <button className="m2-cta" disabled={Boolean(paymentComparison && !routeId)} onClick={() => void checkout()}>Confirm sandbox payment · {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
+                {routeLabel && <p className="m2-route">Selected route: <b>{routeLabel}</b>. Kip checks your permission again before paying.</p>}
                 <button className="m2-link" onClick={resetShop}>Start over</button>
               </>}
               {phase === 'paying' && <div className="m2-dots center"><i /><i /><i /></div>}
               {phase === 'verdict' && verdict?.kind === 'refused' && <>
-                {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
-                <p className="m2-muted">Nothing was paid.</p>
+                {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{reasonTitle(v)}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
               </>}
-              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at {storeName(quote.merchant_id)}.</p>}
-              {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" onClick={() => void checkout()}>Check again</button></>}
+              {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" disabled={Boolean(busy)} onClick={() => void checkPaymentStatus()}>{busy === 'payment-status' ? 'Checking status…' : 'Check payment status'}</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>
-                {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul>}
-                <p className="m2-muted">Approval covers only this basket and the reasons shown here, once.</p>
+                {verdict.risk && verdict.risk.score > 0 && <RiskMeter risk={verdict.risk} />}
+                {verdict.violations.length > 0 && <ul className="m2-why m2-review-reasons">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{reasonTitle(v)}{(() => { const pts = verdict.risk?.signals.find((sg) => sg.check === riskCheck(v))?.points; return pts ? <span className="m2-risk-pts">+{pts}</span> : null; })()}</b><small>{v.message}</small></li>)}</ul>}
+                <p className="m2-muted">Approval covers only this basket and the reasons shown here, once. Expires {new Date(verdict.approval.expires_at).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong' })} HKT. The wallet checks expiry when you decide.</p>
                 <div className="m2-row">
                   <button className="m2-cta" onClick={() => void decide(true)} disabled={busy === 'decide'}>Approve once</button>
                   <button className="m2-ghost" onClick={() => void decide(false)} disabled={busy === 'decide'}>Say no</button>
                 </div>
               </>}
-              {phase === 'verdict' && verdict?.kind !== 'review' && <button className="m2-ghost" onClick={resetShop}>Shop again</button>}
+              {phase === 'verdict' && verdict?.kind === 'paid' && <button className="m2-cta" onClick={() => viewReceipt({ receipt: verdict.receipt, quote, occurredAt: verdict.receipt.paid_at })}><ReceiptText size={18} />Open digital receipt</button>}
+              {phase === 'verdict' && verdict?.kind !== 'review' && verdict?.kind !== 'uncertain' && <button className="m2-ghost" onClick={resetShop}>Shop again</button>}
             </div>
           ) : null}
+          </div>
         </section>
       </main>
     )}
