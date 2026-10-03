@@ -325,7 +325,7 @@ def test_events_form_a_hash_chain_in_the_same_transaction(h):
     h.buy(m["id"])
     with h.wallet.db.read() as conn:
         rows = [dict(r) for r in conn.execute(
-            "SELECT * FROM wallet_stub_audit_events WHERE stream_id = 'stream_user_demo' ORDER BY sequence")]
+            "SELECT * FROM audit_events WHERE stream_id = 'stream_user_demo' ORDER BY sequence")]
     assert [r["type"] for r in rows] == ["mandate_confirmed", "quote_created", "authorization_approved", "payment_completed"]
     previous = GENESIS_HASH
     for r in rows:

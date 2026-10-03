@@ -13,6 +13,8 @@ from mandate.agent.drafts import DraftService
 from mandate.agent.run_routes import build_agent_run_router
 from mandate.agent.runs import AgentRuns
 from mandate.integration.demo_routes import build_demo_router
+from mandate.audit.routes import build_router as build_audit_router
+from mandate.verification import build_router as build_verification_router
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -29,6 +31,9 @@ def build_app():
     app.include_router(build_demo_router(wallet), prefix="/api/v1")
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
     app.include_router(build_agent_run_router(AgentRuns(wallet), DraftService(wallet, drafts)), prefix="/api/v1")
+    # Audit forwards checkpoints/checks to the separate verifier process (MANDATE_VERIFIER_URL).
+    app.include_router(build_audit_router(wallet.db), prefix="/api/v1")
+    app.include_router(build_verification_router(), prefix="/api/v1")
 
     @app.get("/api/v1/health")
     def health():

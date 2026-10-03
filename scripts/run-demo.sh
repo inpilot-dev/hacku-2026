@@ -10,6 +10,7 @@ if [[ ! -f "$WEB_INDEX" ]]; then
 fi
 
 cleanup_ephemeral_data=0
+verifier_pid=""
 if [[ -n "${MANDATE_DEMO_DATA_DIR:-}" ]]; then
   demo_data_dir="$MANDATE_DEMO_DATA_DIR"
   mkdir -p "$demo_data_dir"
@@ -20,6 +21,9 @@ else
 fi
 
 cleanup() {
+  if [[ -n "$verifier_pid" ]]; then
+    kill "$verifier_pid" 2>/dev/null || true
+  fi
   if [[ "$cleanup_ephemeral_data" == 1 ]]; then
     rm -rf -- "$demo_data_dir"
   fi
@@ -41,6 +45,13 @@ if [[ "$cleanup_ephemeral_data" == 1 ]]; then
 else
   echo "Using persistent demo data at: $demo_data_dir"
 fi
+
+# Independent audit verifier: separate process, own data dir, pinned checkpoint key.
+export MANDATE_AUDIT_KEY_DIR="$demo_data_dir/audit-keys"
+verifier_port="${MANDATE_VERIFIER_PORT:-8201}"
+export MANDATE_VERIFIER_URL="http://127.0.0.1:$verifier_port"
+"$REPO_ROOT/scripts/start-verifier.sh" "$python_bin" "$MANDATE_AUDIT_KEY_DIR" "$demo_data_dir/verifier" "$verifier_port" &
+verifier_pid=$!
 
 cd "$REPO_ROOT/services/api"
 "$python_bin" -m uvicorn mandate.app:app --host 127.0.0.1 --port "$demo_port"

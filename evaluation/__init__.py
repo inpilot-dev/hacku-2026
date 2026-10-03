@@ -1,0 +1,8 @@
+"""Evaluation harness (owner: Seungbin). Reuses the wallet's venv; puts services/api on the path."""
+
+import sys
+from pathlib import Path
+
+API_DIR = Path(__file__).resolve().parents[1] / "services" / "api"
+if str(API_DIR) not in sys.path:
+    sys.path.insert(0, str(API_DIR))

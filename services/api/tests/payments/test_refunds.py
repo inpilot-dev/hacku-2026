@@ -26,7 +26,7 @@ def test_refund_returns_budget_and_reverses_reward(h):
     with h.wallet.db.read() as conn:
         net = conn.execute("SELECT SUM(reward_minor), SUM(spend_minor) FROM reward_ledger").fetchone()
         rail = conn.execute("SELECT status, refunded_minor FROM rail_payments").fetchone()
-        event = json.loads(conn.execute("SELECT payload_json FROM wallet_stub_audit_events "
+        event = json.loads(conn.execute("SELECT payload_json FROM audit_events "
                                         "WHERE type = 'payment_refunded'").fetchone()[0])
     assert tuple(net) == (0, 0)
     assert tuple(rail) == ("refunded", 29700)

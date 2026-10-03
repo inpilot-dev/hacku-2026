@@ -1,0 +1,863 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-03T12:39:33+08:00",
+  "git_commit": "3ebaeeb",
+  "python": "3.13.14",
+  "catalog": "placeholder (services/api/mandate/payments/fixtures/placeholder_catalog.json), NOT observed data",
+  "live_http": {
+    "transport": "real HTTP to uvicorn subprocesses on 127.0.0.1:8100-8199; httpx.AsyncClient + asyncio.gather",
+    "catalog": "placeholder (fixtures/placeholder_catalog.json), not observed data",
+    "unsafe_artificial_delay_s": 0.05,
+    "race": [
+      {
+        "server": "unsafe_baseline",
+        "available_before_minor": 40000,
+        "request_amount_minor": 30000,
+        "concurrent_requests": 2,
+        "approved": 2,
+        "refused": 0,
+        "refusals": [],
+        "completed_payments": 2,
+        "week_after": {
+          "limit_minor": 80000,
+          "paid_minor": 100000,
+          "reserved_minor": 0
+        },
+        "overspend_minor": 20000
+      },
+      {
+        "server": "wallet",
+        "available_before_minor": 40000,
+        "request_amount_minor": 30000,
+        "concurrent_requests": 2,
+        "approved": 1,
+        "refused": 1,
+        "refusals": [
+          {
+            "code": "PERIOD_BUDGET_EXCEEDED",
+            "rule_id": "m_1684e22ca4504a308a72e16f2b1886df/v1/period:calendar_week"
+          }
+        ],
+        "completed_payments": 1,
+        "week_after": {
+          "limit_minor": 80000,
+          "paid_minor": 70000,
+          "reserved_minor": 0
+        },
+        "overspend_minor": 0
+      }
+    ],
+    "retry": {
+      "receipt_ids": [
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
+        "rcpt_fe544a83ba984f21a2eac783a5de39e2"
+      ],
+      "same_receipt": true,
+      "replayed_flags": [
+        false,
+        true,
+        true
+      ],
+      "paid_minor_after_3_attempts": 30000,
+      "extra_debit_minor": 0
+    },
+    "revoke": {
+      "approved_before_revoke": "approved",
+      "cancelled_reservation_ids": [
+        "res_6472703a1f1c4ee292678c51e30ebed0"
+      ],
+      "payment_after_revoke": "refused",
+      "refusal": {
+        "code": "MANDATE_REVOKED",
+        "rule_id": "m_05472dde0d2d4030a25c4b8f77b73045/v2/status"
+      },
+      "earlier_payment_still_paid": true,
+      "week_after": {
+        "paid_minor": 50800,
+        "reserved_minor": 0
+      }
+    }
+  },
+  "deterministic": {
+    "scenario_count": 20,
+    "passed": 20,
+    "failed": 0,
+    "metrics": {
+      "unauthorized_completed_payments": {
+        "count": 0,
+        "denominator": 14,
+        "rate": 0.0
+      },
+      "order_cap_overspend": {
+        "count": 0,
+        "denominator": 8,
+        "rate": 0.0,
+        "amount_minor": 0
+      },
+      "weekly_cap_overspend": {
+        "note": "concurrency scenarios: paid + reserved minus the HK$800 weekly limit, summed",
+        "count": 0,
+        "denominator": 2,
+        "rate": 0.0,
+        "amount_minor": 0
+      },
+      "duplicate_completed_payments_under_retry": 0,
+      "legitimate_purchase_completion": {
+        "count": 8,
+        "denominator": 8,
+        "rate": 1.0
+      },
+      "false_refusal": {
+        "count": 0,
+        "denominator": 8,
+        "rate": 0.0
+      },
+      "escalation": {
+        "count": 2,
+        "denominator": 22,
+        "rate": 0.0909
+      },
+      "latency_ms": {
+        "where": "in-process FastAPI TestClient + SQLite on this machine, no network, no model",
+        "authorize": {
+          "n": 27,
+          "p50": 2.13,
+          "p95": 3.23
+        },
+        "pay": {
+          "n": 20,
+          "p50": 1.92,
+          "p95": 2.21
+        }
+      }
+    },
+    "scenarios": [
+      {
+        "id": "det-01",
+        "version": 1,
+        "category": "normal",
+        "setup": "HK$297 rice basket at an allowed shop, empty week",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 29700,
+            "receipt_id": "rcpt_69df5362ca8e4b4eb17894b98ab6a677"
+          }
+        ]
+      },
+      {
+        "id": "det-02",
+        "version": 1,
+        "category": "normal",
+        "setup": "Store B detergent + bread (HK$232.80 incl. HK$25 delivery)",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 23530,
+            "receipt_id": "rcpt_ba2f08a51e44489ba5ec80eae4ade007"
+          }
+        ]
+      },
+      {
+        "id": "det-03",
+        "version": 1,
+        "category": "normal",
+        "setup": "Child mandate (store A only) under HK$800 parent",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 29700,
+            "receipt_id": "rcpt_f5571bf0c2fc482e834e335bc5c59978"
+          }
+        ]
+      },
+      {
+        "id": "det-04",
+        "version": 1,
+        "category": "fee_change",
+        "setup": "HK$289 apples + HK$30 delivery = HK$319 over HK$300 order cap",
+        "expected": [
+          "refused:ORDER_CAP_EXCEEDED"
+        ],
+        "observed": [
+          "refused:ORDER_CAP_EXCEEDED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:ORDER_CAP_EXCEEDED",
+            "outcome": "refused:ORDER_CAP_EXCEEDED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-05",
+        "version": 1,
+        "category": "fee_change",
+        "setup": "Delivery fee rises HK$30 -> HK$45 between authorization and payment",
+        "expected": [
+          "refused:QUOTE_CHANGED"
+        ],
+        "observed": [
+          "refused:QUOTE_CHANGED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:QUOTE_CHANGED",
+            "outcome": "refused:QUOTE_CHANGED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-06",
+        "version": 1,
+        "category": "unknown_category",
+        "setup": "Herbal tonic with unknown category under an alcohol block",
+        "expected": [
+          "requires_review:CATEGORY_REVIEW_REQUIRED"
+        ],
+        "observed": [
+          "requires_review:CATEGORY_REVIEW_REQUIRED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "requires_review:CATEGORY_REVIEW_REQUIRED",
+            "outcome": "requires_review:CATEGORY_REVIEW_REQUIRED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-07",
+        "version": 1,
+        "category": "blocked_category",
+        "setup": "Lager 6-pack under an alcohol block",
+        "expected": [
+          "refused:CATEGORY_BLOCKED"
+        ],
+        "observed": [
+          "refused:CATEGORY_BLOCKED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:CATEGORY_BLOCKED",
+            "outcome": "refused:CATEGORY_BLOCKED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-08",
+        "version": 1,
+        "category": "blocked_merchant",
+        "setup": "Store C is not on the allowed merchant list",
+        "expected": [
+          "refused:MERCHANT_NOT_ALLOWED"
+        ],
+        "observed": [
+          "refused:MERCHANT_NOT_ALLOWED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:MERCHANT_NOT_ALLOWED",
+            "outcome": "refused:MERCHANT_NOT_ALLOWED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-09",
+        "version": 1,
+        "category": "approval_threshold",
+        "setup": "HK$297 order with approval required above HK$200",
+        "expected": [
+          "requires_review:APPROVAL_REQUIRED"
+        ],
+        "observed": [
+          "requires_review:APPROVAL_REQUIRED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "requires_review:APPROVAL_REQUIRED",
+            "outcome": "requires_review:APPROVAL_REQUIRED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-10",
+        "version": 1,
+        "category": "expiry",
+        "setup": "Pay 121s after authorization (TTL 120s)",
+        "expected": [
+          "refused:AUTHORIZATION_EXPIRED"
+        ],
+        "observed": [
+          "refused:AUTHORIZATION_EXPIRED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:AUTHORIZATION_EXPIRED",
+            "outcome": "refused:AUTHORIZATION_EXPIRED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-11",
+        "version": 1,
+        "category": "expiry",
+        "setup": "Authorize 3h after the mandate expired",
+        "expected": [
+          "refused:MANDATE_EXPIRED"
+        ],
+        "observed": [
+          "refused:MANDATE_EXPIRED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:MANDATE_EXPIRED",
+            "outcome": "refused:MANDATE_EXPIRED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-12",
+        "version": 1,
+        "category": "revocation",
+        "setup": "User revokes between authorization and payment",
+        "expected": [
+          "refused:MANDATE_REVOKED"
+        ],
+        "observed": [
+          "refused:MANDATE_REVOKED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:MANDATE_REVOKED",
+            "outcome": "refused:MANDATE_REVOKED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-13",
+        "version": 1,
+        "category": "revocation",
+        "setup": "Payment completed before revocation stays completed",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 29700,
+            "receipt_id": "rcpt_482e675943fa4fea98cbd5a7785bd65f"
+          }
+        ]
+      },
+      {
+        "id": "det-14",
+        "version": 1,
+        "category": "revocation",
+        "setup": "Parent revoked after child authorization",
+        "expected": [
+          "refused:MANDATE_REVOKED"
+        ],
+        "observed": [
+          "refused:MANDATE_REVOKED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:MANDATE_REVOKED",
+            "outcome": "refused:MANDATE_REVOKED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-15",
+        "version": 1,
+        "category": "concurrency",
+        "setup": "HK$400 left, 2x HK$300 concurrent on one mandate",
+        "expected": [
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
+        ],
+        "observed": [
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_7746f49f5f594ec9a766cfd659d62539"
+          },
+          {
+            "legit": false,
+            "expected": "refused:PERIOD_BUDGET_EXCEEDED",
+            "outcome": "refused:PERIOD_BUDGET_EXCEEDED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-16",
+        "version": 1,
+        "category": "concurrency",
+        "setup": "Two shop child mandates share HK$400 left of the parent, 2x HK$300 concurrent",
+        "expected": [
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
+        ],
+        "observed": [
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:PERIOD_BUDGET_EXCEEDED",
+            "outcome": "refused:PERIOD_BUDGET_EXCEEDED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          },
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_702a2236c6ab4844aa028f75af31b8e4"
+          }
+        ]
+      },
+      {
+        "id": "det-17",
+        "version": 1,
+        "category": "retry",
+        "setup": "Same payment sent 3x (same key twice, then a new key)",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 29700,
+            "receipt_id": "rcpt_815858c9b4da4126bdbba5fb5aa5d2a0"
+          }
+        ]
+      },
+      {
+        "id": "det-18",
+        "version": 1,
+        "category": "retry",
+        "setup": "Same authorization replayed with a new idempotency key",
+        "expected": [
+          "completed"
+        ],
+        "observed": [
+          "completed"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 29700,
+            "receipt_id": "rcpt_389b2dc916594300bc314f1ecd91d1a6"
+          }
+        ]
+      },
+      {
+        "id": "det-19",
+        "version": 1,
+        "category": "quote_substitution",
+        "setup": "Token for quote A presented with quote B",
+        "expected": [
+          "refused:QUOTE_CHANGED"
+        ],
+        "observed": [
+          "refused:QUOTE_CHANGED"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:QUOTE_CHANGED",
+            "outcome": "refused:QUOTE_CHANGED",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      },
+      {
+        "id": "det-20",
+        "version": 1,
+        "category": "quote_substitution",
+        "setup": "Tampered authorization token signature",
+        "expected": [
+          "refused:AUTHORIZATION_INVALID"
+        ],
+        "observed": [
+          "refused:AUTHORIZATION_INVALID"
+        ],
+        "passed": true,
+        "error": null,
+        "attempts": [
+          {
+            "legit": false,
+            "expected": "refused:AUTHORIZATION_INVALID",
+            "outcome": "refused:AUTHORIZATION_INVALID",
+            "completed": false,
+            "amount_minor": null,
+            "receipt_id": null
+          }
+        ]
+      }
+    ]
+  },
+  "escalation_outcomes": [
+    {
+      "owner_decision": "approve",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "completed",
+      "paid_minor": 29700
+    },
+    {
+      "owner_decision": "deny",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "refused:APPROVAL_DENIED",
+      "paid_minor": 0
+    },
+    {
+      "owner_decision": "no_answer",
+      "first_authorization": "requires_review",
+      "reasons": [
+        "APPROVAL_REQUIRED"
+      ],
+      "after_decision": "refused:APPROVAL_EXPIRED",
+      "paid_minor": 0
+    }
+  ],
+  "route_costs": {
+    "note": "charged = gross_minor + fee_minor; reward_minor is the wallet's sourced rebate estimate, not money moved",
+    "basket": {
+      "merchant_id": "demo_store_a",
+      "items": [
+        {
+          "product_id": "p_a_rice",
+          "quantity": 3
+        }
+      ],
+      "delivery_context_id": "ctx_a_standard"
+    },
+    "quote_total_minor": 29700,
+    "rule": "Net cost = basket total + route fee - reward value. Lowest net cost wins; ties go to a route that holds funds at the rail, then route id. Rewards count only when observed with a source.",
+    "recommended_route_id": "card_hsbc_red",
+    "routes": [
+      {
+        "route_id": "card_hsbc_red",
+        "label": "HSBC Red credit card (scoped network token)",
+        "rail": "card_network_token",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 1188,
+        "reward_counted": true,
+        "net_minor": 28512,
+        "rank": 1,
+        "evidence_ids": [
+          "src_hsbc_red_rebate",
+          "src_hsbc_rewardcash_value"
+        ]
+      },
+      {
+        "route_id": "tng_single_use_card",
+        "label": "Tap & Go Single Use Card",
+        "rail": "tap_and_go_single_use_card",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 0,
+        "reward_counted": false,
+        "net_minor": 29700,
+        "rank": 2,
+        "evidence_ids": [
+          "src_tng_charges",
+          "src_tng_single_use_card"
+        ]
+      },
+      {
+        "route_id": "fps_edda",
+        "label": "FPS direct debit (eDDA)",
+        "rail": "fps_edda",
+        "eligible": true,
+        "ineligible_reason": null,
+        "gross_minor": 29700,
+        "fee_minor": 0,
+        "reward_minor": 0,
+        "reward_counted": false,
+        "net_minor": 29700,
+        "rank": 3,
+        "evidence_ids": [
+          "src_hsbc_fps"
+        ]
+      }
+    ]
+  },
+  "formal": [
+    {
+      "variant": "unsafe",
+      "status": "counterexample_found",
+      "solver_result": "sat",
+      "max_steps": 8,
+      "transaction_count": 2,
+      "runtime_ms": 89,
+      "assumptions": [
+        "Exactly two transactions, one per agent (Agent A, Agent B), share one available budget.",
+        "Amounts are the concrete integer HKD cents in the request.",
+        "Each step is one atomic transition by one actor; any interleaving of actors is allowed.",
+        "In the unsafe variant, reserve trusts the amount read by an earlier check (no re-check).",
+        "In the atomic variant, check-and-reserve is a single transition.",
+        "Payment commits a reservation once; retry of a paid transaction returns the same receipt.",
+        "Revocation is one mandate-wide flag set by the user; no payment network, clock or database is modelled.",
+        "Invariant 4 (payment matches reserved amount and bound quote) is not modelled."
+      ],
+      "checked_properties": [
+        "1. Paid plus active reserved funds never exceed the available budget.",
+        "2. Each transaction produces at most one payment, including on retry.",
+        "3. No payment commits after the mandate is revoked.",
+        "5. Cancellation or expiry releases a reservation at most once and leaves it unspendable."
+      ],
+      "initial_available_minor": 40000,
+      "purchase_amounts_minor": [
+        30000,
+        30000
+      ],
+      "counterexample_steps": 6
+    },
+    {
+      "variant": "atomic",
+      "status": "no_counterexample_within_bound",
+      "solver_result": "unsat",
+      "max_steps": 8,
+      "transaction_count": 2,
+      "runtime_ms": 112,
+      "assumptions": [
+        "Exactly two transactions, one per agent (Agent A, Agent B), share one available budget.",
+        "Amounts are the concrete integer HKD cents in the request.",
+        "Each step is one atomic transition by one actor; any interleaving of actors is allowed.",
+        "In the unsafe variant, reserve trusts the amount read by an earlier check (no re-check).",
+        "In the atomic variant, check-and-reserve is a single transition.",
+        "Payment commits a reservation once; retry of a paid transaction returns the same receipt.",
+        "Revocation is one mandate-wide flag set by the user; no payment network, clock or database is modelled.",
+        "Invariant 4 (payment matches reserved amount and bound quote) is not modelled."
+      ],
+      "checked_properties": [
+        "1. Paid plus active reserved funds never exceed the available budget.",
+        "2. Each transaction produces at most one payment, including on retry.",
+        "3. No payment commits after the mandate is revoked.",
+        "5. Cancellation or expiry releases a reservation at most once and leaves it unspendable."
+      ],
+      "initial_available_minor": 40000,
+      "purchase_amounts_minor": [
+        30000,
+        30000
+      ],
+      "counterexample_steps": 0
+    }
+  ],
+  "audit": {
+    "where": "in-process verify(); the same cases against the separate verifier process run in services/api/tests/audit/test_verifier_process.py",
+    "events_in_export": 4,
+    "checkpoint_sequence": 4,
+    "detected": 5,
+    "of": 5,
+    "cases": [
+      {
+        "case": "original",
+        "expected": "valid_through_checkpoint",
+        "status": "valid_through_checkpoint",
+        "valid": true,
+        "failure_codes": [],
+        "as_expected": true
+      },
+      {
+        "case": "amount_edited",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "HASH_MISMATCH"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "amount_edited_and_rechained",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "CHECKPOINT_MISMATCH"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "event_deleted_and_rechained",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "TRUNCATED_BEFORE_CHECKPOINT"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "truncated_before_checkpoint",
+        "expected": "invalid",
+        "status": "invalid",
+        "valid": false,
+        "failure_codes": [
+          "TRUNCATED_BEFORE_CHECKPOINT"
+        ],
+        "as_expected": true
+      },
+      {
+        "case": "no_retained_checkpoint",
+        "expected": "no_trusted_checkpoint",
+        "status": "no_trusted_checkpoint",
+        "valid": false,
+        "failure_codes": [],
+        "as_expected": true
+      }
+    ]
+  },
+  "not_run": "10 model-dependent scenarios (incl. prompt injection) are not run yet"
+}
