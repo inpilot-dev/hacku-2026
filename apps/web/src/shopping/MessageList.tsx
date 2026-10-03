@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactiveCharacter from '../components/ReactiveCharacter';
 
 export type ConversationMessage = {
@@ -6,6 +6,7 @@ export type ConversationMessage = {
   speaker: 'you' | 'kumi' | 'kip' | 'bean' | 'stella';
   text: string;
   tone?: 'good' | 'bad' | 'info';
+  startsConversation?: boolean;
 };
 type Agent = Exclude<ConversationMessage['speaker'], 'you'>;
 const identities = {
@@ -34,6 +35,29 @@ function present(message: ConversationMessage): { text: string; detail?: string 
 }
 
 export default function MessageList({ messages, working }: { messages: ConversationMessage[]; working?: { speaker: Agent; text: string } }) {
+  // History is only hidden from view; no messages are removed from the conversation.
+  const [historyStartId, setHistoryStartId] = useState<string | null>(null);
+  let currentStart = 0;
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message.startsConversation || (message.speaker === 'you' && /^(Shop for |Price the items I picked from the shelf\.)/.test(message.text))) {
+      currentStart = index;
+      break;
+    }
+  }
+  const currentId = messages[currentStart]?.id;
+  const previousCurrentId = useRef(currentId);
+  useEffect(() => {
+    if (previousCurrentId.current !== currentId) {
+      setHistoryStartId(null);
+      previousCurrentId.current = currentId;
+    }
+  }, [currentId]);
+  const recentStart = Math.max(currentStart, messages.length - 6);
+  const savedStart = historyStartId ? messages.findIndex((message) => message.id === historyStartId) : -1;
+  const start = savedStart < 0 ? recentStart : Math.min(savedStart, recentStart);
+  const visibleMessages = messages.slice(start);
+  const historyOpen = start < recentStart;
   const end = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   useEffect(() => {
@@ -42,11 +66,15 @@ export default function MessageList({ messages, working }: { messages: Conversat
     return () => window.removeEventListener('scroll', update);
   }, []);
   useEffect(() => {
-    if (following.current && messages.length > 1) end.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-  }, [messages.length, working?.speaker, working?.text]);
+    if (!historyOpen && following.current && messages.length > 1) end.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }, [messages.length, working?.speaker, working?.text, historyOpen]);
   return <div className="conversation-messages" role="log" aria-label="Shopping conversation" aria-live="polite" aria-relevant="additions">
-    {messages.map((message, index) => {
-      const grouped = index > 0 && messages[index - 1].speaker === message.speaker;
+    {(start > 0 || historyOpen) && <nav className="conversation-history" aria-label="Conversation history">
+      {start > 0 && <button type="button" onClick={() => setHistoryStartId(messages[Math.max(0, start - 8)].id)}><span aria-hidden="true">↑</span> Load earlier messages <span className="conversation-history-count">{start}</span></button>}
+      {historyOpen && <button type="button" className="conversation-history-latest" onClick={() => setHistoryStartId(null)}>Back to latest <span aria-hidden="true">↓</span></button>}
+    </nav>}
+    {visibleMessages.map((message, index) => {
+      const grouped = index > 0 && visibleMessages[index - 1].speaker === message.speaker;
       const content = present(message);
       const identity = message.speaker === 'you' ? null : identities[message.speaker];
       return <article key={message.id} className={`conversation-message from-${message.speaker} ${message.tone ?? ''} ${grouped ? 'is-grouped' : ''}`} aria-label={identity?.name ?? 'You'}>

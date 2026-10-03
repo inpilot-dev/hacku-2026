@@ -154,8 +154,8 @@ type Spoken = { kind: 'list'; items: ShoppingItem[] };
 
 export default function SimpleApp() {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const say = useCallback((speaker: ConversationMessage['speaker'], text: string, tone: ConversationMessage['tone'] = 'info') => {
-    setMessages((current) => current[current.length - 1]?.speaker === speaker && current[current.length - 1]?.text === text ? current : [...current, { id: crypto.randomUUID(), speaker, text, tone }]);
+  const say = useCallback((speaker: ConversationMessage['speaker'], text: string, tone: ConversationMessage['tone'] = 'info', startsConversation = false) => {
+    setMessages((current) => current[current.length - 1]?.speaker === speaker && current[current.length - 1]?.text === text ? current : [...current, { id: crypto.randomUUID(), speaker, text, tone, startsConversation }]);
   }, []);
   const [online, setOnline] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
@@ -413,7 +413,7 @@ export default function SimpleApp() {
   async function shopFromText() {
     const text = listText.trim();
     if (!mandate || !canSpend || !text || busy) return;
-    say('you', text);
+    say('you', text, 'info', true);
     setListText('');
     setError(''); setBusy('parse');
     try {
@@ -429,8 +429,8 @@ export default function SimpleApp() {
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
     if (!mandate || !canSpend || phase === 'packing' || phase === 'paying') return;
-    if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.');
-    else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`);
+    if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.', 'info', true);
+    else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`, 'info', true);
     const spoken = chosen !== 'custom' && 'kind' in chosen;
     const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
