@@ -80,6 +80,10 @@ SUMMARY_SCHEMA = {
 }
 
 
+PASSWORD_JS = """[...document.querySelectorAll('input[type=password]')].some(e =>
+  e.getBoundingClientRect().width > 20 && e.checkVisibility({checkOpacity: true, checkVisibilityCSS: true}))"""
+
+
 @dataclass
 class OrderSummary:
     stage: str
@@ -209,6 +213,8 @@ def read_summary(tab: GuestTab, title: str, model: JsonModel) -> OrderSummary:
     summary = OrderSummary(stage=raw["stage"], url=page["url"], currency=raw["currency"], card_fields=fields)
     if summary.stage != "payment" and "number" in fields:
         summary.stage = "payment"  # card fields on the page are evidence enough
+    elif summary.stage != "payment" and tab.evaluate(PASSWORD_JS):
+        summary.stage = "sign_in_required"  # a login form, whatever the page calls it
     if quoted(raw["total_quote"], page["text"]):
         summary.total_text = raw["total_quote"]
         summary.total_minor = amount_minor(raw["total_quote"])

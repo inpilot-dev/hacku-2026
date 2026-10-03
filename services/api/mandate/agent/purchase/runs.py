@@ -331,9 +331,12 @@ class PurchaseRuns:
                                  f"Create an account there and buy it here: {best['url']}"
                                  + (f"\nOther matches that also need an account:{others}" if others else ""))
             return False
+        best = options[0] if options else None
         self._update(run_id, status="failed", choice=None, options=options,
-                     message="I found matching products but could not get through any shop's checkout: "
-                             + "; ".join(f"{o['shop']}: {o['reason']}" for o in options))
+                     message="I found matching products but could not get through any shop's checkout ("
+                             + "; ".join(f"{o['shop']}: {o['reason']}" for o in options) + ")."
+                             + (f" The best deal was {best['title']} for {best['price_text']}: {best['url']}"
+                                if best else ""))
         return False
 
     def _step(self, run_id: str, step: dict) -> None:

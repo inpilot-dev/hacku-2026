@@ -65,7 +65,7 @@ def product_answer(price="HK$2,499", ram_quote="8GB RAM", ram=8, **kw):
             "requirements": [{"quote": ram_quote, "number": ram, "meets": True}], "product_links": [], **kw}
 
 
-PAGE = {"url": "https://shop.example.com/p/1", "title": "Phone X", "text": "Phone X\nHK$2,499\n8GB RAM\n6.7\" FHD+",
+PAGE = {"url": "https://shop.example.com/p/1", "title": "Phone X", "text": "Phone X\nHK$2,499\n8GB RAM\n6.7\" FHD+\nAdd to cart",
         "ld": [], "links": []}
 
 
@@ -87,6 +87,12 @@ def test_assess_does_not_trust_the_model():
     assert wrong_number.checks[0].ok is False  # 16 is not in the quote "8GB RAM"
     silent = assess(PAGE, spec(), Model(page_assessment=product_answer(ram_quote=None, ram=None)))
     assert silent.matches and silent.unverified == ["RAM at least 8 GB"]
+
+
+def test_review_pages_are_not_shops():
+    review = {**PAGE, "text": "Phone X price in Hong Kong\nHK$2,499\n8GB RAM"}
+    result = assess(review, spec(), Model(page_assessment=product_answer()))
+    assert not result.matches and "no way to buy" in result.problems[0]
 
 
 def test_listing_links_are_only_the_pages_own():
@@ -161,6 +167,9 @@ class Tab:
     def wait_loaded(self):
         pass
 
+    def evaluate(self, _script):
+        return False  # no login form
+
     def close(self):
         self.closed = True
 
@@ -230,8 +239,9 @@ def make_runs(tmp_path, monkeypatch):
     return build
 
 
-PAGES = {"https://a.example.com/p": "Phone\nHK$2,899\n8GB RAM", "https://b.example.com/p": "Phone\nHK$2,499\n8GB RAM",
-         "https://c.example.com/p": "Phone\nHK$1,999\n4GB RAM"}
+PAGES = {"https://a.example.com/p": "Phone\nHK$2,899\n8GB RAM\nAdd to cart",
+         "https://b.example.com/p": "Phone\nHK$2,499\n8GB RAM\nAdd to cart",
+         "https://c.example.com/p": "Phone\nHK$1,999\n4GB RAM\nAdd to cart"}
 
 
 def test_best_deal_is_checked_out_and_waits_for_approval(make_runs):

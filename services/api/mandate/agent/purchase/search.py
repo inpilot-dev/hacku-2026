@@ -14,7 +14,7 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
 RESULT = re.compile(r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>', re.S)
 # Sites that compare or review rather than sell: their links lead to other shops.
 NOT_SHOPS = re.compile(r"(^|\.)(biggo|price\.com|priceinto|mobilekishop|gsmarena|youtube|facebook|instagram|reddit|"
-                       r"wikipedia|carousell|hi94|openrice|amazon\.(?!com\.hk))", re.I)
+                       r"wikipedia|carousell|hi94|openrice|priceme|pricespy|idealo|pricerunner|amazon\.(?!com\.hk))", re.I)
 
 
 class SearchError(Exception):
