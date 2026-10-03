@@ -116,4 +116,22 @@ def build_router(wallet: Wallet) -> APIRouter:
     def get_budget(actor: UserOrAgent, mandate_id: str):
         return _out(models.BudgetResponse, 200, wallet.budget(actor, mandate_id))
 
+    @router.get("/mandates/{mandate_id}/card", response_model=models.VirtualCard)
+    def get_card(actor: UserOrAgent, mandate_id: str):
+        return _out(models.VirtualCard, 200, wallet.get_card(actor, mandate_id))
+
+    @router.post("/mandates/{mandate_id}/card/freeze", response_model=models.CardStatusResponse)
+    def freeze_card(actor: UserOnly, key: IdempotencyKey, mandate_id: str, body: models.CardFreezeRequest):
+        status, out = wallet.freeze_card(actor, key, mandate_id, body.model_dump(mode="json", exclude_unset=True))
+        return _out(models.CardStatusResponse, status, out)
+
+    @router.post("/mandates/{mandate_id}/card/unfreeze", response_model=models.CardStatusResponse)
+    def unfreeze_card(actor: UserOnly, key: IdempotencyKey, mandate_id: str, body: models.CardFreezeRequest):
+        status, out = wallet.unfreeze_card(actor, key, mandate_id, body.model_dump(mode="json", exclude_unset=True))
+        return _out(models.CardStatusResponse, status, out)
+
+    @router.get("/mandates/{mandate_id}/card/authorizations", response_model=models.CardAuthorizationList)
+    def card_authorizations(actor: UserOrAgent, mandate_id: str):
+        return _out(models.CardAuthorizationList, 200, wallet.card_authorizations(actor, mandate_id))
+
     return router

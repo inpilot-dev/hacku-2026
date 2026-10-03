@@ -20,8 +20,8 @@ ReasonCode = Literal[
     "TRANSACTION_CONFLICT", "APPROVAL_REQUIRED", "POLICY_NOT_NARROWER", "PARENT_MANDATE_INVALID",
     # v0.2 additions
     "VELOCITY_LIMIT_EXCEEDED", "APPROVAL_DENIED", "APPROVAL_EXPIRED",
-    # v0.3 addition
-    "RISK_REVIEW_REQUIRED",
+    # v0.3 additions
+    "RISK_REVIEW_REQUIRED", "CARD_FROZEN",
 ]
 Category = Literal[
     "produce", "dairy", "eggs", "meat", "seafood", "bakery", "pantry",
@@ -409,3 +409,68 @@ class RefundResponse(Strict):
     refund: Refund
     budgets: list[BudgetPeriod]
     event_sequence: PosInt
+
+
+# v0.3 virtual cards (wallet, Timmy)
+
+class CardControls(Strict):
+    spend_limit_minor: NonNegInt
+    currency: Currency
+    allowed_merchant_ids: list[str] | None
+    blocked_mccs: list[str]
+    single_use: StrictBool
+    expires_at: str
+
+
+class SingleUseCardCounts(Strict):
+    active: NonNegInt
+    used: NonNegInt
+    cancelled: NonNegInt
+
+
+class VirtualCard(Strict):
+    card_id: str
+    mandate_id: str
+    parent_card_id: str | None
+    usage: Literal["mandate", "single_use"]
+    network: Literal["mastercard", "visa"]
+    last4: Annotated[str, Field(pattern=r"^[0-9]{4}$")]
+    exp_month: Annotated[int, Field(ge=1, le=12)]
+    exp_year: PosInt
+    status: Literal["active", "frozen", "used", "cancelled"]
+    controls: CardControls
+    issued_at: str
+    status_changed_at: str | None
+    payment_mode: Literal["sandbox"]
+    single_use_cards: SingleUseCardCounts
+
+
+class CardFreezeRequest(Strict):
+    reason: Annotated[StrictStr, Field(max_length=500)] | None = None
+
+
+class CardStatusResponse(Strict):
+    card: VirtualCard
+    event_sequence: PosInt
+
+
+class CardAuthorization(Strict):
+    id: str
+    card_id: str
+    card_last4: str
+    card_usage: Literal["mandate", "single_use"]
+    merchant_id: str
+    mcc: str | None
+    amount_minor: NonNegInt
+    currency: Currency
+    approved: StrictBool
+    response_code: str
+    decline_reason: str | None
+    message: str
+    reservation_id: str | None
+    created_at: str
+
+
+class CardAuthorizationList(Strict):
+    card_id: str
+    authorizations: list[CardAuthorization]

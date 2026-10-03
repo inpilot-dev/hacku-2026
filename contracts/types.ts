@@ -3,7 +3,7 @@
 
 export type Currency = "HKD";
 
-export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID" | "VELOCITY_LIMIT_EXCEEDED" | "APPROVAL_DENIED" | "APPROVAL_EXPIRED" | "RISK_REVIEW_REQUIRED";
+export type ReasonCode = "ORDER_CAP_EXCEEDED" | "PERIOD_BUDGET_EXCEEDED" | "MERCHANT_NOT_ALLOWED" | "CATEGORY_BLOCKED" | "CATEGORY_REVIEW_REQUIRED" | "MANDATE_NOT_ACTIVE" | "MANDATE_EXPIRED" | "MANDATE_REVOKED" | "MANDATE_VERSION_CHANGED" | "QUOTE_EXPIRED" | "QUOTE_CHANGED" | "RESERVATION_EXPIRED" | "RESERVATION_CANCELLED" | "AUTHORIZATION_INVALID" | "AUTHORIZATION_EXPIRED" | "TRANSACTION_CONFLICT" | "APPROVAL_REQUIRED" | "POLICY_NOT_NARROWER" | "PARENT_MANDATE_INVALID" | "VELOCITY_LIMIT_EXCEEDED" | "APPROVAL_DENIED" | "APPROVAL_EXPIRED" | "RISK_REVIEW_REQUIRED" | "CARD_FROZEN";
 
 export type Evidence = {
   "id": string;
@@ -615,4 +615,65 @@ export type TranscriptionRequest = {
 export type TranscriptionResponse = {
   "text": string;
   "model_id": string;
+};
+
+export type CardControls = {
+  "spend_limit_minor": number;
+  "currency": Currency;
+  "allowed_merchant_ids": Array<string> | null;
+  "blocked_mccs": Array<string>;
+  "single_use": boolean;
+  "expires_at": string;
+};
+
+export type VirtualCard = {
+  "card_id": string;
+  "mandate_id": string;
+  "parent_card_id": string | null;
+  "usage": "mandate" | "single_use";
+  "network": "mastercard" | "visa";
+  "last4": string;
+  "exp_month": number;
+  "exp_year": number;
+  "status": "active" | "frozen" | "used" | "cancelled";
+  "controls": CardControls;
+  "issued_at": string;
+  "status_changed_at": string | null;
+  "payment_mode": "sandbox";
+  "single_use_cards": {
+  "active": number;
+  "used": number;
+  "cancelled": number;
+};
+};
+
+export type CardFreezeRequest = {
+  "reason"?: string;
+};
+
+export type CardStatusResponse = {
+  "card": VirtualCard;
+  "event_sequence": number;
+};
+
+export type CardAuthorization = {
+  "id": string;
+  "card_id": string;
+  "card_last4": string;
+  "card_usage": "mandate" | "single_use";
+  "merchant_id": string;
+  "mcc": string | null;
+  "amount_minor": number;
+  "currency": Currency;
+  "approved": boolean;
+  "response_code": string;
+  "decline_reason": string | null;
+  "message": string;
+  "reservation_id": string | null;
+  "created_at": string;
+};
+
+export type CardAuthorizationList = {
+  "card_id": string;
+  "authorizations": Array<CardAuthorization>;
 };

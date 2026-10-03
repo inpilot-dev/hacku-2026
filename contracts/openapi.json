@@ -3002,6 +3002,390 @@
           }
         }
       }
+    },
+    "/mandates/{mandate_id}/card": {
+      "get": {
+        "operationId": "getMandateCard",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Read the mandate's virtual card",
+        "description": "Owner or the mandate's own agent. Masked: last4, expiry, status and controls only. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VirtualCard"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}/card/freeze": {
+      "post": {
+        "operationId": "freezeMandateCard",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Freeze the mandate's virtual card",
+        "description": "Owner only. Reversible, unlike revoke: while frozen the wallet refuses new purchases on this mandate and its child mandates with CARD_FROZEN, a payment on an earlier authorization is refused (its hold is released) and the issuer declines every card under it with response code 62. 409 if already frozen or the mandate was revoked. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardFreezeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}/card/unfreeze": {
+      "post": {
+        "operationId": "unfreezeMandateCard",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "Unfreeze the mandate's virtual card",
+        "description": "Owner only. 409 if not frozen or the mandate was revoked. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "description": "Stable UUID recommended. Scoped by authenticated actor + operation. Same key and same semantic request returns the original outcome; changed request returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency/payload conflict or illegal state transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed or invalid request; distinct from a valid purchase refused by policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporary unavailable service or database contention; no payment performed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CardFreezeRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mandates/{mandate_id}/card/authorizations": {
+      "get": {
+        "operationId": "listMandateCardAuthorizations",
+        "tags": [
+          "wallet"
+        ],
+        "summary": "List card authorizations",
+        "description": "Owner or the mandate's own agent. Every approved and declined card authorization on the mandate's cards, with ISO 8583 response codes. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user",
+          "agent"
+        ],
+        "parameters": [
+          {
+            "name": "mandate_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardAuthorizationList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found or not visible to caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3044,7 +3428,8 @@
           "VELOCITY_LIMIT_EXCEEDED",
           "APPROVAL_DENIED",
           "APPROVAL_EXPIRED",
-          "RISK_REVIEW_REQUIRED"
+          "RISK_REVIEW_REQUIRED",
+          "CARD_FROZEN"
         ],
         "description": "VELOCITY_LIMIT_EXCEEDED, APPROVAL_DENIED and APPROVAL_EXPIRED are Proposed v0.2 addition (wallet, Timmy). RISK_REVIEW_REQUIRED is a proposed v0.3 addition (wallet, Timmy): normally a review reason; it refuses only when the reason cannot be put to the owner (new since their approval, or too many purchases already waiting). Additive: older clients can ignore it."
       },
@@ -6202,6 +6587,322 @@
             "type": "string"
           }
         }
+      },
+      "CardControls": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "spend_limit_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "allowed_merchant_ids": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocked_mccs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "single_use": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "spend_limit_minor",
+          "currency",
+          "allowed_merchant_ids",
+          "blocked_mccs",
+          "single_use",
+          "expires_at"
+        ],
+        "description": "Spending controls the card issuer enforces on every card authorization: a second line of defence behind the wallet's policy engine. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+      },
+      "VirtualCard": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "mandate_id": {
+            "type": "string"
+          },
+          "parent_card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "type": "string",
+            "enum": [
+              "mandate",
+              "single_use"
+            ]
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "mastercard",
+              "visa"
+            ]
+          },
+          "last4": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$"
+          },
+          "exp_month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "exp_year": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "frozen",
+              "used",
+              "cancelled"
+            ]
+          },
+          "controls": {
+            "$ref": "#/components/schemas/CardControls"
+          },
+          "issued_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          },
+          "status_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "RFC 3339 timestamp with an explicit UTC offset."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payment_mode": {
+            "type": "string",
+            "enum": [
+              "sandbox"
+            ]
+          },
+          "single_use_cards": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "used": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "active",
+              "used",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "card_id",
+          "mandate_id",
+          "parent_card_id",
+          "usage",
+          "network",
+          "last4",
+          "exp_month",
+          "exp_year",
+          "status",
+          "controls",
+          "issued_at",
+          "status_changed_at",
+          "payment_mode",
+          "single_use_cards"
+        ],
+        "description": "A mandate's virtual card (sandbox issuer). It is the card account the owner controls; only single-use cards issued from it, one per purchase and locked to that shop, amount and expiry, are ever presented to a shop. Only the last4 leaves the issuer: the card number is encrypted at rest and the security code is never stored. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+      },
+      "CardFreezeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": []
+      },
+      "CardStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/VirtualCard"
+          },
+          "event_sequence": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "card",
+          "event_sequence"
+        ],
+        "description": "Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+      },
+      "CardAuthorization": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "card_id": {
+            "type": "string"
+          },
+          "card_last4": {
+            "type": "string"
+          },
+          "card_usage": {
+            "type": "string",
+            "enum": [
+              "mandate",
+              "single_use"
+            ]
+          },
+          "merchant_id": {
+            "type": "string"
+          },
+          "mcc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "amount_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "currency": {
+            "$ref": "#/components/schemas/Currency"
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "response_code": {
+            "type": "string",
+            "description": "ISO 8583 response code: 00 approved, 05 single-use card already used, 14 invalid card number, 46 card closed, 54 expired, 57 not permitted (merchant lock, blocked MCC, currency, mandate card presented directly), 61 over limit, 62 frozen, 82 security code mismatch."
+          },
+          "decline_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "reservation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp with an explicit UTC offset."
+          }
+        },
+        "required": [
+          "id",
+          "card_id",
+          "card_last4",
+          "card_usage",
+          "merchant_id",
+          "mcc",
+          "amount_minor",
+          "currency",
+          "approved",
+          "response_code",
+          "decline_reason",
+          "message",
+          "reservation_id",
+          "created_at"
+        ],
+        "description": "One card authorization attempt on the mandate's card or a single-use card under it, approved or declined. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+      },
+      "CardAuthorizationList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "authorizations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CardAuthorization"
+            }
+          }
+        },
+        "required": [
+          "card_id",
+          "authorizations"
+        ],
+        "description": "Newest first, at most 50. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
       }
     }
   }
