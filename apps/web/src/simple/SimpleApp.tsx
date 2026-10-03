@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { ArrowRight, Carrot, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
+import ReactiveCharacter from '../components/ReactiveCharacter';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 import CartSyncPanel from './CartSyncPanel';
@@ -79,11 +80,11 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
 };
 
 function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
-  return <img className="m2-avatar" src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
+  return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
-  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><img src={`/agents/${name}-${state}.png`} alt="" /></span>;
+  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><ReactiveCharacter name={name} state={state} size={size} /></span>;
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
@@ -93,7 +94,9 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
   switch (event.type) {
     case 'mandate_confirmed': return { who: 'bean', text: 'Allowance switched on', tone: 'good' };
-    case 'mandate_revoked': return { who: 'kip', text: 'Card frozen', tone: 'bad', state: 'revoked' };
+    case 'mandate_revoked': return { who: 'kip', text: 'Allowance permanently revoked', tone: 'bad', state: 'revoked' };
+    case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
+    case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
     case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };
@@ -147,6 +150,7 @@ export default function SimpleApp() {
   const [mandateId, setMandateId] = useState(() => localStorage.getItem(MANDATE_KEY) ?? '');
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
+  const [card, setCard] = useState<VirtualCard | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -195,10 +199,11 @@ export default function SimpleApp() {
 
   const refresh = useCallback(async (id = mandateId) => {
     try { await api.health(); setOnline(true); } catch { setOnline(false); }
-    if (!id) { setMandate(null); setBudget(null); setLoaded(true); return; }
+    if (!id) { setMandate(null); setBudget(null); setCard(null); setLoaded(true); return; }
     try {
       const [m, b] = await Promise.all([api.mandate(TOKEN, id), api.budget(TOKEN, id)]);
       setMandate(m); setBudget(b);
+      try { setCard(await api.card(TOKEN, id)); } catch { setCard(null); }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) { localStorage.removeItem(MANDATE_KEY); setMandateId(''); setMandate(null); setBudget(null); }
     } finally { setLoaded(true); }
@@ -222,6 +227,7 @@ export default function SimpleApp() {
   }, [catalog]);
 
   const active = mandate?.status === 'active';
+  const canSpend = active && card?.status !== 'frozen';
   const period = budget?.applicable_budgets[0];
   const available = period?.available_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const limit = period?.limit_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
@@ -250,13 +256,41 @@ export default function SimpleApp() {
     if (!mandate) return;
     setBusy('freeze'); setError('');
     try {
-      const result = await api.revoke(TOKEN, mandate.id);
-      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
-      setMandate(result.mandate); resetShop();
-      note('kip', `Card frozen${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      const result = await api.freezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-freeze-${mandate.id}`);
+      setCard(result.card); resetShop();
+      note('kip', 'Card paused. No new purchases can be made.', 'bad', 'frozen');
       await refresh(mandate.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not freeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function unfreeze() {
+    if (!mandate) return;
+    setBusy('unfreeze'); setError('');
+    try {
+      const result = await api.unfreezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-unfreeze-${mandate.id}`);
+      setCard(result.card);
+      note('kip', 'Card resumed. The existing allowance still applies.', 'good', 'active');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unfreeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function revokeAllowance() {
+    if (!mandate || !window.confirm('Permanently revoke this allowance? Its virtual card will be cancelled and cannot be resumed.')) return;
+    setBusy('revoke'); setError('');
+    try {
+      const result = await api.revoke(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
+      setMandate(result.mandate); resetShop();
+      note('kip', `Allowance revoked${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke the allowance.');
     } finally { setBusy(''); }
   }
 
@@ -320,7 +354,7 @@ export default function SimpleApp() {
 
   async function shopFromText() {
     const text = listText.trim();
-    if (!mandate || !active || !text || busy) return;
+    if (!mandate || !canSpend || !text || busy) return;
     setError(''); setBusy('parse');
     try {
       const parsed = await api.parseShoppingList(TOKEN, { text });
@@ -333,7 +367,7 @@ export default function SimpleApp() {
   }
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
-    if (!mandate || !active) return;
+    if (!mandate || !canSpend) return;
     const spoken = chosen !== 'custom' && 'kind' in chosen;
     const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
@@ -581,7 +615,7 @@ export default function SimpleApp() {
     if (loaded && mandateId) void loadReceipts();
   }, [loaded, mandateId]);
 
-  const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
+  const kipState = !mandate || !active ? 'revoked' : card?.status === 'frozen' ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
   const estimate = (p: Pick) => p.items.reduce((sum, line) => sum + (productById.get(line.product_id)?.unit_price_minor ?? 0) * line.quantity, 0);
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
@@ -616,9 +650,11 @@ export default function SimpleApp() {
     ) : mandate && (
       <main className="m2-grid">
         <section className="m2-col m2-area-card">
-          <div className={`m2-card ${active ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{active ? 'Active' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span></div>
-            <div className="m2-card-amount"><small>{active ? 'Left this week' : 'Spending is off'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
+          <div className={`m2-card ${canSpend ? '' : 'frozen'}`}>
+            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
+            {card && <div className="m2-card-number"><span>CONTROL CARD</span><b>{card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ···· {card.last4}</b><small>the agent never sees reusable card details</small></div>}
+            {active && !card && <p className="m2-card-note">Card details are unavailable for this allowance. Wallet spending rules remain active.</p>}
+            <div className="m2-card-amount"><small>{!active ? 'Spending is off' : card?.status === 'frozen' ? 'Available when resumed' : 'Left this week'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
             <div className="m2-meter" aria-hidden>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < Math.round(ratio * 20) ? 'on' : ''} />)}</div>
             <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a week</span></div>
             <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
@@ -631,9 +667,11 @@ export default function SimpleApp() {
             {mandate.policy.risk_review && <div><dt>Extra protection</dt><dd>Unusual purchases reviewed</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
           </dl>
-          {active
-            ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
+          {active ? card?.status === 'frozen'
+            ? <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}><Snowflake size={18} />{busy === 'unfreeze' ? 'Resuming…' : 'Unfreeze the card'}</button>
+            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
+          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke'}>Permanently revoke allowance</button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
           {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
         </section>
@@ -647,11 +685,12 @@ export default function SimpleApp() {
         </section>
 
         <section className="m2-col m2-area-shop" ref={shopRef}>
-          {!active ? (
+          {!canSpend ? (
             <div className="m2-panel m2-center">
               <Sticker name="kip" state="revoked" size={150} tilt={-4} />
-              <h2>Kip is asleep.</h2>
-              <p className="m2-muted">The card is {mandate.status === 'expired' ? 'expired' : 'frozen'}. Nobody can spend from it, not even Kumi.</p>
+              <h2>{!active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
+              <p className="m2-muted">{!active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
+              {active && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">

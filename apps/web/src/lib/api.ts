@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -59,6 +59,13 @@ export const api = {
     return response.json() as Promise<{ status: string; payment_mode: string; server_time: string }>;
   }),
   mandate: (token: string, id: string) => request<Mandate>(`/mandates/${encodeURIComponent(id)}`, token),
+  card: (token: string, id: string) => request<VirtualCard>(`/mandates/${encodeURIComponent(id)}/card`, token),
+  freezeCard: (token: string, id: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(id)}/card/freeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': sessionKey(`freeze-${id}`) }, body: JSON.stringify({ reason: 'Paused from family dashboard' }),
+  }),
+  unfreezeCard: (token: string, id: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(id)}/card/unfreeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': sessionKey(`unfreeze-${id}`) }, body: JSON.stringify({ reason: 'Resumed from family dashboard' }),
+  }),
   draft: async (token: string, input: DraftRequest) => request<DraftResponse>('/mandates/draft', token, {
     method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('mandate-draft', input) }, body: JSON.stringify(input),
   }),

@@ -20,7 +20,7 @@ Existing character assets include Kumi (shopping bag), Kip (wallet), Bean (reque
 - Timmy: virtual card and wallet/payment behaviour.
 - Seungbin: mobile responsiveness, currently proposed in PR #18.
 
-Review incoming team changes before integration and before push. Coordinate edits to shared `SimpleApp` and CSS with the mobile branch. Show the existing wallet allowance as an allowance until an actual virtual-card integration exists.
+Review incoming team changes before integration and before push. Coordinate edits to shared `SimpleApp` and CSS with the mobile branch. Show only the control card network and last four digits; explain that the agent never sees reusable card details and that checkout card rails use single-use cards. Keep sandbox payment limits visible.
 
 ## 1. Editable presets — first deliverable
 

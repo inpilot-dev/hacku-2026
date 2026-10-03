@@ -6,6 +6,7 @@ import placeholderCatalog from '../../../../services/api/mandate/payments/fixtur
 import { generated_at as evalGeneratedAt, git_commit as evalCommit, live_http as evalLive } from '../../../../evaluation/results/latest.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
+import ReactiveCharacter from '../components/ReactiveCharacter';
 import { matchScriptedCatalogBasket } from './scriptedCatalogMatcher';
 
 const DEFAULT_TOKEN = 'dev-user-token';
@@ -568,7 +569,7 @@ function MandateOverviewContent({ mandate, active, busy, onSetup, onWallet, onRe
 }
 
 function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip' | 'kumi' | 'stella'; state: string; label: string; size?: number }) {
-  return <img className="agent-character" src={`/agents/${name}-${state}.png`} alt={label} width={size} height={size} loading="lazy" />;
+  return <ReactiveCharacter className="agent-character" name={name} state={state} label={label} size={size} loading="lazy" />;
 }
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
