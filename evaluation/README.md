@@ -1,13 +1,13 @@
 # Evaluation (owner: Seungbin)
 
 Measures the wallet against an unsafe baseline over real HTTP (C1) and through 20 deterministic gateway
-scenarios (C2). Uses the wallet's venv (`services/api/.venv`, see `services/api/requirements-wallet.txt`).
+scenarios (C2). Uses the repository venv from `just install` (`.venv`); any venv with the API and verification requirements works.
 
 ```bash
 # from the repo root
-services/api/.venv/bin/python -m evaluation.run            # C1 + C2, prints a summary, writes results/latest.json
-services/api/.venv/bin/python -m evaluation.live           # C1 only
-services/api/.venv/bin/python -m pytest evaluation -q      # both, as tests
+.venv/bin/python -m evaluation.run            # C1 + C2, prints a summary, writes results/latest.json
+.venv/bin/python -m evaluation.live           # C1 only
+.venv/bin/python -m pytest evaluation -q      # both, as tests
 ```
 
 Servers start on free ports in 8100–8199 and are stopped (own PIDs only) when the run ends. Runtime data lives in

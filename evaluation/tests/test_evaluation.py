@@ -1,4 +1,4 @@
-"""services/api/.venv/bin/python -m pytest evaluation -q      (from the repo root)"""
+""".venv/bin/python -m pytest evaluation -q      (from the repo root)"""
 
 import evaluation  # noqa: F401  (puts services/api on sys.path)
 from evaluation import extra, live, scenarios

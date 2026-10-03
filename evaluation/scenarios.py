@@ -1,6 +1,6 @@
 """C2: 20 deterministic gateway scenarios (build plan §11 categories that need no model).
 
-    services/api/.venv/bin/python -m evaluation.run      (from the repo root; writes results/latest.json)
+    .venv/bin/python -m evaluation.run      (from the repo root; writes results/latest.json)
 
 Each scenario runs against a fresh in-process wallet (FastAPI TestClient, FixedClock on a
 Wednesday in HKT, placeholder catalog). It returns the purchase *attempts* it made; each
