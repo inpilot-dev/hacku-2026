@@ -7,3 +7,11 @@
   .reactive-character[data-can-greet=true]:hover .character-base{opacity:0}
 }
 @media(prefers-reduced-motion:reduce){.reactive-character img{transition:none}}
+
+.reactive-character[data-motion=working]{animation:agent-working 1.8s ease-in-out infinite;transform-origin:50% 85%}
+.reactive-character[data-motion=success]{animation:agent-success 620ms ease-out both;transform-origin:50% 90%}
+.reactive-character[data-motion=refused]{animation:agent-refused 500ms ease-in-out both}
+@keyframes agent-working{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(4deg) translateY(-2px)}}
+@keyframes agent-success{0%,100%{transform:translateY(0) scale(1)}25%{transform:translateY(2px) scale(1.04,.94)}55%{transform:translateY(-9px) scale(.98,1.03)}80%{transform:translateY(0) scale(1.03,.97)}}
+@keyframes agent-refused{0%,100%{transform:rotate(0)}25%{transform:rotate(-7deg)}50%{transform:rotate(6deg)}75%{transform:rotate(-3deg)}}
+@media(prefers-reduced-motion:reduce){.reactive-character[data-motion]{animation:none}}

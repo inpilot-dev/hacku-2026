@@ -22,8 +22,8 @@ const tint = (who: Agent): CSSProperties => ({
 });
 
 /** A character, animated when idle (blinks, looks around), with a pose for other states. */
-export function Sticker({ who, state = 'idle', size = 56, className, label }: { who: Agent; state?: string; size?: number; className?: string; label?: string }) {
-  return <ReactiveCharacter name={who} state={state} size={size} className={className} label={label} />;
+export function Sticker({ who, state = 'idle', size = 56, className, label, motion }: { who: Agent; state?: string; size?: number; className?: string; label?: string; motion?: 'working' | 'success' | 'refused' }) {
+  return <ReactiveCharacter name={who} state={state} size={size} className={className} label={label} motion={motion ?? (state === goodPose(who) ? 'success' : state === 'refused' || state === 'sad' || state === 'revoked' || state === 'fail' ? 'refused' : undefined)} />;
 }
 
 export function PageHeader({ title, description, action, who, state }: {
@@ -63,8 +63,8 @@ const badPose = (who: Agent) => ({ kumi: 'sad', kip: 'refused', bean: 'thinking'
 
 export function Working({ children, who }: { children: ReactNode; who?: Agent }) {
   return <div className="flex items-center gap-2.5 text-sm text-muted-foreground" role="status">
-    {who ? <Sticker who={who} size={36} className="shrink-0" /> : null}
-    <Loader2 className="size-4 animate-spin" />{children}
+    {who ? <Sticker who={who} size={36} className="shrink-0" motion="working" /> : null}
+    <span className="working-dots" style={{ color: `var(--${who ?? 'kumi'})` }} aria-hidden="true"><i /><i /><i /></span>{children}
   </div>;
 }
 

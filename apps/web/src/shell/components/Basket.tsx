@@ -31,13 +31,13 @@ export default function Basket({ g }: { g: Groceries }) {
     <CardHeader>
       <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect</CardDescription>
       <CardAction><Sticker who={v || g.phase === 'paying' ? 'kip' : 'kumi'} size={56}
-        state={v?.kind === 'paid' ? 'approved' : v?.kind === 'refused' ? 'refused' : v || g.phase === 'paying' ? 'idle' : 'happy'} /></CardAction>
+        state={v?.kind === 'paid' ? 'approved' : v?.kind === 'refused' ? 'refused' : v || g.phase === 'paying' ? 'idle' : 'happy'} motion={g.phase === 'paying' ? 'working' : undefined} /></CardAction>
       <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0) : g.phase === 'paying' ? 'Checking your rules…' : 'Basket ready'}</CardTitle>
     </CardHeader>
     <CardContent className="space-y-4 text-sm">
       <ul className="basket-products">
-        {quote.items.map((item) => { const category = g.catalogById.get(item.product_id)?.category ?? ''; const flagged = blocked.has(category);
-          return <li key={item.product_id} className="basket-product ui-enter">
+        {quote.items.map((item, index) => { const category = g.catalogById.get(item.product_id)?.category ?? ''; const flagged = blocked.has(category);
+          return <li key={item.product_id} className="basket-product result-arrive" style={{ animationDelay: `${Math.min(index, 5) * 70}ms` }}>
             <ProductVisual title={item.title} />
             <span className={cn('basket-product-name', flagged && 'text-destructive')}>{item.title}<small>Qty {item.quantity}</small>{flagged && <Badge variant="outline" className="border-destructive/40 text-destructive">{categoryLabel(category)}</Badge>}</span>
             <span className="basket-product-price">{money(item.line_total_minor)}</span></li>; })}
@@ -52,7 +52,19 @@ export default function Basket({ g }: { g: Groceries }) {
         {g.paymentComparison && <PaymentRoutes comparison={g.paymentComparison} selected={g.routeId} onSelect={g.selectRoute} />}
       </>}
 
-      {g.phase === 'paying' && <Working>Kip is checking your rules and paying…</Working>}
+      {g.phase === 'paying' && <Working who="kip">Kip is checking your rules and paying…</Working>}
+
+      {v?.kind === 'paid' && <div className="receipt-printer" key={v.receipt.id}>
+        <div className="receipt-printer-slot" aria-hidden="true" />
+        <div className="receipt-printer-window"><button className="printed-ticket" aria-label="Open confirmed sandbox receipt"
+          onClick={() => void account.receipts.open({ receipt: v.receipt, quote, occurredAt: v.receipt.paid_at })}>
+          <span className="printed-ticket-brand">MANDATE · SANDBOX</span>
+          <strong>{storeName(v.receipt.merchant_id)}</strong>
+          <span className="printed-ticket-paid"><CheckCircle2 className="size-4" aria-hidden="true" />Payment confirmed</span>
+          <strong className="printed-ticket-total">{money(v.receipt.amount_minor)}</strong>
+          <span className="printed-ticket-open">View your receipt →</span>
+        </button></div>
+      </div>}
 
       {v?.kind === 'paid' && <p className="payment-success ui-enter text-muted-foreground"><CheckCircle2 className="size-5 shrink-0" aria-hidden="true" />Paid in the sandbox within your rules. {money(account.available)} left this {per}. This is not a retailer order confirmation.</p>}
       {v?.kind === 'refused' && (v.violations.length

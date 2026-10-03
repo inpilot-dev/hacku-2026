@@ -19,8 +19,8 @@ function preloadIdle(name: CharacterName) {
   return ready;
 }
 
-export default function ReactiveCharacter({ name, state, size = 64, label = '', className = '', loading }: {
-  name: CharacterName; state: string; size?: number; label?: string; className?: string; loading?: 'lazy';
+export default function ReactiveCharacter({ name, state, size = 64, label = '', className = '', loading, motion }: {
+  name: CharacterName; state: string; size?: number; label?: string; className?: string; loading?: 'lazy'; motion?: 'working' | 'success' | 'refused';
 }) {
   const canGreet = state === 'idle';
   const [hovered, setHovered] = useState(false);
@@ -75,7 +75,7 @@ export default function ReactiveCharacter({ name, state, size = 64, label = '', 
 
   const visibleFrame = canGreet && !hovered ? frame : state;
   return <span className={`reactive-character ${className}`} data-character={name} data-state={state}
-    data-idle-frame={visibleFrame} data-can-greet={canGreet}
+    data-motion={motion} data-idle-frame={visibleFrame} data-can-greet={canGreet}
     onPointerEnter={(event) => { if (event.pointerType === 'mouse' && matchMedia('(hover: hover) and (pointer: fine)').matches) setHovered(true); }}
     onPointerLeave={() => setHovered(false)}
     role={label ? 'img' : undefined} aria-label={label || undefined}

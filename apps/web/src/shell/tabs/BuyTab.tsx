@@ -55,7 +55,7 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
   }
 
   return <div className="flex flex-col">
-    <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment') ? 'happy' : 'idle'}
+    <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment' || (!isWorking(x) && x.candidates.some((c) => c.matches))) ? 'happy' : 'idle'}
       description="Find a match. Review the total before paying."
       action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={() => { p.clear(); setOlder(0); }}>New conversation</Button> : undefined} />
 
@@ -123,7 +123,7 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
 
     {!working && purchase.status !== 'awaiting_approval' && <Bubble from={speaker(purchase)} tone={tone(purchase)}><Linkified text={presentPurchase(purchase.message)} /></Bubble>}
     {purchase.status !== 'awaiting_approval' && purchase.candidates.some((c) => c.matches) && <div className="shop-results">
-      {purchase.candidates.filter((c) => c.matches).map((candidate) => <MatchCard key={candidate.url} candidate={candidate} />)}
+      {purchase.candidates.filter((c) => c.matches).map((candidate, index) => <MatchCard key={candidate.url} candidate={candidate} index={index} />)}
     </div>}
     {purchase.status === 'awaiting_approval' && <Bubble from="kip">Review the total. I’ll wait for your approval before paying.</Bubble>}
 
@@ -164,9 +164,9 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
   </section>;
 }
 
-function MatchCard({ candidate }: { candidate: PurchaseCandidate }) {
+function MatchCard({ candidate, index }: { candidate: PurchaseCandidate; index: number }) {
   const checks = candidate.checks.filter((c) => c.ok);
-  return <article className="shop-match ui-enter">
+  return <article className="shop-match result-arrive" style={{ animationDelay: `${Math.min(index, 5) * 90}ms` }}>
     <ProductVisual title={candidate.title} />
     <div className="shop-match-copy">
       <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="shop-match-title">{candidate.title}<ExternalLink aria-hidden="true" className="size-3 shrink-0" /></a>
