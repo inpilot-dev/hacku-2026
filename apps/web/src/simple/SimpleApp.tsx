@@ -442,6 +442,8 @@ export default function SimpleApp() {
   const filtered = products.filter((p) => p.title.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 24);
   const feed = serverLog && serverLog.length ? serverLog : log;
   const showSetup = loaded && (!mandate || setupOpen);
+  // Phones pin Kumi's question and the list box to the bottom while picking (see simple.css).
+  const docked = !showSetup && Boolean(mandate) && active && phase === 'pick';
 
   const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
@@ -449,7 +451,7 @@ export default function SimpleApp() {
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
   const stamp = verdict?.kind === 'paid' ? 'Paid' : verdict?.kind === 'refused' ? 'Refused' : verdict?.kind === 'review' ? 'Your call' : 'Checking';
 
-  return <div className="m2">
+  return <div className={`m2${docked ? ' docked' : ''}`}>
     <header className="m2-top">
       <div className="m2-brand">Mandate</div>
       <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
@@ -485,7 +487,7 @@ export default function SimpleApp() {
         </div>
       </section>
     ) : mandate && (
-      <main className="m2-grid">
+      <main className={`m2-grid${phase === 'verdict' ? ' verdict' : ''}`}>
         <section className="m2-col m2-area-card">
           <div className={`m2-card ${active ? '' : 'frozen'}`}>
             <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{active ? 'Active' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span></div>
@@ -524,15 +526,17 @@ export default function SimpleApp() {
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
+              <div className="m2-dock">
               <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>What does Mum need this week?</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
               <div className="m2-ask">
-                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
+                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={2} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
                 <div className="m2-ask-actions">
                   <button type="button" className={`m2-mic${voice === 'recording' ? ' on' : ''}`} onClick={() => void toggleRecording()} disabled={voice === 'transcribing' || busy === 'parse'} aria-label={voice === 'recording' ? 'Stop recording' : 'Speak the list'}>
                     {voice === 'recording' ? <Square size={16} /> : <Mic size={16} />}{voice === 'recording' ? 'Stop' : voice === 'transcribing' ? 'Transcribing…' : 'Speak'}
                   </button>
                   <button type="button" className="m2-cta" onClick={() => void shopFromText()} disabled={!listText.trim() || busy === 'parse' || Boolean(voice) || !products.length}>{busy === 'parse' ? 'Reading your list…' : 'Ask Kumi to pack it'}<ArrowRight size={18} /></button>
                 </div>
+              </div>
               </div>
               <p className="m2-muted m2-or">or start from a preset</p>
               <div className="m2-picks">
@@ -569,7 +573,9 @@ export default function SimpleApp() {
                 <div><p className="m2-kicker">{phase === 'verdict' ? 'Kip’s decision' : agentNote}</p><h2>{phase === 'verdict' && verdict ? verdictTitle(verdict, quote.total_minor) : phase === 'paying' ? 'Kip is checking Mum’s rules…' : 'Basket’s ready.'}</h2></div>
                 <Sticker name={phase === 'verdict' && verdict?.kind === 'review' ? 'bean' : phase === 'verdict' ? 'kip' : 'kumi'} state={phase === 'verdict' && verdict ? (verdict.kind === 'paid' ? 'approved' : verdict.kind === 'refused' ? 'refused' : 'idle') : phase === 'paying' ? 'idle' : 'happy'} size={phase === 'verdict' ? 112 : 84} tilt={phase === 'verdict' ? -7 : 6} />
               </div>
-              <div className="m2-receipt">
+              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at Wellcome.</p>}
+              {phase === 'verdict' && verdict?.kind === 'refused' && <p className="m2-muted">Nothing was paid.</p>}
+              <div className={`m2-receipt${phase === 'verdict' && verdict ? ` stamped is-${verdict.kind}` : ''}`}>
                 <div className="m2-receipt-head"><span>WELLCOME · CLICK &amp; COLLECT</span><span>{new Date(quote.created_at).toLocaleDateString('en-HK', { day: '2-digit', month: 'short' })}</span></div>
                 <ul>{quote.items.map((item) => <li key={item.product_id} className={productById.get(item.product_id)?.category === 'alcohol' ? 'flag' : ''}><span>{item.quantity}×</span><span>{item.title}</span><b>{money(item.line_total_minor)}</b></li>)}
                   {quote.charges.map((charge, i) => <li key={`c${i}`} className="m2-charge"><span /><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}
@@ -586,9 +592,7 @@ export default function SimpleApp() {
               {phase === 'paying' && <div className="m2-dots center"><i /><i /><i /></div>}
               {phase === 'verdict' && verdict?.kind === 'refused' && <>
                 {verdict.violations.length > 0 ? <ul className="m2-why">{verdict.violations.map((v, i) => <li key={`${v.rule_id}-${i}`}><b>{REASONS[v.code] ?? v.code.replace(/_/g, ' ').toLowerCase()}</b><small>{v.message}</small></li>)}</ul> : <p className="m2-muted">{verdict.message}</p>}
-                <p className="m2-muted">Nothing was paid.</p>
               </>}
-              {phase === 'verdict' && verdict?.kind === 'paid' && <p className="m2-muted">Within every rule. It’s ready to collect at Wellcome.</p>}
               {phase === 'verdict' && verdict?.kind === 'uncertain' && <><p className="m2-muted">{verdict.message}</p><button className="m2-cta" onClick={() => void checkout()}>Check again</button></>}
               {phase === 'verdict' && verdict?.kind === 'review' && <>
                 <p className="m2-muted">Kip paused this order for your review. Nothing is reserved or paid while it waits. Check each reason before deciding:</p>

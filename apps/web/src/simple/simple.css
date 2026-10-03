@@ -106,18 +106,18 @@ button:disabled{cursor:not-allowed;opacity:.4}
 
 /* Order summary */
 .m2-receipt{position:relative;padding:calc(var(--spacing)*5);border-radius:var(--radius-2xl);background:var(--color-surface-secondary);font-size:var(--font-text-sm-size)}
-.m2-receipt-head{display:flex;gap:12px;justify-content:space-between;font-size:12px;color:var(--color-text-tertiary);padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);margin-bottom:6px;padding-right:110px}
+.m2-receipt-head{display:flex;gap:12px;justify-content:space-between;font-size:12px;color:var(--color-text-secondary);padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);margin-bottom:6px;padding-right:110px}
 .m2-receipt-head span:last-child{white-space:nowrap}
 .m2-receipt ul{list-style:none;margin:0;padding:0}
 .m2-receipt li{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:7px 0;line-height:1.4}
-.m2-receipt li span:first-child{color:var(--color-text-tertiary);font-variant-numeric:tabular-nums}
+.m2-receipt li span:first-child{color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 .m2-receipt li b{font-weight:var(--font-weight-medium);font-variant-numeric:tabular-nums}
 .m2-receipt li.flag{color:var(--color-text-danger)}.m2-receipt li.flag span:nth-child(2)::after{content:' · alcohol';font-size:12px}
-.m2-receipt li.m2-charge{color:var(--color-text-tertiary)}
+.m2-receipt li.m2-charge{color:var(--color-text-secondary)}
 .m2-receipt-total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--color-border);margin-top:8px;padding-top:14px;font-weight:var(--font-weight-medium)}
 .m2-receipt-total b{font-size:var(--font-heading-lg-size);font-weight:var(--font-weight-semibold);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .m2-receipt-meta{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--color-border-subtle);font-size:12px}
-.m2-receipt-meta span:nth-child(odd){color:var(--color-text-tertiary)}.m2-receipt-meta span:nth-child(even){text-align:right}
+.m2-receipt-meta span:nth-child(odd){color:var(--color-text-secondary)}.m2-receipt-meta span:nth-child(even){text-align:right}
 .m2-stamp{position:absolute;top:14px;right:16px;padding:3px 12px;border-radius:var(--radius-full);font-size:12px;font-weight:var(--font-weight-semibold);animation:m2-in .3s ease-out}
 .m2-stamp.paid{background:var(--color-background-success-soft);color:var(--color-text-success)}
 .m2-stamp.refused{background:var(--color-background-danger-soft);color:var(--color-text-danger)}
@@ -134,10 +134,10 @@ button:disabled{cursor:not-allowed;opacity:.4}
 /* Log */
 .m2-feed{padding:calc(var(--spacing)*5);border-radius:var(--radius-3xl);box-shadow:inset 0 0 0 1px var(--color-border)}
 .m2-feed-head{display:flex;align-items:center;gap:12px;margin-bottom:8px}.m2-feed-head div{display:grid}
-.m2-feed-head strong{font-weight:var(--font-weight-semibold)}.m2-feed-head small{font-size:12px;color:var(--color-text-tertiary);margin-top:2px}
+.m2-feed-head strong{font-weight:var(--font-weight-semibold)}.m2-feed-head small{font-size:12px;color:var(--color-text-secondary);margin-top:2px}
 .m2-feed ol{list-style:none;margin:0;padding:0}
 .m2-feed li{display:grid;grid-template-columns:44px 8px 1fr;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--color-border-subtle);font-size:var(--font-text-sm-size)}
-.m2-feed time{font-size:12px;color:var(--color-text-tertiary);font-variant-numeric:tabular-nums}
+.m2-feed time{font-size:12px;color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 .m2-dot{width:8px;height:8px;border-radius:50%}
 .m2-dot.kumi{background:var(--orange-400)}.m2-dot.kip{background:var(--green-500)}.m2-dot.bean{background:var(--blue-400)}.m2-dot.stella{background:var(--pink-400)}
 .m2-feed li.bad span:last-child{color:var(--color-text-danger)}
@@ -196,3 +196,24 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .m2-or{margin:14px 0 10px;font-size:var(--font-text-sm-size)}
 @keyframes m2-pulse{50%{opacity:.7}}
 @media(prefers-reduced-motion:reduce){.m2-mic.on{animation:none}}
+
+/* Thumb dock, verdict first and a stamped receipt (design canvas variants 2C, 4C, 5C).
+   Small text that sat on --color-text-tertiary (3.2:1) above now uses --color-text-secondary. */
+.m2-dock{display:contents}
+.m2-receipt.stamped{display:flex;flex-direction:column;background:var(--color-surface);box-shadow:var(--shadow-200);padding:calc(var(--spacing)*5)}
+.m2-receipt.stamped .m2-receipt-head{padding-right:0}
+.m2-receipt.stamped .m2-receipt-total{order:-1;display:grid;gap:2px;border-top:0;border-bottom:1px solid var(--color-border);margin:0 0 12px;padding:0 0 14px}
+.m2-receipt.stamped .m2-receipt-total b{font-size:var(--font-heading-2xl-size)}
+.m2-receipt.stamped.is-refused .m2-receipt-total b{text-decoration:line-through 2px var(--color-text-danger)}
+.m2-receipt.stamped .m2-stamp{position:absolute;top:-14px;right:16px;margin:0;transform:rotate(-8deg);font-size:var(--font-heading-md-size);padding:6px 16px;border-radius:var(--radius-md);box-shadow:inset 0 0 0 2px currentColor}
+@media(max-width:860px){.m2-grid.verdict{grid-template-areas:'shop' 'card' 'feed'}}
+@media(max-width:480px){
+  .m2.docked{padding-bottom:calc(var(--spacing)*16 + 260px)}
+  .m2-dock{display:flex;flex-direction:column;gap:12px;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:16px 16px calc(20px + env(safe-area-inset-bottom));background:var(--color-surface-elevated);border-radius:var(--radius-4xl) var(--radius-4xl) 0 0;box-shadow:var(--shadow-300),inset 0 1px 0 var(--color-border)}
+  .m2-dock .m2-panel-head h2{font-size:var(--font-heading-md-size);line-height:1.2;letter-spacing:-.01em}
+  .m2-dock .m2-ask{margin-bottom:0}
+  .m2-dock .m2-ask textarea{min-height:64px}
+  .m2-dock .m2-ask-actions{flex-direction:row}
+  .m2-dock .m2-mic{flex:none}
+  .m2-dock~.m2-or{margin:0}
+}
