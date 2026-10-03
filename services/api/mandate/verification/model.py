@@ -16,6 +16,7 @@ breaks a property: sat = counterexample, unsat = none within the bound.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 
@@ -176,8 +177,20 @@ class _Unrolled:
         }[act]
 
 
+# ponytail: z3py's default context is process-global and not thread-safe; two concurrent
+# /verification/runs (the Safety Lab sends unsafe+atomic together) segfaulted the API.
+# One lock serialises runs; per-call z3.Context() if parallel solving ever matters.
+_Z3_LOCK = threading.Lock()
+
+
 def run(variant: str, initial_available_minor: int, purchase_amounts_minor: list[int],
         max_steps: int = 8, timeout_ms: int = 3000) -> dict:
+    with _Z3_LOCK:  # timeout starts once this run holds the solver
+        return _run(variant, initial_available_minor, purchase_amounts_minor, max_steps, timeout_ms)
+
+
+def _run(variant: str, initial_available_minor: int, purchase_amounts_minor: list[int],
+         max_steps: int, timeout_ms: int) -> dict:
     started = time.monotonic()
     deadline = started + timeout_ms / 1000
     model = _Unrolled(variant, initial_available_minor, list(purchase_amounts_minor), max_steps)

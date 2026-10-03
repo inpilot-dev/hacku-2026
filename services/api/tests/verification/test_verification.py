@@ -67,3 +67,12 @@ def test_auth_and_validation(client):
     bad = {**EXAMPLE, "variant": "atomic", "purchase_amounts_minor": [1]}
     assert client.post(url, json=bad, headers=USER).status_code == 422
     assert client.post(url, json={**EXAMPLE, "variant": "atomic", "extra": 1}, headers=USER).status_code == 422
+
+
+def test_concurrent_runs_do_not_share_z3_state():
+    # The Safety Lab posts unsafe and atomic together; unlocked, z3's global context crashed the process.
+    from concurrent.futures import ThreadPoolExecutor
+    for _ in range(5):
+        with ThreadPoolExecutor(2) as ex:
+            got = list(ex.map(lambda v: run(**EXAMPLE, variant=v), ["unsafe", "atomic"]))
+        assert [r["status"] for r in got] == ["counterexample_found", "no_counterexample_within_bound"]
