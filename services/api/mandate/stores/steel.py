@@ -30,7 +30,7 @@ from websockets.sync.client import connect
 
 from .registry import SuperwebStore
 
-CDP_URL = os.environ.get("MANDATE_STEEL_CDP_URL", "ws://localhost:3000/")
+CDP_URL = os.environ.get("MANDATE_STEEL_CDP_URL", "ws://127.0.0.1:3000/")
 COOKIE_FIELDS = ("name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires")
 
 CALL_JS = """(async (path, param, flag) => {
