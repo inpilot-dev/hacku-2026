@@ -113,7 +113,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .m2-receipt li{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:7px 0;line-height:1.4}
 .m2-receipt li span:first-child{color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 .m2-receipt li b{font-weight:var(--font-weight-medium);font-variant-numeric:tabular-nums}
-.m2-receipt li.flag{color:var(--color-text-danger)}.m2-receipt li.flag span:nth-child(2)::after{content:' · alcohol';font-size:12px}
+.m2-receipt li.flag{color:var(--color-text-danger)}.m2-receipt li.flag span:nth-child(2)::after{content:' · ' attr(data-flag);font-size:12px}
 .m2-receipt li.m2-charge{color:var(--color-text-secondary)}
 .m2-receipt-total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--color-border);margin-top:8px;padding-top:14px;font-weight:var(--font-weight-medium)}
 .m2-receipt-total b{font-size:var(--font-heading-lg-size);font-weight:var(--font-weight-semibold);letter-spacing:-.02em;font-variant-numeric:tabular-nums}

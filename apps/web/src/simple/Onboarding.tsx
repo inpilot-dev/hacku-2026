@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
-import type { Mandate, Policy, StoreConnection } from '../../../../contracts/types';
+import type { Category, Mandate, PeriodLimit, Policy, StoreConnection } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
-import { money } from '../lib/format';
+import { categoryLabel, money, periodWord } from '../lib/format';
 import StoresPanel from './StoresPanel';
 import './onboarding.css';
 
 /*
- * First run (and every new allowance): set Mum's rules, then connect the stores Kumi may shop at.
+ * First run (and every new allowance): say who it's for and set the rules, then connect the stores Kumi may shop at.
  * Connecting signs in to the user's own store account so Kumi can fill the real cart; it never checks out.
  * The wallet stays the only authority: these screens only submit a policy for the user to confirm.
  */
 
 const DRAFT_ID = 'draft_demo';
 const DELEGATEE_ID = 'agent_student';
+const BLOCKABLE: Category[] = ['alcohol', 'beverage_non_alcoholic', 'pantry', 'produce', 'dairy', 'eggs', 'meat', 'seafood', 'bakery', 'household'];
 const KNOWN_STORES: Record<string, string> = { wellcome: 'Wellcome', marketplace: 'Market Place' };
 
 export function storeName(id: string) {
@@ -31,16 +32,21 @@ type Props = {
   initialRiskReview?: boolean;
   /** Changing rules: start from the current allowance's policy. */
   initialPolicy?: Policy | null;
-  onActivated: (mandate: Mandate, summary: string) => void | Promise<void>;
+  /** Changing rules: keep the name the current allowance is for. */
+  initialHolder?: string;
+  onActivated: (mandate: Mandate, summary: string, holder: string) => void | Promise<void>;
   onBack?: () => void;
 };
 
 const dollars = (minor: number) => String(Math.round(minor / 100));
 
-export default function Onboarding({ token, online, initialRiskReview = false, initialPolicy, onActivated, onBack }: Props) {
+export default function Onboarding({ token, online, initialRiskReview = false, initialPolicy, initialHolder = '', onActivated, onBack }: Props) {
   const start = initialPolicy ?? null;
   const [step, setStep] = useState<'rules' | 'stores'>('rules');
+  const [holder, setHolder] = useState(initialHolder);
+  const [period, setPeriod] = useState<PeriodLimit['period']>(start?.period_limits[0]?.period ?? 'calendar_week');
   const [weekly, setWeekly] = useState(start?.period_limits[0] ? dollars(start.period_limits[0].limit_minor) : '800');
+  const [blocked, setBlocked] = useState<Category[]>(start?.blocked_categories ?? ['alcohol']);
   const [perOrder, setPerOrder] = useState(start ? dollars(start.per_order_limit_minor) : '300');
   const [askOn, setAskOn] = useState(start?.approval_above_minor != null);
   const [askAbove, setAskAbove] = useState(start?.approval_above_minor != null ? dollars(start.approval_above_minor) : '100');
@@ -58,6 +64,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     const orderMinor = Math.round(Number(perOrder) * 100);
     const askMinor = askOn ? Math.round(Number(askAbove) * 100) : null;
     if (!(weeklyMinor > 0) || !(orderMinor > 0) || (askMinor !== null && !(askMinor > 0))) { setError('Use whole HK$ amounts above zero.'); return null; }
+    if (orderMinor > weeklyMinor) { setError(`The most per order can’t be more than the ${periodWord(period)}ly budget.`); return null; }
     return { weeklyMinor, orderMinor, askMinor };
   }
 
@@ -82,9 +89,9 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     const policy: Policy = {
       currency: 'HKD',
       per_order_limit_minor: rules.orderMinor,
-      period_limits: [{ period: 'calendar_week', limit_minor: rules.weeklyMinor, timezone: 'Asia/Hong_Kong' }],
+      period_limits: [{ period, limit_minor: rules.weeklyMinor, timezone: 'Asia/Hong_Kong' }],
       allowed_merchant_ids: merchants,
-      blocked_categories: ['alcohol'],
+      blocked_categories: blocked,
       expires_at: fourWeeksIso(),
       approval_above_minor: rules.askMinor,
       risk_review: riskReviewOn,
@@ -92,10 +99,12 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     setBusy('activate');
     try {
       const names = merchants.map(storeName).join(' and ');
-      const draftId = await freshDraftId(`Weekly allowance for Mum: ${money(rules.orderMinor)} per order and ${money(rules.weeklyMinor)} per week, only from ${names}, no alcohol.`);
+      const per = periodWord(period);
+      const never = blocked.length ? `no ${blocked.map((c) => categoryLabel(c).toLowerCase()).join(', ')}` : 'nothing blocked';
+      const draftId = await freshDraftId(`Allowance for ${holder.trim() || 'me'}: ${money(rules.orderMinor)} per order and ${money(rules.weeklyMinor)} per ${per}, only from ${names}, ${never}.`);
       const result = await api.confirm(token, { draft_id: draftId, policy });
       sessionStorage.removeItem('mandate-idempotency-confirm-draft-demo');
-      await onActivated(result, `Allowance on: ${money(rules.weeklyMinor)}/week, ${money(rules.orderMinor)}/order at ${names}`);
+      await onActivated(result, `Allowance on: ${money(rules.weeklyMinor)}/${per}, ${money(rules.orderMinor)}/order at ${names}`, holder.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The wallet could not switch this on.');
     } finally { setBusy(''); }
@@ -105,29 +114,36 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
 
   return <div className="m2-setup-form ob">
     <ol className="ob-steps" aria-label="Setup steps">
-      <li className={step === 'rules' ? 'on' : 'done'}><i>{step === 'rules' ? 1 : <Check size={12} />}</i>Mum’s rules</li>
-      <li className={step === 'stores' ? 'on' : ''}><i>2</i>Her stores</li>
+      <li className={step === 'rules' ? 'on' : 'done'}><i>{step === 'rules' ? 1 : <Check size={12} />}</i>The rules</li>
+      <li className={step === 'stores' ? 'on' : ''}><i>2</i>Stores</li>
     </ol>
     {error && <p className="ob-error" role="alert">{error}</p>}
 
     {step === 'rules' ? <>
-      <h2>Mum’s rules</h2>
-      <label className="m2-ledger-row"><span>Weekly budget</span><b>HK$<input inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} aria-label="Weekly budget in HK$" /></b></label>
+      <h2>The rules</h2>
+      <label className="m2-ledger-row"><span>Who it’s for</span><b><input className="ob-holder" value={holder} maxLength={40} placeholder="Me" onChange={(e) => setHolder(e.target.value)} aria-label="Who this allowance is for (leave blank for yourself)" /></b></label>
+      <div className="m2-ledger-row"><span>Budget resets</span><div className="ob-seg" role="group" aria-label="Budget period">
+        {(['calendar_week', 'calendar_month'] as const).map((p) => <button key={p} type="button" aria-pressed={period === p} className={period === p ? 'on' : ''} onClick={() => setPeriod(p)}>{p === 'calendar_week' ? 'Weekly' : 'Monthly'}</button>)}
+      </div></div>
+      <label className="m2-ledger-row"><span>{period === 'calendar_month' ? 'Monthly' : 'Weekly'} budget</span><b>HK$<input inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} aria-label={`${period === 'calendar_month' ? 'Monthly' : 'Weekly'} budget in HK$`} /></b></label>
       <label className="m2-ledger-row"><span>Most per order</span><b>HK$<input inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} aria-label="Maximum per order in HK$" /></b></label>
       <div className="m2-ledger-row"><span>Ask me first</span><Switch on={askOn} label="Ask me first before bigger orders" onChange={() => setAskOn(!askOn)} /></div>
       {askOn && <label className="m2-ledger-row m2-ledger-sub"><span>For orders above</span><b>HK$<input inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>}
       <div className="m2-ledger-row"><span>Review unusual purchases</span><Switch on={riskReviewOn} label="Review unusual purchases" onChange={() => setRiskReviewOn(!riskReviewOn)} /></div>
       {riskReviewOn && <p className="m2-muted m2-risk-note">Kip can pause first-time or unusually large baskets, new items and sharp price rises. Product listings that try to instruct the agent are always sent for your review.</p>}
-      <div className="m2-ledger-row fixed"><span>Never buy</span><b>Alcohol</b></div>
+      <div className="m2-ledger-row ob-never"><span>Never buy</span><div className="ob-chips" role="group" aria-label="Categories Kip always refuses">
+        {BLOCKABLE.map((c) => { const on = blocked.includes(c); return <button key={c} type="button" aria-pressed={on} className={on ? 'on' : ''}
+          onClick={() => setBlocked((current) => on ? current.filter((x) => x !== c) : [...current, c])}>{categoryLabel(c)}</button>; })}
+      </div></div>
       <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
-      <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next: her stores<ArrowRight size={18} /></button>
+      <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next: stores<ArrowRight size={18} /></button>
       {onBack && <button className="m2-link" onClick={onBack}>Back</button>}
     </> : <>
       <h2>Where Kumi may shop</h2>
-      <p className="m2-muted ob-small">Sign in to Mum’s own store accounts so Kumi can put the basket straight into the real cart. Kumi never checks out: Kip still has to approve every purchase against these rules.</p>
+      <p className="m2-muted ob-small">Sign in to the store accounts the shopping is for, so Kumi can put the basket straight into the real cart. Kumi never checks out: Kip still has to approve every purchase against these rules.</p>
       <StoresPanel token={token} online={online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} onStores={setStores} />
       <p className="m2-muted ob-small">{connectedCount ? `Kumi will fill your real cart at ${connectedCount} connected store${connectedCount > 1 ? 's' : ''}.` : 'No store connected yet: Kumi can still price baskets from the store snapshot, but not fill a real cart.'}</p>
-      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : start ? 'Replace the allowance' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
+      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : start ? 'Replace the allowance' : 'Switch on the card'}<ArrowRight size={18} /></button>
       <button className="m2-link" onClick={() => setStep('rules')}>Back to rules</button>
     </>}
   </div>;

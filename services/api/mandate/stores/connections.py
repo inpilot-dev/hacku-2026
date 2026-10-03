@@ -26,7 +26,7 @@ from mandate.payments.clock import iso
 from mandate.payments.errors import conflict, not_found
 
 from .registry import STORES, SuperwebStore
-from .steel import StoreBrowserError
+from .steel import ScamSiteError, StoreBrowserError
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / ".data" / "stores"
 LOGIN_TIMEOUT_S = 10 * 60
@@ -97,6 +97,9 @@ class StoreConnections:
             window, started = pending
             try:
                 state = self.browser.poll_login(window, store)
+            except ScamSiteError as exc:
+                self._finish(key)
+                return self._view(store, "not_connected", message=f"{exc} Sign-in stopped; nothing was saved.")
             except StoreBrowserError as exc:
                 return self._view(store, "awaiting_login", message=f"Waiting for sign-in ({exc}).")
             if state is not None:

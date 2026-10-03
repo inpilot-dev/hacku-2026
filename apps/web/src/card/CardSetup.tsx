@@ -5,6 +5,7 @@ import ReactiveCharacter from '../components/ReactiveCharacter';
 import type { CardAuthorization, Mandate, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
+import { holderName, possessive } from '../simple/holder';
 
 /*
  * Virtual card setup, in the simple flow's look: the wallet issues the card when an allowance is confirmed, so this
@@ -100,7 +101,7 @@ export default function CardSetup() {
             <div className="m2-vcard-chip"><i /><Wifi size={22} strokeWidth={1.75} /></div>
             <div className="m2-vcard-number">•••• •••• •••• {card.last4}</div>
             <div className="m2-vcard-foot">
-              <span><small>Card holder</small>Mum’s groceries</span>
+              <span><small>Card holder</small>{possessive(holderName(mandateId))} groceries</span>
               <span><small>Valid thru</small>{expiry}</span>
               <b>{card.network === 'mastercard' ? 'mastercard' : 'VISA'}</b>
             </div>
