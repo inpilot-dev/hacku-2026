@@ -72,7 +72,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .frozen .m2-card-amount b{color:var(--color-text-tertiary)}
 .m2-meter{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;margin-bottom:10px}
 .m2-meter i{height:6px;border-radius:var(--radius-full);background:var(--gray-150)}.m2-meter i.on{background:var(--green-500)}
-.m2-card-foot{display:flex;justify-content:space-between;font-size:var(--font-text-sm-size);color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
+.m2-card-foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;white-space:nowrap;font-size:var(--font-text-sm-size);color:var(--color-text-secondary);font-variant-numeric:tabular-nums}
 .m2-card-sticker{position:absolute;top:14px;right:14px}
 .m2-card-sticker .m2-sticker{background:transparent;width:96px!important;height:96px!important}
 .m2-rules{margin:0;padding:4px 20px;border-radius:var(--radius-3xl);box-shadow:inset 0 0 0 1px var(--color-border)}
@@ -107,6 +107,7 @@ button:disabled{cursor:not-allowed;opacity:.4}
 /* Order summary */
 .m2-receipt{position:relative;padding:calc(var(--spacing)*5);border-radius:var(--radius-2xl);background:var(--color-surface-secondary);font-size:var(--font-text-sm-size)}
 .m2-receipt-head{display:flex;gap:12px;justify-content:space-between;font-size:12px;color:var(--color-text-tertiary);padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);margin-bottom:6px;padding-right:110px}
+.m2-receipt-head span:last-child{white-space:nowrap}
 .m2-receipt ul{list-style:none;margin:0;padding:0}
 .m2-receipt li{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:7px 0;line-height:1.4}
 .m2-receipt li span:first-child{color:var(--color-text-tertiary);font-variant-numeric:tabular-nums}
@@ -148,6 +149,32 @@ button:disabled{cursor:not-allowed;opacity:.4}
 .m2-fine-print p{margin:0 0 8px}.m2-fine-print b{color:var(--color-text);font-weight:var(--font-weight-semibold)}.m2-fine-print a{color:var(--color-text);font-weight:var(--font-weight-medium)}
 
 @media(max-width:480px){.m2-panel{padding:20px}.m2-card{padding:20px}.m2-setup-form{padding:20px}.m2-pick-price{display:none}.m2-card-sticker .m2-sticker{width:76px!important;height:76px!important}}
+/* Phones: tighter top so Kumi's panel starts higher, the status badge clear of Kip, smaller panel
+   mascots, receipt stamp above the header instead of reserving a column for it, two-line shelf titles,
+   stacked Speak / Ask buttons, and the pay button pinned to the bottom while the basket scrolls. */
+@media(max-width:480px){
+  .m2-top{margin-bottom:24px}
+  .m2-grid{row-gap:16px}
+  .m2-card-amount{margin:20px 0 14px}
+  .m2-rules div{padding:10px 0}
+  .m2-checkout>.m2-cta{position:sticky;bottom:12px;z-index:1;box-shadow:var(--shadow-300)}
+  .m2-link{min-height:44px}
+  .m2-card-top{flex-wrap:wrap;padding-right:70px}
+  .m2-panel-head .m2-sticker{width:72px!important;height:72px!important}
+  .m2-receipt{display:flex;flex-direction:column;padding:16px}
+  .m2-receipt-head{padding-right:0}
+  .m2-stamp{position:static;order:-1;align-self:flex-start;margin-bottom:10px}
+  .m2-shelf-title{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .m2-ask-actions{flex-direction:column}
+  .m2-mic{justify-content:center}
+}
+/* Touch: bigger steppers, and a press state instead of the grey tap flash (hover never fires there). */
+@media(pointer:coarse){
+  .m2-qty button{width:36px;height:36px}
+  button{-webkit-tap-highlight-color:transparent}
+  .m2-cta,.m2-ghost,.m2-freeze,.m2-pick{transition:background .15s,transform .1s}
+  :is(.m2-cta,.m2-ghost,.m2-freeze,.m2-pick):not(:disabled):active{transform:scale(.98)}
+}
 @media(prefers-reduced-motion:reduce){.m2-bob,.m2-dots i,.m2-stamp{animation:none}}
 
 /* On/off switch */
