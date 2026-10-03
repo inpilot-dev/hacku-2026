@@ -9,6 +9,8 @@ from mandate.payments.clock import iso
 from mandate.payments.dev_app import create_app
 from mandate.payments.drafts import InMemoryDrafts
 from mandate.agent.catalog_routes import build_catalog_router
+from mandate.agent.run_routes import build_agent_run_router
+from mandate.agent.runs import AgentRuns
 from mandate.integration.demo_routes import build_demo_router
 
 
@@ -25,6 +27,7 @@ def build_app():
     app.version = "0.1.0"
     app.include_router(build_demo_router(wallet), prefix="/api/v1")
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")
+    app.include_router(build_agent_run_router(AgentRuns(wallet)), prefix="/api/v1")
 
     @app.get("/api/v1/health")
     def health():

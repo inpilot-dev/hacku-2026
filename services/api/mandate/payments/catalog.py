@@ -67,6 +67,10 @@ class Catalog:
         evidence = [copy.deepcopy(e) for e in self._data["evidence"] if e["id"] in wanted]
         return {"products": products, "evidence": evidence}
 
+    def delivery_context_ids(self, merchant_id: str) -> list[str]:
+        """IDs of the merchant's observed delivery contexts, in file order (read-only)."""
+        return [c["id"] for c in self._data["delivery_contexts"] if c["merchant_id"] == merchant_id]
+
     def merchant(self, merchant_id: str) -> dict:
         merchant = self._data["merchants"].get(merchant_id)
         if merchant is None:
