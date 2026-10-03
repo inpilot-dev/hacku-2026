@@ -490,7 +490,7 @@ function App() {
           token={token} mandateId={mandate?.id ?? ''} mandateStatus={mandate?.status ?? null}
           products={products} storeLabel={storeLabel} evidence={catalog?.evidence ?? []} quantities={quantity} onChange={changeQuantity}
           quote={quote} onQuoteChange={acceptAgentQuote} busy={busy} active={Boolean(active)}
-          onConfirm={() => mandate ? setView('wallet') : setShowMandateReview(true)}
+          onConfirm={() => active ? setView('wallet') : setShowMandateReview(true)}
           onBuildQuote={() => void buildQuote()} onRefreshQuote={(oldQuote) => void refreshQuote(oldQuote)}
           onEditRefusedBasket={editRefusedBasket} onPurchase={() => void completeDemoPurchase()}
           onReconcile={(savedQuote) => void reconcileCheckout(savedQuote)} paymentResult={paymentResult}
@@ -542,7 +542,7 @@ function Overview({ token, mandate, active, spentRatio, currentBudget, onShop, o
   }, [token, activityRefresh]);
 
   return <>
-    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> YOUR FAMILY WALLET</div><h1>Everyday spending,<br className="mobile-break" /> with a little more peace of mind.</h1><p>Give someone you trust room to shop, with clear limits you stay in control of.</p></div><button className="button button-primary" onClick={active ? onShop : mandate ? onWallet : onSetup} disabled={busy === 'mandate'}>{busy === 'mandate' ? <span className="spinner" /> : active ? <ShoppingBasket size={17} /> : <Shield size={17} />}{active ? 'Start a grocery order' : mandate ? 'Review wallet status' : 'Set up family spending'}</button></div>
+    <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> YOUR FAMILY WALLET</div><h1>Everyday spending,<br className="mobile-break" /> with a little more peace of mind.</h1><p>Give someone you trust room to shop, with clear limits you stay in control of.</p></div><button className="button button-primary" onClick={active ? onShop : onSetup} disabled={busy === 'mandate'}>{busy === 'mandate' ? <span className="spinner" /> : active ? <ShoppingBasket size={17} /> : <Shield size={17} />}{active ? 'Start a grocery order' : mandate ? 'Create a new allowance' : 'Set up family spending'}</button></div>
     <section className="summary-grid">
       <div className="summary-card balance-card"><div className="card-label"><span>AVAILABLE THIS WEEK</span><span className="icon-bubble green"><WalletCards size={17} /></span></div><strong className="balance-amount">{currentBudget ? money(currentBudget.available_minor) : '—'}</strong><div className="metric-foot"><span>{currentBudget ? `${money(currentBudget.paid_minor)} spent` : 'Confirm a mandate to activate a budget'}</span><span className="trend"><ArrowDownRight size={14} /> live wallet</span></div><div className="progress-track"><span style={{ width: `${spentRatio}%` }} /></div><div className="progress-meta"><span>{currentBudget ? `${spentRatio}% used` : 'No active allowance'}</span><span>{currentBudget ? `of ${money(currentBudget.limit_minor)}` : 'Weekly limit'}</span></div></div>
       <div className="summary-card"><div className="card-label"><span>ACTIVE PERMISSIONS</span><span className="icon-bubble lavender"><LockKeyhole size={17} /></span></div><strong className="stat-number">{active ? '01' : '00'}</strong><div className="metric-foot"><span>{active ? 'Weekly grocery allowance' : mandate?.status === 'revoked' ? 'Access revoked' : mandate?.status === 'expired' ? 'Allowance expired' : 'No spending rules yet'}</span><span className={`status-tag ${active ? 'status-green' : 'status-muted'}`}><i />{mandate?.status ?? 'Not set up'}</span></div></div>
@@ -561,7 +561,7 @@ function Overview({ token, mandate, active, spentRatio, currentBudget, onShop, o
 
 function MandateOverviewContent({ mandate, active, busy, onSetup, onWallet, onRevoke }: { mandate: Mandate | null; active: boolean; busy: string; onSetup: () => void; onWallet: () => void; onRevoke: () => void }) {
   if (!mandate) return <div className="empty-state"><div className="empty-illustration"><Shield size={25} /></div><div><strong>No spending rules yet</strong><p>Set a weekly cap, choose a shop and decide what’s off limits. You can change or revoke access any time.</p><button className="text-button" onClick={onSetup} disabled={busy === 'mandate'}>{busy === 'mandate' ? 'Setting up…' : 'Create your first allowance'} <ArrowUpRight size={14} /></button></div></div>;
-  return <><div className="rule-grid"><Rule icon={<WalletCards size={17} />} label="Per order" value={money(mandate.policy.per_order_limit_minor)} detail="Maximum basket total" /><Rule icon={<Activity size={17} />} label="Weekly budget" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Resets every Monday" /><Rule icon={<Ban size={17} />} label="Not allowed" value={mandate.policy.blocked_categories.join(', ')} detail="Blocked at checkout" /><Rule icon={<Clock3 size={17} />} label="Ends on" value={shortDate(mandate.policy.expires_at)} detail="Permission expiry" /></div>{active ? <div className="panel-footer"><div className="people-line"><span className="person-avatar caregiver">FO</span><span className="connector-line" /><span className="person-avatar delegate">A</span><span>You <span className="muted">authorize the assigned shopping agent</span></span></div><button className="text-button danger-text" onClick={onRevoke} disabled={busy === 'revoke'}>{busy === 'revoke' ? 'Revoking…' : 'Revoke access'}</button></div> : <div className="inactive-mandate"><AgentCharacter name="kip" state="revoked" label={mandate.status === 'expired' ? 'Kip marks this allowance expired' : 'Kip marks this allowance revoked'} /><div><strong>{mandate.status === 'expired' ? 'This allowance has expired' : 'This allowance was revoked'}</strong><p>The saved rules remain visible, but the wallet will not authorize spending with this mandate.</p><button className="text-button" onClick={onWallet}>{busy === 'mandate' ? 'Loading…' : 'Review wallet status'} <ArrowUpRight size={14} /></button></div></div>}</>;
+  return <><div className="rule-grid"><Rule icon={<WalletCards size={17} />} label="Per order" value={money(mandate.policy.per_order_limit_minor)} detail="Maximum basket total" /><Rule icon={<Activity size={17} />} label="Weekly budget" value={money(mandate.policy.period_limits[0]?.limit_minor ?? 0)} detail="Resets every Monday" /><Rule icon={<Ban size={17} />} label="Not allowed" value={mandate.policy.blocked_categories.join(', ')} detail="Blocked at checkout" /><Rule icon={<Clock3 size={17} />} label="Ends on" value={shortDate(mandate.policy.expires_at)} detail="Permission expiry" /></div>{active ? <div className="panel-footer"><div className="people-line"><span className="person-avatar caregiver">FO</span><span className="connector-line" /><span className="person-avatar delegate">A</span><span>You <span className="muted">authorize the assigned shopping agent</span></span></div><button className="text-button danger-text" onClick={onRevoke} disabled={busy === 'revoke'}>{busy === 'revoke' ? 'Revoking…' : 'Revoke access'}</button></div> : <div className="inactive-mandate"><AgentCharacter name="kip" state="revoked" label={mandate.status === 'expired' ? 'Kip marks this allowance expired' : 'Kip marks this allowance revoked'} /><div><strong>{mandate.status === 'expired' ? 'This allowance has expired' : 'This allowance was revoked'}</strong><p>The saved rules remain visible, but the wallet will not authorize spending with this mandate.</p><button className="text-button" onClick={onSetup}>Create a new allowance <ArrowUpRight size={14} /></button><button className="text-button" onClick={onWallet}>{busy === 'mandate' ? 'Loading…' : 'Review wallet status'} <ArrowUpRight size={14} /></button></div></div>}</>;
 }
 
 function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip' | 'kumi' | 'stella'; state: string; label: string; size?: number }) {
@@ -653,8 +653,14 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
       } catch (error) {
         if (disposed) return;
         const status = error instanceof ApiError ? error.status : 0;
-        if ([404, 405].includes(status)) setAgentUnavailable(true);
-        setAgentError([404, 405].includes(status) ? 'Agent-run service is not connected in this checkout. No AI shopping run was performed.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
+        if (status === 404) {
+          if (storageKey) sessionStorage.removeItem(storageKey);
+          setAgentRun(null); setAgentRunId('');
+          setAgentError('This shopping run is no longer available (the API may have restarted). Start a new run.');
+          return;
+        }
+        if (status === 405) setAgentUnavailable(true);
+        setAgentError(status === 405 ? 'Agent-run service is not connected in this checkout. No AI shopping run was performed.' : error instanceof Error ? error.message : 'Could not refresh agent progress.');
         if (![401, 403, 404, 405].includes(status)) timer = window.setTimeout(() => void poll(), 4000);
       }
     }
@@ -717,7 +723,7 @@ function Shopping({ token, mandateId, mandateStatus, products, storeLabel, evide
 
   return <>
     <div className="page-heading shopping-heading"><div><div className="eyebrow"><span className="eyebrow-dot" /> WEEKLY SHOP</div><h1>What’s on your list?</h1><p>Ask the connected agent to build a basket or choose catalog items yourself. The wallet still checks the final quote against your rules.</p></div><span className="merchant-chip"><span className="merchant-logo">{storeLabel[0] ?? '—'}</span><span><strong>{storeLabel}</strong><small>{catalogIsPlaceholder ? 'Sample catalog' : 'Observed prices · Click & Collect'}</small></span><ChevronDown size={15} /></span></div>
-    {!active && <div className="inline-alert">{mandateStatus && <AgentCharacter name="kip" state="revoked" label={mandateStatus === 'expired' ? 'Kip shows the allowance has expired' : 'Kip shows spending access has been revoked'} size={40} />}<span><strong>{mandateStatus === 'expired' ? 'This allowance has expired.' : mandateStatus === 'revoked' ? 'Spending access was revoked.' : 'Set up your allowance before shopping.'}</strong> The wallet needs an active allowance before it can create an agent run or quote.</span><button className="text-button" onClick={onConfirm}>{mandateStatus ? 'Review wallet status' : 'Set up now'} <ArrowUpRight size={14} /></button></div>}
+    {!active && <div className="inline-alert">{mandateStatus && <AgentCharacter name="kip" state="revoked" label={mandateStatus === 'expired' ? 'Kip shows the allowance has expired' : 'Kip shows spending access has been revoked'} size={40} />}<span><strong>{mandateStatus === 'expired' ? 'This allowance has expired.' : mandateStatus === 'revoked' ? 'Spending access was revoked.' : 'Set up your allowance before shopping.'}</strong> The wallet needs an active allowance before it can create an agent run or quote.</span><button className="text-button" onClick={onConfirm}>{mandateStatus ? 'Create a new allowance' : 'Set up now'} <ArrowUpRight size={14} /></button></div>}
     <form className="panel agent-request-panel" onSubmit={(event) => void startAgentRun(event)}>
       <div className="agent-request-heading"><AgentCharacter name="kumi" state={paymentResult ? 'happy' : agentRun?.status === 'failed' || agentRun?.status === 'refused' ? 'sad' : 'idle'} label="Kumi, shopping agent" /><div><div className="eyebrow">SHOPPING AGENT</div><h2>Build a basket from your list</h2></div></div>
       <label>Items <small>One item per line; each starts at quantity 1.</small><textarea value={shoppingListText} onChange={(event) => setShoppingListText(event.target.value)} rows={3} disabled={!active || agentSubmitting || agentWorking} /></label>
@@ -1045,13 +1051,28 @@ function MandateReviewModal({ token, initial, storeId, storeLabel, busy, onClose
     if (blockAlcohol) blockedCategories.push('alcohol');
     const next: Policy = { ...basePolicy, per_order_limit_minor: perOrder, period_limits: basePolicy.period_limits.map((period, index) => index === 0 ? { ...period, limit_minor: weekly } : period), expires_at: `${expires}T23:59:59+08:00`, blocked_categories: blockedCategories, approval_above_minor: approvalMinor, velocity_limit: velocityEnabled ? { max_purchases: velocityMax, window_minutes: velocityWindow } : null };
     setError('');
-    await onConfirm(next, draftId);
+    let confirmDraftId = draftId;
+    if (!draftResponse) {
+      // A draft can be confirmed only once, so each activation registers a fresh one.
+      // The structured rules above are what gets confirmed; the draft's proposal is not applied.
+      try {
+        const fresh = await api.draft(token, { text: draftText.trim() || 'Rules set in the review form.', delegatee_id: 'agent_student' });
+        clearIdempotency('mandate-draft');
+        confirmDraftId = fresh.draft_id;
+      } catch (failure) {
+        if (!(failure instanceof ApiError && [404, 405].includes(failure.status))) {
+          setError(failure instanceof Error ? failure.message : 'Could not create a draft for these rules.');
+          return;
+        }
+      }
+    }
+    await onConfirm(next, confirmDraftId);
   }
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy && !draftBusy) onClose(); }}><section className="settings-modal mandate-modal" role="dialog" aria-modal="true" aria-labelledby="mandate-review-title"><div className="modal-heading"><span className="settings-icon"><Shield size={18} /></span><button className="icon-button" aria-label="Close mandate review" onClick={onClose} disabled={busy || draftBusy}><X size={18} /></button></div><div className="eyebrow">REVIEW BEFORE ACTIVATION</div><h2 id="mandate-review-title">Set the spending boundaries</h2><p>Interpretation is only a proposal. Check every rule and explicitly confirm it; the assistant cannot raise your limits later.</p>
     <section className="draft-interpreter" aria-label="Interpret a natural-language mandate"><label>Your request<textarea value={draftText} onChange={(event) => editDraftText(event.target.value)} rows={3} disabled={busy || draftBusy} /></label><button type="button" className="button button-secondary" onClick={() => void interpretRequest()} disabled={busy || draftBusy}>{draftBusy ? <span className="spinner spinner-green" /> : <Sparkles size={15} />}{draftBusy ? 'Interpreting request…' : 'Interpret request'}</button>
       {draftBusy && <div className="agent-inline"><AgentCharacter name="bean" state="thinking" label="Bean is interpreting the spending request" /><span>Bean is turning your words into a draft. You’ll review every rule before activation.</span></div>}
       {draftResponse && <div className="draft-result"><AgentCharacter name="bean" state="idle" label="Bean, mandate proposal ready" /><strong>Proposed by interpreter</strong><p>{draftResponse.summary}</p><small>Assigned agent: {draftResponse.delegatee_id} · Draft expires {shortDate(draftResponse.expires_at)}</small>{draftResponse.ambiguities.length > 0 && <div className="draft-ambiguities"><b>Clarify before confirming</b>{draftResponse.ambiguities.map((item) => <p key={`${item.field}-${item.question}`}><strong>{item.field}:</strong> {item.question}</p>)}</div>}</div>}
-      {!draftResponse && <small className="draft-seed-note">Until interpretation returns, the text above is not applied; confirmation uses the structured rules and the local sample draft.</small>}
+      {!draftResponse && <small className="draft-seed-note">Until interpretation returns, the text above is not applied; confirmation uses the structured rules below.</small>}
       {draftError && <div className="form-error" role="alert">{draftError}</div>}
     </section>
     <form onSubmit={(event) => void submit(event)}>
