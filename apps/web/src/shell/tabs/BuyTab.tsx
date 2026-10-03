@@ -69,7 +69,7 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
     <HistoryControls hidden={hidden} expanded={older > 0} onMore={() => setOlder((count) => count + 3)} onLatest={() => setOlder(0)} />
     {p.refreshError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{p.refreshError}</span><Button variant="outline" size="sm" onClick={p.retry}>Retry</Button></AlertDescription></Alert>}
     <div className="space-y-6">
-      {p.purchases.slice(hidden).map((purchase) => <Thread key={purchase.id} purchase={purchase} acting={p.acting === purchase.id}
+      {p.purchases.slice(hidden).map((purchase) => <Thread key={purchase.id} purchase={purchase} acting={p.acting === purchase.id || p.uncertain.includes(purchase.id)} checking={p.uncertain.includes(purchase.id)}
         onApprove={() => void p.approve(purchase)} onCancel={() => void p.cancel(purchase)} />)}
       <div ref={end} />
     </div>
@@ -101,7 +101,7 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
   </div>;
 }
 
-function Thread({ purchase, acting, onApprove, onCancel }: { purchase: Purchase; acting: boolean; onApprove: () => void; onCancel: () => void }) {
+function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase: Purchase; acting: boolean; checking: boolean; onApprove: () => void; onCancel: () => void }) {
   const working = isWorking(purchase);
   const steps = purchase.events;
   return <section className="space-y-3" aria-label={`Purchase: ${purchase.request}`}>
@@ -143,7 +143,7 @@ function Thread({ purchase, acting, onApprove, onCancel }: { purchase: Purchase;
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-2 sm:flex-row">
         <Button className="min-h-11 flex-1" onClick={onApprove} disabled={acting}>
-          {acting ? 'Paying…' : `Approve and pay ${purchase.order.total_text ?? money(purchase.order.total_minor)}`}</Button>
+          {checking ? 'Checking status…' : acting ? 'Submitting…' : `Approve and pay ${purchase.order.total_text ?? money(purchase.order.total_minor)}`}</Button>
         <Button variant="outline" className="min-h-11" onClick={onCancel} disabled={acting}>Cancel</Button>
       </CardFooter>
       {!purchase.live_payments && <p className="px-6 text-xs text-muted-foreground">Sandbox: the card is filled in but the order is not placed.</p>}

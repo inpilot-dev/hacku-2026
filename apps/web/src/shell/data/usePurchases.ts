@@ -23,6 +23,11 @@ function savedIds(): string[] {
 export function usePurchases() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [sending, setSending] = useState(false);
+  const [uncertain, setUncertain] = useState<string[]>([]);
+  const uncertainRef = useRef(uncertain);
+  uncertainRef.current = uncertain;
+  const actionRef = useRef('');
+  const actionVersion = useRef(0);
   const [acting, setActing] = useState('');  // purchase id with an approve/cancel in flight
   const [error, setError] = useState('');
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -55,7 +60,7 @@ export function usePurchases() {
   }, [retryTick]);
 
   // The next poll is scheduled even when an individual status request fails.
-  const workingIds = purchases.filter(isWorking).map((p) => p.id).join(',');
+  const workingIds = purchases.filter((p) => isWorking(p) || p.status === 'awaiting_approval' || uncertain.includes(p.id)).map((p) => p.id).join(',');
   useEffect(() => {
     if (!workingIds) return;
     let cancelled = false;
@@ -64,13 +69,20 @@ export function usePurchases() {
       let failed = false;
       for (const id of workingIds.split(',')) {
         if (cancelled) return;
+        if (actionRef.current === id) continue;
+        const version = actionVersion.current;
         try {
           const next = await api.purchase(TOKEN, id);
-          if (!cancelled) upsert(next);
+          if (!cancelled && version === actionVersion.current && actionRef.current !== id) {
+            upsert(next);
+            uncertainRef.current = uncertainRef.current.filter((pending) => pending !== id);
+            setUncertain(uncertainRef.current);
+          }
         } catch (error) {
+          if (version !== actionVersion.current || actionRef.current === id) continue;
           if (error instanceof ApiError && error.status === 404) {
             const previous = latest.current.find((p) => p.id === id);
-            if (previous && previous.status !== 'paying' && !cancelled) upsert({ ...previous, status: 'failed', message: 'This search is no longer available. Please start a new search.' });
+            if (previous && previous.status !== 'paying' && !uncertainRef.current.includes(id) && !cancelled) upsert({ ...previous, status: 'failed', message: 'This search is no longer available. Please start a new search.' });
             else failed = true;
           } else failed = true;
         }
@@ -86,7 +98,7 @@ export function usePurchases() {
 
   async function start(text: string): Promise<boolean> {
     const request = text.trim();
-    if (!request || sending || restoring || latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return false;
+    if (!request || sending || restoring || actionRef.current || uncertainRef.current.length || latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return false;
     setSending(true); setError(''); setNeedsProfile(false);
     try {
       const created = await api.startPurchase(TOKEN, request);
@@ -100,29 +112,42 @@ export function usePurchases() {
     } finally { setSending(false); }
   }
 
-  async function approve(p: Purchase) {
-    if (!p.order || acting) return;
+  async function submitAction(p: Purchase, operation: () => Promise<Purchase>) {
+    if (actionRef.current || uncertainRef.current.includes(p.id)) return;
+    actionVersion.current += 1;
+    actionRef.current = p.id;
     setActing(p.id); setError('');
-    try { upsert(await api.approvePurchase(TOKEN, p.id, p.order.total_minor)); } catch (err) {
-      setError(err instanceof Error ? err.message : 'The approval was not accepted.');
-      try { upsert(await api.purchase(TOKEN, p.id)); } catch { /* shown as is */ }
-    } finally { setActing(''); }
+    try { upsert(await operation()); }
+    catch (err) {
+      // A lost response does not say whether the server accepted the action.
+      // Read the authoritative status before offering another approval or cancellation.
+      try {
+        const current = await api.purchase(TOKEN, p.id);
+        upsert(current);
+        if (current.status === p.status) setError(err instanceof Error ? err.message : 'The request was not accepted.');
+      } catch {
+        uncertainRef.current = [...uncertainRef.current, p.id];
+        setUncertain(uncertainRef.current);
+        setRefreshError('Connection interrupted. Checking the purchase status before you can continue…');
+      }
+    } finally { actionRef.current = ''; setActing(''); }
+  }
+
+  async function approve(p: Purchase) {
+    if (!p.order) return;
+    await submitAction(p, () => api.approvePurchase(TOKEN, p.id, p.order!.total_minor));
   }
 
   async function cancel(p: Purchase) {
-    if (acting) return;
-    setActing(p.id); setError('');
-    try { upsert(await api.cancelPurchase(TOKEN, p.id)); } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not cancel.');
-    } finally { setActing(''); }
+    await submitAction(p, () => api.cancelPurchase(TOKEN, p.id));
   }
 
   function clear() {
-    if (latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return;
+    if (actionRef.current || uncertainRef.current.length || latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return;
     sessionStorage.removeItem(IDS_KEY);
     setPurchases([]); setError(''); setNeedsProfile(false); setRefreshError('');
   }
 
-  const busy = restoring || purchases.some(isWorking) || purchases.some((p) => p.status === 'awaiting_approval');
-  return { purchases, refreshError, restoring, retry: () => setRetryTick((value) => value + 1), start, approve, cancel, clear, sending, acting, error, setError, needsProfile, setNeedsProfile, busy };
+  const busy = restoring || uncertain.length > 0 || purchases.some(isWorking) || purchases.some((p) => p.status === 'awaiting_approval');
+  return { purchases, uncertain, refreshError, restoring, retry: () => setRetryTick((value) => value + 1), start, approve, cancel, clear, sending, acting, error, setError, needsProfile, setNeedsProfile, busy };
 }

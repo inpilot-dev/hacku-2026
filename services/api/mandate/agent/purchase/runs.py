@@ -219,17 +219,21 @@ class PurchaseRuns:
     def _find(self, run_id: str, spec: PurchaseSpec) -> list[Assessment]:
         """Read pages in parallel: each worker has its own tab, loads a page and has the model read it."""
         queue: list[str] = []
+        search_error: SearchError | None = None
         for query in (f"{spec.search_query} Hong Kong buy online", f"{spec.search_query} 香港 網購",
                       f"buy {spec.item} online Hong Kong price"):
             try:
                 found = [r["url"] for r in self.search(query)]
             except SearchError as exc:
+                search_error = exc
                 self._update(run_id, f"A web search failed: {exc}")
                 continue
             # Interleave, so every query's best results come early.
             queue = [u for pair in zip_longest(queue, [u for u in found if u not in queue]) for u in pair if u]
         if not queue:
-            raise SearchError("The web search returned nothing.")
+            if search_error is not None:
+                raise search_error
+            raise SearchError("No shops appeared in the search results. Try a different product description.")
         self._update(run_id, f"Found {len(queue)} pages in web searches.")
         seen: set[str] = set()
         matches: list[Assessment] = []

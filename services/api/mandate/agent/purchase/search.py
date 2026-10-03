@@ -23,13 +23,19 @@ class SearchError(Exception):
 
 def web_search(query: str, client: httpx.Client | None = None, limit: int = 10) -> list[dict]:
     """[{url, title}] of organic results, ads and non-shop sites left out."""
+    owns_client = client is None
     client = client or httpx.Client(timeout=20)
     try:
         response = client.post(SEARCH_URL, data={"q": query, "kl": "hk-tzh"}, headers={"User-Agent": UA})
     except httpx.HTTPError as exc:
-        raise SearchError("Web search could not be reached.") from exc
+        raise SearchError("Web search could not be reached. Please try again later.") from exc
+    finally:
+        if owns_client:
+            client.close()
     if response.is_error:
         raise SearchError(f"Web search answered HTTP {response.status_code}.")
+    if response.status_code == 202 or any(marker in response.text.lower() for marker in ("challenge-form", "anomaly.js", "anomaly-modal")):
+        raise SearchError("The search provider requires a browser verification. Search is temporarily unavailable; please try again later.")
     results, seen = [], set()
     for href, title in RESULT.findall(response.text):
         url = unescape(parse_qs(urlparse(unescape(href)).query).get("uddg", [unescape(href)])[0])
