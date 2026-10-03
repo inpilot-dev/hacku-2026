@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import { categoryLabel, money, periodWord } from '../lib/format';
 import StoresPanel from './StoresPanel';
 import './onboarding.css';
+import MessageList from '../shopping/MessageList';
 
 /*
  * First run (and every new allowance): say who it's for and set the rules, then connect the stores Kumi may shop at.
@@ -42,7 +43,7 @@ const dollars = (minor: number) => String(Math.round(minor / 100));
 
 export default function Onboarding({ token, online, initialRiskReview = false, initialPolicy, initialHolder = '', onActivated, onBack }: Props) {
   const start = initialPolicy ?? null;
-  const [step, setStep] = useState<'rules' | 'stores'>('rules');
+  const [step, setStep] = useState<'rules' | 'stores' | 'review'>('rules');
   const [holder, setHolder] = useState(initialHolder);
   const [period, setPeriod] = useState<PeriodLimit['period']>(start?.period_limits[0]?.period ?? 'calendar_week');
   const [weekly, setWeekly] = useState(start?.period_limits[0] ? dollars(start.period_limits[0].limit_minor) : '800');
@@ -58,6 +59,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     : { wellcome: true, marketplace: true });
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [reviewPolicy, setReviewPolicy] = useState<Policy | null>(null);
 
   function rulesValid() {
     const weeklyMinor = Math.round(Number(weekly) * 100);
@@ -80,7 +82,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
     }
   }
 
-  async function activate() {
+  function prepareReview() {
     setError('');
     const rules = rulesValid();
     if (!rules) { setStep('rules'); return; }
@@ -96,15 +98,26 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
       approval_above_minor: rules.askMinor,
       risk_review: riskReviewOn,
     };
+    setReviewPolicy(policy);
+    setStep('review');
+  }
+
+  async function activate() {
+    if (!reviewPolicy || busy) return;
+    const policy = reviewPolicy;
+    const merchants = policy.allowed_merchant_ids;
+    const orderMinor = policy.per_order_limit_minor;
+    const periodLimit = policy.period_limits[0];
+    setError('');
     setBusy('activate');
     try {
       const names = merchants.map(storeName).join(' and ');
-      const per = periodWord(period);
+      const per = periodWord(periodLimit.period);
       const never = blocked.length ? `no ${blocked.map((c) => categoryLabel(c).toLowerCase()).join(', ')}` : 'nothing blocked';
-      const draftId = await freshDraftId(`Allowance for ${holder.trim() || 'me'}: ${money(rules.orderMinor)} per order and ${money(rules.weeklyMinor)} per ${per}, only from ${names}, ${never}.`);
+      const draftId = await freshDraftId(`Allowance for ${holder.trim() || 'me'}: ${money(orderMinor)} per order and ${money(periodLimit.limit_minor)} per ${per}, only from ${names}, ${never}.`);
       const result = await api.confirm(token, { draft_id: draftId, policy });
       sessionStorage.removeItem('mandate-idempotency-confirm-draft-demo');
-      await onActivated(result, `Allowance on: ${money(rules.weeklyMinor)}/${per}, ${money(rules.orderMinor)}/order at ${names}`, holder.trim());
+      await onActivated(result, `Allowance on: ${money(periodLimit.limit_minor)}/${per}, ${money(orderMinor)}/order at ${names}`, holder.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The wallet could not switch this on.');
     } finally { setBusy(''); }
@@ -115,10 +128,12 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
   return <div className="m2-setup-form ob">
     <ol className="ob-steps" aria-label="Setup steps">
       <li className={step === 'rules' ? 'on' : 'done'}><i>{step === 'rules' ? 1 : <Check size={12} />}</i>The rules</li>
-      <li className={step === 'stores' ? 'on' : ''}><i>2</i>Stores</li>
+      <li className={step === 'stores' ? 'on' : step === 'review' ? 'done' : ''}><i>2</i>Stores</li>
+      <li className={step === 'review' ? 'on' : ''}><i>3</i>Confirm</li>
     </ol>
     {error && <p className="ob-error" role="alert">{error}</p>}
 
+    <MessageList messages={[{ id: `setup-${step}`, speaker: step === 'stores' ? 'kumi' : 'kip', text: step === 'rules' ? 'First, tell me who this is for and set the spending limits. These are draft rules until you confirm.' : step === 'stores' ? 'Choose the stores I may use. Connecting your account lets me add items to its cart; it does not place an order.' : 'Here is the exact permission you are granting. Check every rule before switching it on.' }]} />
     {step === 'rules' ? <>
       <h2>The rules</h2>
       <label className="m2-ledger-row"><span>Who it’s for</span><b><input className="ob-holder" value={holder} maxLength={40} placeholder="Me" onChange={(e) => setHolder(e.target.value)} aria-label="Who this allowance is for (leave blank for yourself)" /></b></label>
@@ -138,14 +153,30 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
       <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
       <button className="m2-cta" onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next: stores<ArrowRight size={18} /></button>
       {onBack && <button className="m2-link" onClick={onBack}>Back</button>}
-    </> : <>
+    </> : step === 'stores' ? <>
       <h2>Where Kumi may shop</h2>
       <p className="m2-muted ob-small">Sign in to the store accounts the shopping is for, so Kumi can put the basket straight into the real cart. Kumi never checks out: Kip still has to approve every purchase against these rules.</p>
       <StoresPanel token={token} online={online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} onStores={setStores} />
       <p className="m2-muted ob-small">{connectedCount ? `Kumi will fill your real cart at ${connectedCount} connected store${connectedCount > 1 ? 's' : ''}.` : 'No store connected yet: Kumi can still price baskets from the store snapshot, but not fill a real cart.'}</p>
-      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : start ? 'Replace the allowance' : 'Switch on the card'}<ArrowRight size={18} /></button>
+      <button className="m2-cta" onClick={prepareReview}>Review permission<ArrowRight size={18} /></button>
       <button className="m2-link" onClick={() => setStep('rules')}>Back to rules</button>
+    </> : reviewPolicy && <>
+      <h2>Review your permission</h2>
+      <dl className="m2-rules">
+        <div><dt>Shopping for</dt><dd>{holder.trim() || 'Me'}</dd></div>
+        <div><dt>Budget</dt><dd>{money(reviewPolicy.period_limits[0].limit_minor)} per {periodWord(reviewPolicy.period_limits[0].period)}</dd></div>
+        <div><dt>Most per order</dt><dd>{money(reviewPolicy.per_order_limit_minor)}, including fees</dd></div>
+        <div><dt>May shop at</dt><dd>{reviewPolicy.allowed_merchant_ids.map(storeName).join(', ')}</dd></div>
+        <div><dt>Must not buy</dt><dd>{reviewPolicy.blocked_categories.map(categoryLabel).join(', ') || 'No categories blocked'}</dd></div>
+        <div><dt>Ask me above</dt><dd>{reviewPolicy.approval_above_minor == null ? 'No extra amount threshold' : money(reviewPolicy.approval_above_minor)}</dd></div>
+        <div><dt>Unusual purchase review</dt><dd>{reviewPolicy.risk_review ? 'On' : 'Off'}</dd></div>
+        <div><dt>Expires</dt><dd>{new Date(reviewPolicy.expires_at).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong' })} HKT</dd></div>
+      </dl>
+      <p className="m2-muted ob-small">You may pause or revoke this permission. The agent cannot increase these limits. Payments in this prototype are simulated; no real funds move.</p>
+      <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Activating…' : start ? 'Confirm and replace permission' : 'Confirm and activate permission'}<Check size={18} /></button>
+      <button className="m2-link" disabled={Boolean(busy)} onClick={() => setStep('stores')}>Edit stores or rules</button>
     </>}
+
   </div>;
 }
 

@@ -40,3 +40,11 @@ Open the URL printed by the script (default `http://127.0.0.1:8000/`). Stopping 
 ## Serve the built site from the API
 
 For a reproducible presentation run without the task runner, build with `npm --prefix apps/web run build`, then invoke `./scripts/run-demo.sh` from the repository root with the project Python interpreter. It starts the same-origin frontend and API and uses the captured catalog unless `MANDATE_CATALOG_PATH` is set explicitly.
+
+## Conversational shopping UI
+
+The default page now presents user requests and real agent progress in a chronological conversation. Existing quote, approval, sandbox payment, cart-sync and receipt controls are rendered in the active conversation card. Enter submits a request; Shift+Enter adds a line. Agent messages are based on the run API rather than simulated milestones. The transcript is session memory and resets on a full reload; receipts remain recoverable from the wallet.
+
+Setup progresses through draft rules, store selection/sign-in, and an explicit review of the exact policy before confirmation. The expiry shown during review is the expiry submitted to the wallet. Existing mobile, profile, card and classic audit routes are retained. The responsive conversation layout shows the conversation first on phones. Retailer cart sync and sandbox payment remain separate operations; simulated payment is not retailer order confirmation.
+
+Remaining integration work: exercise the new setup and refusal flows end to end, inspect mobile rendering, and integrate structured site-risk results when the shared API exposes them to the shopping conversation.
