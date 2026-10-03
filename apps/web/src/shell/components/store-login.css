@@ -1,0 +1,17 @@
+/* The relayed store sign-in (simple/StoreLoginCanvas.tsx) in the shell's look; same class names, scoped. */
+.shell-store-login .ob-login { display: grid; gap: 12px; }
+.shell-store-login .ob-login-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg);
+  background: var(--muted); font-size: 0.875rem; color: var(--muted-foreground); }
+.shell-store-login .ob-lock { font-size: 12px; }
+.shell-store-login .ob-login-screen { position: relative; justify-self: center; max-width: 100%; border-radius: var(--radius-xl);
+  overflow: hidden; background: var(--muted); border: 1px solid var(--border); }
+.shell-store-login .ob-login-screen canvas { display: block; width: 100%; height: auto; touch-action: none; cursor: pointer; opacity: 0; transition: opacity .2s; }
+.shell-store-login .ob-login-screen canvas.live { opacity: 1; }
+.shell-store-login .ob-login-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted-foreground); font-size: 0.875rem; }
+.shell-store-login .ob-login-closed { display: grid; align-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center; background: var(--muted); }
+.shell-store-login .ob-login-screen:has(.ob-login-closed) canvas { opacity: .25; }
+.shell-store-login .ob-typing { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; }
+.shell-store-login .ob-notice, .shell-store-login .ob-small, .shell-store-login .m2-muted { margin: 0; font-size: 0.8125rem; color: var(--muted-foreground); }
+.shell-store-login .ob-connect { min-height: 44px; padding: 8px 16px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-size: 0.875rem; font-weight: 500; }
+.shell-store-login .ob-connect:disabled { opacity: .5; }
+.shell-store-login .m2-link { min-height: 44px; font-size: 0.875rem; color: var(--muted-foreground); text-decoration: underline; text-underline-offset: 3px; }

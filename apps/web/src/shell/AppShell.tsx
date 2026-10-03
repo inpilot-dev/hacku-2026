@@ -4,8 +4,12 @@ import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import AllowanceSetup from './components/AllowanceSetup';
+import { ReceiptDialog } from './components/Receipts';
+import { AccountProvider, useAccount } from './data/account';
+import BuyTab from './tabs/BuyTab';
+import WalletTab from './tabs/WalletTab';
 import './app.css';
 
 /*
@@ -27,13 +31,17 @@ function tabFromHash(): TabId {
 }
 
 export default function AppShell() {
+  return <AccountProvider><TooltipProvider><Shell /></TooltipProvider></AccountProvider>;
+}
+
+function Shell() {
+  const account = useAccount();
   const [tab, setTab] = useState<TabId>(tabFromHash);
-  const [online, setOnline] = useState<boolean | null>(null);
+  const online = account.online;
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash());
     window.addEventListener('hashchange', onHash);
-    api.health().then(() => setOnline(true)).catch(() => setOnline(false));
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
@@ -42,7 +50,7 @@ export default function AppShell() {
     setTab(next as TabId);
   };
 
-  return <TooltipProvider>
+  return <>
     <Tabs value={tab} onValueChange={go} className="min-h-dvh gap-0">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur no-print">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-4 px-4">
@@ -58,24 +66,26 @@ export default function AppShell() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-28 md:pb-12">
-        <TabsContent value="buy"><Placeholder title="Buy anything" /></TabsContent>
+        <TabsContent value="buy"><BuyTab onOpenProfile={() => { go('wallet'); window.setTimeout(() => document.getElementById('delivery')?.scrollIntoView({ behavior: 'smooth' }), 60); }} /></TabsContent>
         <TabsContent value="groceries"><Placeholder title="Groceries" /></TabsContent>
-        <TabsContent value="wallet"><Placeholder title="Wallet" /></TabsContent>
+        <TabsContent value="wallet"><WalletTab /></TabsContent>
       </main>
 
       {/* Phones: a bottom tab bar, clear of the home indicator. */}
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/90 backdrop-blur md:hidden no-print"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <TabsList className="grid h-16 w-full grid-cols-3 rounded-none bg-transparent p-0">
+        <TabsList variant="line" className="grid h-16 w-full grid-cols-3 rounded-none p-0">
           {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id}
-            className="h-full flex-col gap-1 rounded-none text-xs data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground text-muted-foreground">
+            className="h-full min-h-11 flex-col gap-1 rounded-none text-xs after:hidden">
             <Icon className="size-5" />{label}
           </TabsTrigger>)}
         </TabsList>
       </nav>
       <Toaster position="top-center" />
     </Tabs>
-  </TooltipProvider>;
+    <AllowanceSetup open={account.setup !== null} change={account.setup === 'change'} onOpenChange={(open) => { if (!open) account.closeSetup(); }} />
+    <ReceiptDialog />
+  </>;
 }
 
 function Placeholder({ title }: { title: string }) {
