@@ -434,6 +434,7 @@ export default function SimpleApp() {
         note('kip', `Kip blocked ${money(quote.total_minor)}`, 'bad');
       } else if (result.payment?.status === 'completed') {
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
+        rememberReceipt(result.payment.receipt);
         note('kip', `Kip paid ${money(result.payment.receipt.amount_minor)}`, 'good');
       } else if (result.payment?.status === 'refused') {
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
@@ -448,6 +449,7 @@ export default function SimpleApp() {
         try {
           const receipt = await api.paymentByTransaction(TOKEN, transactionId);
           setVerdict({ kind: 'paid', receipt, replayed: true });
+          rememberReceipt(receipt);
         } catch {
           setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
         }
@@ -566,6 +568,17 @@ export default function SimpleApp() {
     setReceiptsOpen(true); setSelectedReceipt(null); setReceiptDetailError(''); void loadReceipts();
   }
 
+  function viewReceipt(record: ReceiptRecord) {
+    setReceiptsOpen(true); setReceiptsError('');
+    void loadReceipts();
+    void openReceipt(record);
+  }
+
+  function rememberReceipt(receipt: Receipt) {
+    const record: ReceiptRecord = { receipt, quote, occurredAt: receipt.paid_at };
+    setReceipts((current) => [record, ...current.filter((entry) => entry.receipt.transaction_id !== receipt.transaction_id)].sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt)));
+  }
+
   async function openReceipt(record: ReceiptRecord) {
     setSelectedReceipt(record.receipt.id); setReceiptDetailError('');
     if (record.quote) return;
@@ -597,6 +610,10 @@ export default function SimpleApp() {
     window.addEventListener('keydown', handleKeys);
     return () => { window.removeEventListener('keydown', handleKeys); document.body.style.overflow = oldOverflow; previous?.focus(); };
   }, [editingPreset, receiptsOpen, selectedReceipt]);
+
+  useEffect(() => {
+    if (loaded && mandateId) void loadReceipts();
+  }, [loaded, mandateId]);
 
   const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
@@ -661,6 +678,7 @@ export default function SimpleApp() {
             ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
           <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
+          {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
         </section>
 
         <section className="m2-col m2-area-feed">
