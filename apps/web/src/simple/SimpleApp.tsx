@@ -713,7 +713,7 @@ export default function SimpleApp() {
                     <span className="m2-pick-text"><b>{p.title}</b><small>{p.subtitle}</small></span>
                     <span className="m2-pick-price">{products.length && !p.edited ? `~${hkd(estimate(p))}` : p.edited ? 'Personal' : ''}</span>
                   </button>
-                  <button type="button" className="m2-edit-pick" onClick={() => editPreset(p)} aria-label={`Edit ${p.title}`}><Pencil size={16} /><span>Edit</span></button>
+                  <button type="button" className="m2-edit-pick" onClick={() => editPreset(p)} aria-label={`Edit ${p.title}`} title={`Edit ${p.title}`}><Pencil size={16} /></button>
                 </div>; })}
               </div>
               <button className="m2-link" onClick={() => setShowCustom((v) => !v)}>{showCustom ? 'Hide the shelf' : 'Or pick items yourself'}</button>
