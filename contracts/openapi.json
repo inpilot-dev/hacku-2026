@@ -36,6 +36,10 @@
     {
       "name": "stores",
       "description": "The user's own store accounts and real carts. Proposed."
+    },
+    {
+      "name": "purchases",
+      "description": "One-time purchases on the open web from a typed request, and the delivery details they use. Proposed."
     }
   ],
   "security": [
@@ -3937,6 +3941,470 @@
           },
           "404": {
             "description": "Unknown attack.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/profile": {
+      "get": {
+        "operationId": "getProfile",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Delivery details",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. Saved server-side (0600 file); used to fill guest checkout forms, so they are sent to the browser agent's models and the shop.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "responses": {
+          "200": {
+            "description": "Saved details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not saved yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putProfile",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Save delivery details (onboarding)",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. Replaces the saved details.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases": {
+      "post": {
+        "operationId": "startPurchase",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Buy something from a typed request",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. Returns promptly; poll GET /purchases/{purchase_id}. The agent searches the web, picks the best deal that meets every stated requirement (or the shopper's stated preference), and takes it through the shop's guest checkout to the card form (awaiting_approval). Shops that need an account are never signed in to: needs_account returns the link instead. Nothing is paid before approval.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Delivery details are incomplete (details.reason PROFILE_INCOMPLETE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{purchase_id}": {
+      "get": {
+        "operationId": "getPurchase",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Purchase progress and the agent's reply",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. ",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The purchase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown purchase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{purchase_id}/approve": {
+      "post": {
+        "operationId": "approvePurchase",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Pay exactly the shown total",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. One-shot. Re-reads the checkout total, fills a single-use card that no model sees, and clicks the shop's one final button only when the server runs with MANDATE_LIVE_PAYMENTS=1 (otherwise stopped_before_payment).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Paying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown purchase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Not awaiting approval or the checkout expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "total_minor differs from the checkout total.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{purchase_id}/cancel": {
+      "post": {
+        "operationId": "cancelPurchase",
+        "tags": [
+          "purchases"
+        ],
+        "summary": "Stop before paying",
+        "description": "Proposed (Abdullah, one-time purchases): needs the group's OK. ",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-roles": [
+          "user"
+        ],
+        "x-status": "proposed",
+        "parameters": [
+          {
+            "name": "purchase_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Purchase"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown purchase.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already finished or paying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated actor has insufficient authority.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8287,6 +8755,700 @@
           "threshold",
           "signals"
         ]
+      },
+      "ProfileInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "full_name",
+          "email",
+          "phone",
+          "address_line1",
+          "district"
+        ],
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "address_line1": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "address_line2": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "district": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "region": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hong Kong Island, Kowloon or New Territories; derived from the district when omitted."
+          },
+          "city": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 200,
+            "default": "Hong Kong"
+          },
+          "postal_code": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Profile": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "full_name",
+          "email",
+          "phone",
+          "address_line1",
+          "address_line2",
+          "district",
+          "region",
+          "city",
+          "country",
+          "postal_code",
+          "missing"
+        ],
+        "properties": {
+          "full_name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "email": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phone": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address_line1": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "address_line2": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "district": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "region": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "city": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "country": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "postal_code": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Required fields still empty; a purchase is refused until this is empty."
+          }
+        }
+      },
+      "PurchaseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 1000,
+            "description": "What to buy, in the shopper's words."
+          }
+        }
+      },
+      "PurchaseApproval": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "total_minor"
+        ],
+        "properties": {
+          "total_minor": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Must equal order.total_minor."
+          }
+        }
+      },
+      "PurchaseCheck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requirement",
+          "ok",
+          "evidence",
+          "reason"
+        ],
+        "properties": {
+          "requirement": {
+            "type": "string"
+          },
+          "ok": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: the page does not state it."
+          },
+          "evidence": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Page text that shows the value."
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "PurchaseCandidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "url",
+          "title",
+          "price_minor",
+          "price_text",
+          "currency",
+          "in_stock",
+          "matches",
+          "unverified",
+          "checks",
+          "problems"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "price_minor": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_text": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "in_stock": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "matches": {
+            "type": "boolean"
+          },
+          "unverified": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseCheck"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PurchaseOption": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "url",
+          "shop",
+          "price_minor",
+          "price_text",
+          "unverified",
+          "checkout",
+          "reason"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "shop": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_minor": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_text": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unverified": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checkout": {
+            "type": "string",
+            "enum": [
+              "trying",
+              "guest",
+              "account_required",
+              "blocked",
+              "failed"
+            ]
+          },
+          "reason": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PurchaseOrder": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "total_minor",
+          "total_text",
+          "shipping_text",
+          "currency",
+          "checkout_url",
+          "shop"
+        ],
+        "properties": {
+          "total_minor": {
+            "type": "integer"
+          },
+          "total_text": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shipping_text": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkout_url": {
+            "type": "string"
+          },
+          "shop": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PurchaseSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "search_query",
+          "quantity",
+          "max_price_minor",
+          "requirements",
+          "preference"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "search_query": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "max_price_minor": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "preference": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only when the shopper states one; otherwise the best deal (cheapest with every requirement shown)."
+          }
+        }
+      },
+      "Purchase": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "request",
+          "spec",
+          "candidates",
+          "options",
+          "choice",
+          "order",
+          "card",
+          "events",
+          "message",
+          "live_payments",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "searching",
+              "checking_out",
+              "awaiting_approval",
+              "paying",
+              "ordered",
+              "needs_account",
+              "needs_user",
+              "stopped_before_payment",
+              "cancelled",
+              "expired",
+              "failed"
+            ]
+          },
+          "request": {
+            "type": "string"
+          },
+          "spec": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PurchaseSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseCandidate"
+            }
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PurchaseOption"
+            },
+            "description": "Products tried at checkout, best deal first."
+          },
+          "choice": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PurchaseCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "order": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PurchaseOrder"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "card": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "last4",
+                  "source"
+                ],
+                "properties": {
+                  "last4": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "at",
+                "text"
+              ],
+              "properties": {
+                "at": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "message": {
+            "type": "string",
+            "description": "The agent's reply to show in the chat."
+          },
+          "live_payments": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
       }
     }
   }

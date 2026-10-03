@@ -367,3 +367,28 @@ store checks out everything selected.
   charge. `cart_subtotal_minor` is evidence only; it never replaces the quote.
 - A run that splits a list across stores yields one quote per store. `AgentRun.quote_id` would become a list, and the
   per-order limit needs defined semantics across several store orders.
+
+## Proposed: one-time purchases (Abdullah)
+
+Status: **proposed, needs the group's OK**. Additive endpoints under the `purchases` tag; nothing existing changes.
+
+**Delivery details.** `PUT /profile` (onboarding) saves name, email, phone and Hong Kong address server-side in a 0600
+file; `GET /profile` returns them with `missing` (required fields still empty). A purchase is refused until `missing` is
+empty. Guest checkout forms are filled only from these values, so they go to the shop and to the browser agent's
+models (TypeSafe picks fields, an OpenRouter model picks which saved value fits).
+
+**Chat flow.** `POST /purchases {text}` returns at once; poll `GET /purchases/{id}`. `message` is the agent's reply to show
+in the chat, `events` its progress. The agent searches the web and picks the **best deal**: the cheapest product whose
+page shows every stated requirement (products whose page does not state one come after), unless the shopper states
+another preference (`spec.preference`). It then tries the shop's **guest** checkout up to the card form:
+
+- `awaiting_approval`: `order.total_minor` is the total read from the checkout page. The UI shows it and calls
+  `POST /purchases/{id}/approve {total_minor}` (must match; one-shot) or `/cancel`. Not approved in 20 minutes: `expired`.
+- `needs_account`: every matching shop needs an account. The agent never signs in; `message` and `options[].url` link
+  to the best deal for the shopper to buy themselves.
+
+**Paying (Timmy).** Approve re-reads the checkout total, takes a single-use card from a `CardSource`
+(`issue`/`reveal`/`close`, `services/api/mandate/agent/purchase/cards.py`) and types it into the shop's payment fields
+over CDP, so no model sees it. The wallet should provide that source; only a test card ships here. The shop's one
+final button is clicked only when the server runs with `MANDATE_LIVE_PAYMENTS=1`; otherwise the run ends as
+`stopped_before_payment`. Open question: which mandate/policy check gates `approve` for web purchases.

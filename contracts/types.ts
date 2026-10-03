@@ -841,3 +841,110 @@ export type RiskAssessment = {
   "threshold": number;
   "signals": Array<RiskSignal>;
 };
+
+export type ProfileInput = {
+  "full_name": string;
+  "email": string;
+  "phone": string;
+  "address_line1": string;
+  "address_line2"?: string | null;
+  "district": string;
+  "region"?: string | null;
+  "city"?: string | null;
+  "country"?: string;
+  "postal_code"?: string | null;
+};
+
+export type Profile = {
+  "full_name": string | null;
+  "email": string | null;
+  "phone": string | null;
+  "address_line1": string | null;
+  "address_line2": string | null;
+  "district": string | null;
+  "region": string | null;
+  "city": string | null;
+  "country": string | null;
+  "postal_code": string | null;
+  "missing": Array<string>;
+};
+
+export type PurchaseRequest = {
+  "text": string;
+};
+
+export type PurchaseApproval = {
+  "total_minor": number;
+};
+
+export type PurchaseCheck = {
+  "requirement": string;
+  "ok": boolean | null;
+  "evidence": string | null;
+  "reason": string;
+};
+
+export type PurchaseCandidate = {
+  "url": string;
+  "title": string;
+  "price_minor": number | null;
+  "price_text": string | null;
+  "currency": string | null;
+  "in_stock": boolean | null;
+  "matches": boolean;
+  "unverified": Array<string>;
+  "checks": Array<PurchaseCheck>;
+  "problems": Array<string>;
+};
+
+export type PurchaseOption = {
+  "title": string;
+  "url": string;
+  "shop": string | null;
+  "price_minor": number | null;
+  "price_text": string | null;
+  "unverified": Array<string>;
+  "checkout": "trying" | "guest" | "account_required" | "blocked" | "failed";
+  "reason": string | null;
+};
+
+export type PurchaseOrder = {
+  "total_minor": number;
+  "total_text": string | null;
+  "shipping_text": string | null;
+  "currency": string | null;
+  "checkout_url": string;
+  "shop": string | null;
+};
+
+export type PurchaseSpec = {
+  "item": string;
+  "search_query": string;
+  "quantity": number;
+  "max_price_minor": number | null;
+  "requirements": Array<string>;
+  "preference": string | null;
+};
+
+export type Purchase = {
+  "id": string;
+  "status": "queued" | "searching" | "checking_out" | "awaiting_approval" | "paying" | "ordered" | "needs_account" | "needs_user" | "stopped_before_payment" | "cancelled" | "expired" | "failed";
+  "request": string;
+  "spec": PurchaseSpec | null;
+  "candidates": Array<PurchaseCandidate>;
+  "options": Array<PurchaseOption>;
+  "choice": PurchaseCandidate | null;
+  "order": PurchaseOrder | null;
+  "card": {
+  "last4": string;
+  "source": string;
+} | null;
+  "events": Array<{
+  "at": string;
+  "text": string;
+}>;
+  "message": string;
+  "live_payments": boolean;
+  "created_at": string;
+  "updated_at": string;
+};
