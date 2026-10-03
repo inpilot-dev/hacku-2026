@@ -29,12 +29,13 @@ Open the URL printed by the script (default `http://127.0.0.1:8000/`). Stopping 
 ## Current honest limitations
 
 - The default catalog is a timestamped Wellcome snapshot captured from public pages, not a live retailer connection. The UI shows the observation date, evidence links and the Click & Collect scope. The placeholder catalog is used only as a labeled fallback.
-- Wellcome's captured evidence establishes free Click & Collect only for orders over HK$50. The UI blocks lower baskets, but the wallet catalog adapter still needs to reject unpriced delivery subtotals server-side; do not describe this client-side guard as an authorization boundary.
+- Wellcome's captured evidence establishes free Click & Collect only for orders over HK$50. The UI blocks lower baskets, and the wallet also rejects quotes whose delivery fee is not covered by observed evidence. The capture is not a live price feed.
 - `POST /api/v1/demo/purchases` is a local-only, user-triggered integration adapter. It derives the agent from the user's own mandate and calls the same wallet authorization/payment checks; it never sends the signing capability or agent credential to the browser. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`.
-- The mandate form can request a natural-language draft from the contract endpoint. The response remains inactive until the user reviews the structured fields and confirms it. If the draft endpoint is absent, the form explicitly falls back to the seeded structured policy.
-- The shopping form uses the contract-defined agent run/start, progress and quote APIs, with `auto_purchase: false`. It leaves the manual catalog flow available when the agent-run backend is absent; do not treat the contract client as proof that the worker is deployed.
+- `POST /api/v1/mandates/draft` is mounted and uses deterministic rule-based interpretation. It returns ambiguities instead of guessing; the draft remains inactive until the user reviews and confirms it. This is not an LLM-based mandate compiler.
+- The shopping form uses the mounted agent-run start, progress and quote APIs, with `auto_purchase: false`. Jev selection requires `TYPESAFE_API_KEY`; runs are in memory and disappear when the API process restarts. The manual catalog flow remains available as a transparent fallback.
+- `GET /api/v1/stores` and the Wellcome connection/cart-sync routes are mounted. The user must complete the retailer sign-in in the local Steel browser; a store connection has not been established just by starting the app. Cart sync adds items to the store cart but does not submit a payment.
+- Audit/checkpoint/verifier and bounded Z3 routes are mounted. The independent verifier is a separate process on `:8201`, started by `just dev` / `just demo`; the UI reports unavailable services instead of presenting mock results as verified.
 - The default payment rail is a local simulator. No real funds move.
-- The observed catalog API and shared FastAPI entrypoint are implemented. Draft interpretation, agent shopping runs, independent audit verification and bounded Z3 evaluation are not mounted in the current checkout. The UI displays these limits and is structured to consume the agreed APIs when available.
 
 ## Serve the built site from the API
 

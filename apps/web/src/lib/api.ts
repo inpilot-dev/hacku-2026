@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult, VirtualCard, CardStatusResponse, CardAuthorizationList } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -59,6 +59,14 @@ export const api = {
     return response.json() as Promise<{ status: string; payment_mode: string; server_time: string }>;
   }),
   mandate: (token: string, id: string) => request<Mandate>(`/mandates/${encodeURIComponent(id)}`, token),
+  card: (token: string, id: string) => request<VirtualCard>(`/mandates/${encodeURIComponent(id)}/card`, token),
+  freezeCard: (token: string, id: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(id)}/card/freeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': sessionKey(`freeze-${id}`) }, body: JSON.stringify({ reason: 'Paused from family dashboard' }),
+  }),
+  unfreezeCard: (token: string, id: string) => request<CardStatusResponse>(`/mandates/${encodeURIComponent(id)}/card/unfreeze`, token, {
+    method: 'POST', headers: { 'Idempotency-Key': sessionKey(`unfreeze-${id}`) }, body: JSON.stringify({ reason: 'Resumed from family dashboard' }),
+  }),
+  cardAuthorizations: (token: string, id: string) => request<CardAuthorizationList>(`/mandates/${encodeURIComponent(id)}/card/authorizations`, token),
   draft: async (token: string, input: DraftRequest) => request<DraftResponse>('/mandates/draft', token, {
     method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('mandate-draft', input) }, body: JSON.stringify(input),
   }),
@@ -94,4 +102,16 @@ export const api = {
   createCheckpoint: (token: string, input: CheckpointRequest) => request<Checkpoint>('/audit/checkpoints', token, { method: 'POST', headers: { 'Idempotency-Key': sessionKey(`checkpoint-${input.stream_id}`) }, body: JSON.stringify(input) }),
   verifyAudit: (token: string, input: VerifierRequest) => request<VerifierResult>('/verifier/check', token, { method: 'POST', body: JSON.stringify(input) }),
   verifyModel: (token: string, input: VerificationRequest) => request<VerificationResult>('/verification/runs', token, { method: 'POST', body: JSON.stringify(input) }),
+  stores: (token: string) => request<StoreList>('/stores', token),
+  store: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}`, token),
+  connectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connect`, token, { method: 'POST' }),
+  storeLoginTicket: (token: string, storeId: string) => request<StoreLoginTicket>(`/stores/${encodeURIComponent(storeId)}/login/ticket`, token, { method: 'POST' }),
+  disconnectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connection`, token, { method: 'DELETE' }),
+  syncCart: (token: string, input: CartSyncRequest) => request<CartSyncResult>('/carts/sync', token, { method: 'POST', body: JSON.stringify(input) }),
 };
+
+/** WebSocket URL for a store's sign-in stream on this origin (the dev server proxies it). */
+export function storeLoginStreamUrl(storeId: string, ticket: string) {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${scheme}://${window.location.host}${API_ROOT}/stores/${encodeURIComponent(storeId)}/login/stream?ticket=${encodeURIComponent(ticket)}`;
+}

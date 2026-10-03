@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Carrot, Cherry, Mic, Snowflake, Square, Wine } from 'lucide-react';
+import { ArrowRight, Carrot, CreditCard, Cherry, Mic, Pencil, Printer, ReceiptText, RotateCcw, Snowflake, Square, Trash2, Wine, X, UserRound } from 'lucide-react';
 import './openai-tokens.css';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Policy, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
+import ReactiveCharacter from '../components/ReactiveCharacter';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest, VirtualCard } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
+import CartSyncPanel from './CartSyncPanel';
+import Onboarding, { storeName } from './Onboarding';
+import ProfileSheet from './ProfileSheet';
 
 /*
  * A single-screen take on the core Mandate story for a Gen Z caregiver:
@@ -15,12 +19,14 @@ import { money } from '../lib/format';
 const TOKEN = 'dev-user-token';
 const STORE_ID = 'wellcome';
 const PICKUP_CONTEXT_ID = 'ctx_wellcome_click_collect';
-const DRAFT_ID = 'draft_demo';
 const MANDATE_KEY = 'mandate-id';
+const PRESETS_KEY = 'mandate-shopping-presets-v1';
 
 type Mascot = 'kumi' | 'kip' | 'bean' | 'stella';
 type Line = { product_id: string; quantity: number };
-type Pick = { id: string; icon: LucideIcon; title: string; subtitle: string; tone: 'green' | 'orange' | 'pink'; items: Line[]; list: string[] };
+type Pick = { id: string; icon: LucideIcon; title: string; subtitle: string; tone: 'green' | 'orange' | 'pink'; items: Line[]; list: string[]; intent?: ShoppingItem[]; edited?: boolean };
+type SavedPreset = { title: string; items: ShoppingItem[] };
+type ReceiptRecord = { receipt: Receipt; quote: Quote | null; occurredAt: string };
 type Verdict =
   | { kind: 'paid'; receipt: Receipt; replayed: boolean }
   | { kind: 'refused'; message: string; violations: RuleViolation[] }
@@ -73,30 +79,24 @@ const REASONS: Partial<Record<RuleViolation['code'], string>> = {
   RISK_REVIEW_REQUIRED: 'Kip spotted something unusual',
 };
 
-function nextSundayIso() {
-  const end = new Date(Date.now() + 28 * 864e5);
-  return `${end.toISOString().slice(0, 10)}T23:59:59+08:00`;
-}
-
-function Avatar({ name, state, size = 64, bob = false }: { name: Mascot; state: string; size?: number; bob?: boolean }) {
-  return <img className={`m2-avatar${bob ? ' m2-bob' : ''}`} src={`/agents/${name}-${state}.png`} alt="" width={size} height={size} />;
-}
-
-function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
-  return <button type="button" role="switch" aria-checked={on} aria-label={label} className={`m2-switch${on ? ' on' : ''}`} onClick={onChange}><i /></button>;
+function Avatar({ name, state, size = 64 }: { name: Mascot; state: string; size?: number }) {
+  return <ReactiveCharacter className="m2-avatar" name={name} state={state} size={size} />;
 }
 
 function Sticker({ name, state, size = 88, tilt = -6 }: { name: Mascot; state: string; size?: number; tilt?: number }) {
-  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><img src={`/agents/${name}-${state}.png`} alt="" /></span>;
+  return <span className={`m2-sticker ${name}`} style={{ width: size, height: size, transform: `rotate(${tilt}deg)` }}><ReactiveCharacter name={name} state={state} size={size} /></span>;
 }
 
 const hkd = (minor: number) => money(minor).replace('HK$', 'HK$\u202F');
+const merchantName = (id: string) => id === 'wellcome' ? 'Wellcome' : id.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   const amount = typeof event.payload.amount_minor === 'number' ? ` ${money(event.payload.amount_minor)}` : '';
   switch (event.type) {
     case 'mandate_confirmed': return { who: 'bean', text: 'Allowance switched on', tone: 'good' };
-    case 'mandate_revoked': return { who: 'kip', text: 'Card frozen', tone: 'bad', state: 'revoked' };
+    case 'mandate_revoked': return { who: 'kip', text: 'Allowance permanently revoked', tone: 'bad', state: 'revoked' };
+    case 'card_frozen': return { who: 'kip', text: 'Virtual card paused', tone: 'bad', state: 'revoked' };
+    case 'card_unfrozen': return { who: 'kip', text: 'Virtual card resumed', tone: 'good', state: 'idle' };
     case 'quote_created': return { who: 'kumi', text: 'Kumi priced a basket', tone: 'info' };
     case 'authorization_refused': return { who: 'kip', text: 'Kip refused a purchase', tone: 'bad' };
     case 'payment_completed': return { who: 'kip', text: `Kip paid${amount}`, tone: 'good' };
@@ -121,6 +121,27 @@ function audioFormat(mimeType: string): TranscriptionRequest['format'] {
   return 'ogg';
 }
 
+function savedPresets(): Record<string, SavedPreset> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PRESETS_KEY) ?? '{}');
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const result: Record<string, SavedPreset> = {};
+    for (const [id, raw] of Object.entries(value)) {
+      if ((!PICKS.some((pick) => pick.id === id) && !/^custom-[\w-]{1,80}$/.test(id)) || !raw || typeof raw !== 'object') continue;
+      const candidate = raw as Partial<SavedPreset>;
+      if (typeof candidate.title !== 'string' || !candidate.title.trim() || !Array.isArray(candidate.items)) continue;
+      const items = candidate.items.flatMap((raw): ShoppingItem[] => {
+        if (!raw || typeof raw !== 'object') return [];
+        const item = raw as Partial<ShoppingItem>;
+        if (typeof item.name !== 'string' || !item.name.trim() || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 20) return [];
+        return [{ name: item.name.trim().slice(0, 100), quantity: Number(item.quantity), unit: typeof item.unit === 'string' ? item.unit.trim().slice(0, 24) || null : null }];
+      }).slice(0, 20);
+      if (items.length) result[id] = { title: candidate.title.trim().slice(0, 60), items };
+    }
+    return result;
+  } catch { return {}; }
+}
+
 type Spoken = { kind: 'list'; items: ShoppingItem[] };
 
 export default function SimpleApp() {
@@ -129,14 +150,11 @@ export default function SimpleApp() {
   const [mandateId, setMandateId] = useState(() => localStorage.getItem(MANDATE_KEY) ?? '');
   const [mandate, setMandate] = useState<Mandate | null>(null);
   const [budget, setBudget] = useState<BudgetResponse | null>(null);
+  const [card, setCard] = useState<VirtualCard | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
-  const [weekly, setWeekly] = useState('800');
-  const [perOrder, setPerOrder] = useState('300');
-  const [askOn, setAskOn] = useState(false);
-  const [askAbove, setAskAbove] = useState('100');
   const [riskReviewOn, setRiskReviewOn] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
 
@@ -157,6 +175,22 @@ export default function SimpleApp() {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [serverLog, setServerLog] = useState<LogEntry[] | null>(null);
   const [showFine, setShowFine] = useState(false);
+  const [presets, setPresets] = useState<Record<string, SavedPreset>>(savedPresets);
+  const [editingPreset, setEditingPreset] = useState<Pick | null>(null);
+  const [editorTitle, setEditorTitle] = useState('');
+  const [editorItems, setEditorItems] = useState<ShoppingItem[]>([]);
+  const [presetError, setPresetError] = useState('');
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
+  const [receiptsLoading, setReceiptsLoading] = useState(false);
+  const [receiptsError, setReceiptsError] = useState('');
+  const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
+  const [receiptDetailLoading, setReceiptDetailLoading] = useState(false);
+  const [receiptDetailError, setReceiptDetailError] = useState('');
+  const receiptDetailRequestId = useRef(0);
+  const receiptsLoaded = useRef(false);
+  const receiptLoadInFlight = useRef(false);
   const shopRef = useRef<HTMLElement>(null);
 
   const note = useCallback((who: Mascot, text: string, tone: LogEntry['tone'], state?: string) => {
@@ -165,10 +199,11 @@ export default function SimpleApp() {
 
   const refresh = useCallback(async (id = mandateId) => {
     try { await api.health(); setOnline(true); } catch { setOnline(false); }
-    if (!id) { setMandate(null); setBudget(null); setLoaded(true); return; }
+    if (!id) { setMandate(null); setBudget(null); setCard(null); setLoaded(true); return; }
     try {
       const [m, b] = await Promise.all([api.mandate(TOKEN, id), api.budget(TOKEN, id)]);
       setMandate(m); setBudget(b);
+      try { setCard(await api.card(TOKEN, id)); } catch { setCard(null); }
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) { localStorage.removeItem(MANDATE_KEY); setMandateId(''); setMandate(null); setBudget(null); }
     } finally { setLoaded(true); }
@@ -192,72 +227,70 @@ export default function SimpleApp() {
   }, [catalog]);
 
   const active = mandate?.status === 'active';
+  const canSpend = active && card?.status !== 'frozen';
   const period = budget?.applicable_budgets[0];
   const available = period?.available_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const limit = period?.limit_minor ?? mandate?.policy.period_limits[0]?.limit_minor ?? 0;
   const spent = (period?.paid_minor ?? 0) + (period?.reserved_minor ?? 0);
   const ratio = limit ? Math.min(1, spent / limit) : 0;
 
-  async function activate() {
-    setError('');
-    const weeklyMinor = Math.round(Number(weekly) * 100);
-    const orderMinor = Math.round(Number(perOrder) * 100);
-    const askMinor = askOn ? Math.round(Number(askAbove) * 100) : null;
-    if (!(weeklyMinor > 0) || !(orderMinor > 0) || (askMinor !== null && !(askMinor > 0))) { setError('Use whole HK$ amounts above zero.'); return; }
-    const policy: Policy = {
-      currency: 'HKD',
-      per_order_limit_minor: orderMinor,
-      period_limits: [{ period: 'calendar_week', limit_minor: weeklyMinor, timezone: 'Asia/Hong_Kong' }],
-      allowed_merchant_ids: [STORE_ID],
-      blocked_categories: ['alcohol'],
-      expires_at: nextSundayIso(),
-      approval_above_minor: askMinor,
-      risk_review: riskReviewOn,
-    };
-    setBusy('activate');
-    try {
-      const draftId = await freshDraftId(weeklyMinor, orderMinor);
-      const result = await api.confirm(TOKEN, { draft_id: draftId, policy });
-      sessionStorage.removeItem('mandate-idempotency-confirm-draft-demo');
-      localStorage.setItem(MANDATE_KEY, result.id);
-      setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
-      note('bean', `Allowance on: ${money(weeklyMinor)}/week, ${money(orderMinor)}/order`, 'good');
-      await refresh(result.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'The wallet could not switch this on.');
-    } finally { setBusy(''); }
-  }
-
-  /**
-   * A draft backs exactly one mandate, so every switch-on (including after a freeze) registers its own.
-   * The rules confirmed are the ones set on this screen; the draft only records who may act for whom.
-   * Falls back to the seeded draft when the draft API isn't mounted.
-   */
-  async function freshDraftId(weeklyMinor: number, orderMinor: number): Promise<string> {
-    try {
-      const draft = await api.draft(TOKEN, {
-        text: `Weekly allowance for Mum: ${money(orderMinor)} per order and ${money(weeklyMinor)} per week, only from ${STORE_ID}, no alcohol.`,
-        delegatee_id: 'agent_student',
-      });
-      sessionStorage.removeItem('mandate-idempotency-mandate-draft');
-      return draft.draft_id;
-    } catch (err) {
-      if (err instanceof ApiError && [404, 405].includes(err.status)) return DRAFT_ID;
-      throw err;
+  /** Onboarding confirmed a new mandate with the wallet; show it, and retire the one it replaces. */
+  async function activated(result: Mandate, summary: string) {
+    const replaced = mandate && mandate.status === 'active' && mandate.id !== result.id ? mandate : null;
+    localStorage.setItem(MANDATE_KEY, result.id);
+    setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
+    note('bean', summary, 'good');
+    if (replaced) {
+      try {
+        await api.revoke(TOKEN, replaced.id);
+        sessionStorage.removeItem(`mandate-idempotency-revoke-${replaced.id}`);
+        note('kip', 'Previous allowance frozen', 'info');
+      } catch (err) {
+        setError(`The new allowance is on, but the old one could not be frozen: ${err instanceof Error ? err.message : 'unknown error'}. Freeze it from the full dashboard.`);
+      }
     }
+    await refresh(result.id);
   }
 
   async function freeze() {
     if (!mandate) return;
     setBusy('freeze'); setError('');
     try {
-      const result = await api.revoke(TOKEN, mandate.id);
-      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
-      setMandate(result.mandate); resetShop();
-      note('kip', `Card frozen${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      const result = await api.freezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-freeze-${mandate.id}`);
+      setCard(result.card); resetShop();
+      note('kip', 'Card paused. No new purchases can be made.', 'bad', 'frozen');
       await refresh(mandate.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not freeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function unfreeze() {
+    if (!mandate) return;
+    setBusy('unfreeze'); setError('');
+    try {
+      const result = await api.unfreezeCard(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-unfreeze-${mandate.id}`);
+      setCard(result.card);
+      note('kip', 'Card resumed. The existing allowance still applies.', 'good', 'active');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not unfreeze the card.');
+    } finally { setBusy(''); }
+  }
+
+  async function revokeAllowance() {
+    if (!mandate || !window.confirm('Permanently revoke this allowance? Its virtual card will be cancelled and cannot be resumed.')) return;
+    setBusy('revoke'); setError('');
+    try {
+      const result = await api.revoke(TOKEN, mandate.id);
+      sessionStorage.removeItem(`mandate-idempotency-revoke-${mandate.id}`);
+      setMandate(result.mandate); resetShop();
+      note('kip', `Allowance revoked${result.cancelled_reservation_ids.length ? `, ${result.cancelled_reservation_ids.length} hold(s) released` : ''}`, 'bad', 'revoked');
+      await refresh(mandate.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not revoke the allowance.');
     } finally { setBusy(''); }
   }
 
@@ -321,7 +354,7 @@ export default function SimpleApp() {
 
   async function shopFromText() {
     const text = listText.trim();
-    if (!mandate || !active || !text || busy) return;
+    if (!mandate || !canSpend || !text || busy) return;
     setError(''); setBusy('parse');
     try {
       const parsed = await api.parseShoppingList(TOKEN, { text });
@@ -334,8 +367,9 @@ export default function SimpleApp() {
   }
 
   async function shop(chosen: Pick | 'custom' | Spoken) {
-    if (!mandate || !active) return;
+    if (!mandate || !canSpend) return;
     const spoken = chosen !== 'custom' && 'kind' in chosen;
+    const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
@@ -345,10 +379,10 @@ export default function SimpleApp() {
     try {
       let result: Quote | null = null;
       if (chosen !== 'custom') {
-        const packed = await packWithAgent(spoken ? chosen.items : chosen.list.map((name) => ({ name, quantity: 1 })));
+        const packed = await packWithAgent(spoken ? chosen.items : chosen.intent ?? chosen.list.map((name) => ({ name, quantity: 1 })));
         result = packed.quote;
-        if (!result && spoken) {
-          setError(packed.message || 'The shopping agent isn’t connected, so Kumi can’t read a list right now.');
+        if (!result && (spoken || editedPreset)) {
+          setError(packed.message || (editedPreset ? 'The shopping agent isn’t connected. Your edited list was not replaced with the old preset.' : 'The shopping agent isn’t connected, so Kumi can’t read a list right now.'));
           if (packed.message) note('kumi', packed.message, 'bad');
           setPhase('pick');
           return;
@@ -395,6 +429,7 @@ export default function SimpleApp() {
         note('kip', `Kip blocked ${money(quote.total_minor)}`, 'bad');
       } else if (result.payment?.status === 'completed') {
         setVerdict({ kind: 'paid', receipt: result.payment.receipt, replayed: result.payment.replayed });
+        rememberReceipt(result.payment.receipt);
         note('kip', `Kip paid ${money(result.payment.receipt.amount_minor)}`, 'good');
       } else if (result.payment?.status === 'refused') {
         setVerdict({ kind: 'refused', message: result.payment.message, violations: result.payment.violations });
@@ -409,11 +444,13 @@ export default function SimpleApp() {
         try {
           const receipt = await api.paymentByTransaction(TOKEN, transactionId);
           setVerdict({ kind: 'paid', receipt, replayed: true });
+          rememberReceipt(receipt);
         } catch {
           setVerdict({ kind: 'uncertain', message: 'We lost the connection mid-checkout. Checking again reuses the same transaction, so it can’t pay twice.' });
         }
       }
     }
+    receiptsLoaded.current = false;
     setPhase('verdict');
     shopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     void refresh(mandate.id);
@@ -444,8 +481,143 @@ export default function SimpleApp() {
   const showSetup = loaded && (!mandate || setupOpen);
   // Phones pin Kumi's question and the list box to the bottom while picking (see simple.css).
   const docked = !showSetup && Boolean(mandate) && active && phase === 'pick';
+  const visiblePicks = useMemo(() => PICKS.map((base) => {
+    const saved = presets[base.id];
+    return saved ? { ...base, title: saved.title, subtitle: saved.items.map((item) => `${item.quantity > 1 ? `${item.quantity} ` : ''}${item.name}${item.unit ? ` ${item.unit}` : ''}`).join(', '), list: saved.items.map((item) => item.name), intent: saved.items, edited: true } : base;
+  }).concat(Object.entries(presets).filter(([id]) => id.startsWith('custom-')).map(([id, saved]) => ({
+    id, icon: Carrot, title: saved.title, subtitle: saved.items.map((item) => `${item.quantity > 1 ? `${item.quantity} ` : ''}${item.name}${item.unit ? ` ${item.unit}` : ''}`).join(', '), tone: 'green' as const,
+    items: [], list: saved.items.map((item) => item.name), intent: saved.items, edited: true,
+  }))), [presets]);
+  const selectedReceiptRecord = receipts.find((entry) => entry.receipt.id === selectedReceipt) ?? null;
 
-  const kipState = !mandate || !active ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
+  function editPreset(pickToEdit: Pick) {
+    setPresetError('');
+    const saved = presets[pickToEdit.id];
+    setEditingPreset(pickToEdit);
+    setEditorTitle(saved?.title ?? pickToEdit.title);
+    setEditorItems(saved?.items.map((item) => ({ ...item })) ?? pickToEdit.list.map((raw) => {
+      const match = raw.match(/^\s*(\d+)\s+(.+)$/);
+      return match ? { name: match[2], quantity: Number(match[1]) } : { name: raw, quantity: 1 };
+    }));
+  }
+
+  function savePreset() {
+    if (!editingPreset) return;
+    const title = editorTitle.trim();
+    const items = editorItems.map((item) => ({ name: item.name.trim(), quantity: Number(item.quantity), unit: item.unit?.trim() || null })).filter((item) => item.name);
+    if (!title) { setPresetError('Give this preset a name.'); return; }
+    if (!items.length || items.length > 20) { setPresetError('Add between 1 and 20 items.'); return; }
+    if (items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) { setPresetError('Each quantity must be between 1 and 20.'); return; }
+    const next = { ...presets, [editingPreset.id]: { title: title.slice(0, 60), items } };
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not save on this device. Check available storage and try again.'); return; }
+    setPresets(next); setEditingPreset(null);
+  }
+
+  function resetPreset(id: string) {
+    const next = { ...presets };
+    delete next[id];
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not reset this preset on this device.'); return; }
+    setPresets(next);
+    const original = PICKS.find((item) => item.id === id);
+    if (!original) { setEditingPreset(null); return; }
+    setEditorTitle(original?.title ?? '');
+    setEditorItems(original?.list.map((raw) => { const match = raw.match(/^\s*(\d+)\s+(.+)$/); return match ? { name: match[2], quantity: Number(match[1]) } : { name: raw, quantity: 1 }; }) ?? []);
+  }
+
+  function duplicatePreset() {
+    if (!editingPreset) return;
+    const title = editorTitle.trim();
+    const items = editorItems.map((item) => ({ name: item.name.trim(), quantity: Number(item.quantity), unit: item.unit?.trim() || null })).filter((item) => item.name);
+    if (!title || !items.length || items.length > 20 || items.some((item) => !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20)) {
+      setPresetError('Add a name and 1–20 items with quantities from 1 to 20 before making a copy.'); return;
+    }
+    const id = `custom-${crypto.randomUUID()}`;
+    const copy = { title: `${title} copy`.slice(0, 60), items };
+    const next = { ...presets, [id]: copy };
+    try { localStorage.setItem(PRESETS_KEY, JSON.stringify(next)); }
+    catch { setPresetError('Could not duplicate this preset on this device.'); return; }
+    setPresets(next); setEditingPreset(null);
+  }
+
+  async function loadReceipts(force = false) {
+    if (receiptLoadInFlight.current || (receiptsLoaded.current && !force)) return;
+    receiptLoadInFlight.current = true;
+    setReceiptsLoading(true); setReceiptsError('');
+    try {
+      const audit = await api.auditExport(TOKEN);
+      const paymentEvents = audit.events.filter((event) => event.type === 'payment_completed' && event.transaction_id);
+      const transactionEvents = [...new Map(paymentEvents.map((event) => [event.transaction_id!, event])).values()];
+      const records = await Promise.all(transactionEvents.map(async (event): Promise<ReceiptRecord | null> => {
+        const payloadReceipt = event.payload.receipt as Receipt | undefined;
+        if (payloadReceipt?.status === 'paid' && payloadReceipt.transaction_id === event.transaction_id) return { receipt: payloadReceipt, quote: null, occurredAt: event.occurred_at };
+        try { return { receipt: await api.paymentByTransaction(TOKEN, event.transaction_id!), quote: null, occurredAt: event.occurred_at }; }
+        catch { return null; }
+      }));
+      const ordered = records.filter((record): record is ReceiptRecord => record !== null).sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt));
+      setReceipts(ordered); receiptsLoaded.current = true;
+    } catch (err) {
+      setReceiptsError(err instanceof Error ? err.message : 'Could not load receipts.');
+    } finally { receiptLoadInFlight.current = false; setReceiptsLoading(false); }
+  }
+
+  function showReceipts() {
+    setReceiptsOpen(true); setSelectedReceipt(null); setReceiptDetailError(''); void loadReceipts();
+  }
+
+  function viewReceipt(record: ReceiptRecord) {
+    setReceiptsOpen(true); setReceiptsError('');
+    void loadReceipts();
+    void openReceipt(record);
+  }
+
+  function rememberReceipt(receipt: Receipt) {
+    const record: ReceiptRecord = { receipt, quote, occurredAt: receipt.paid_at };
+    setReceipts((current) => [record, ...current.filter((entry) => entry.receipt.transaction_id !== receipt.transaction_id)].sort((a, b) => Date.parse(b.receipt.paid_at || b.occurredAt) - Date.parse(a.receipt.paid_at || a.occurredAt)));
+  }
+
+  async function openReceipt(record: ReceiptRecord) {
+    const requestId = ++receiptDetailRequestId.current;
+    setSelectedReceipt(record.receipt.id); setReceiptDetailError('');
+    if (record.quote) { setReceiptDetailLoading(false); return; }
+    setReceiptDetailLoading(true);
+    try {
+      const quote = await api.quoteById(TOKEN, record.receipt.quote_id);
+      if (requestId === receiptDetailRequestId.current) setReceipts((current) => current.map((entry) => entry.receipt.id === record.receipt.id ? { ...entry, quote } : entry));
+    } catch (err) {
+      if (requestId === receiptDetailRequestId.current) setReceiptDetailError(err instanceof Error ? err.message : 'Item details are unavailable right now.');
+    } finally { if (requestId === receiptDetailRequestId.current) setReceiptDetailLoading(false); }
+  }
+
+  useEffect(() => {
+    if (!editingPreset && !receiptsOpen && !profileOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    const focusables = dialog ? [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')] : [];
+    focusables[0]?.focus();
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeys = (event: KeyboardEvent) => {
+      // Escape inside a store sign-in goes to the store's page, not to closing the sheet.
+      if (event.key === 'Escape' && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
+        setEditingPreset(null); setReceiptsOpen(false); setSelectedReceipt(null); setProfileOpen(false);
+      }
+      if (event.key === 'Tab' && focusables.length && !(event.target instanceof HTMLElement && event.target.classList.contains('ob-typing'))) {
+        const first = focusables[0]; const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => { window.removeEventListener('keydown', handleKeys); document.body.style.overflow = oldOverflow; previous?.focus(); };
+  }, [editingPreset, receiptsOpen, selectedReceipt, profileOpen]);
+
+  useEffect(() => {
+    if (loaded && mandateId) void loadReceipts();
+  }, [loaded, mandateId]);
+
+  const kipState = !mandate || !active ? 'revoked' : card?.status === 'frozen' ? 'revoked' : phase === 'verdict' && verdict?.kind === 'paid' ? 'approved' : phase === 'verdict' && verdict?.kind === 'refused' ? 'refused' : 'idle';
 
   const estimate = (p: Pick) => p.items.reduce((sum, line) => sum + (productById.get(line.product_id)?.unit_price_minor ?? 0) * line.quantity, 0);
   const expires = mandate ? new Date(mandate.policy.expires_at).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' }) : '';
@@ -454,12 +626,15 @@ export default function SimpleApp() {
   return <div className={`m2${docked ? ' docked' : ''}`}>
     <header className="m2-top">
       <div className="m2-brand">Mandate</div>
-      <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
+      <div className="m2-top-right">
+        <span className={`m2-pill ${online === false ? 'off' : ''}`}><i />{online === false ? 'Wallet offline' : 'Sandbox, no real money'}</span>
+        {loaded && mandate && <button className="m2-profile-trigger" onClick={() => setProfileOpen(true)} aria-label="Profile: stores and allowance"><i><UserRound size={15} /></i><span>Profile</span></button>}
+      </div>
     </header>
 
     {error && <div className="m2-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">Dismiss</button></div>}
 
-    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} bob /></div> : showSetup ? (
+    {!loaded ? <div className="m2-loading"><Avatar name="kip" state="idle" size={96} /></div> : showSetup ? (
       <section className="m2-setup">
         <div className="m2-setup-copy">
           <p className="m2-kicker">For the person who does Mum’s shopping</p>
@@ -471,42 +646,37 @@ export default function SimpleApp() {
             <figure><Sticker name="stella" state="idle" size={76} tilt={-3} /><figcaption><b>Stella</b> keeps the log</figcaption></figure>
           </div>
         </div>
-        <div className="m2-setup-form">
-          <h2>Mum’s rules</h2>
-          <label className="m2-ledger-row"><span>Weekly budget</span><b>HK$<input inputMode="numeric" value={weekly} onChange={(e) => setWeekly(e.target.value)} aria-label="Weekly budget in HK$" /></b></label>
-          <label className="m2-ledger-row"><span>Most per order</span><b>HK$<input inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} aria-label="Maximum per order in HK$" /></b></label>
-          <div className="m2-ledger-row"><span>Ask me first</span><Switch on={askOn} label="Ask me first before bigger orders" onChange={() => setAskOn(!askOn)} /></div>
-          {askOn && <label className="m2-ledger-row m2-ledger-sub"><span>For orders above</span><b>HK$<input inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} aria-label="Ask me first above this amount in HK$" /></b></label>}
-          <div className="m2-ledger-row"><span>Review unusual purchases</span><Switch on={riskReviewOn} label="Review unusual purchases" onChange={() => setRiskReviewOn(!riskReviewOn)} /></div>
-          {riskReviewOn && <p className="m2-muted m2-risk-note">Kip can pause first-time or unusually large baskets, new items and sharp price rises. Product listings that try to instruct the agent are always sent for your review.</p>}
-          <div className="m2-ledger-row fixed"><span>Shop</span><b>Wellcome</b></div>
-          <div className="m2-ledger-row fixed"><span>Never buy</span><b>Alcohol</b></div>
-          <div className="m2-ledger-row fixed"><span>Lasts</span><b>4 weeks</b></div>
-          <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Switching on…' : 'Switch on Mum’s card'}<ArrowRight size={18} /></button>
-          {setupOpen && mandate && <button className="m2-link" onClick={() => setSetupOpen(false)}>Back</button>}
-        </div>
+        <Onboarding token={TOKEN} online={online} initialRiskReview={riskReviewOn} initialPolicy={setupOpen && mandate ? mandate.policy : null} onActivated={activated}
+          onBack={setupOpen && mandate ? () => setSetupOpen(false) : undefined} />
       </section>
     ) : mandate && (
       <main className={`m2-grid${phase === 'verdict' ? ' verdict' : ''}`}>
         <section className="m2-col m2-area-card">
-          <div className={`m2-card ${active ? '' : 'frozen'}`}>
-            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{active ? 'Active' : mandate.status === 'expired' ? 'Expired' : 'Frozen'}</span></div>
-            <div className="m2-card-amount"><small>{active ? 'Left this week' : 'Spending is off'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
+          <div className={`m2-card ${canSpend ? '' : 'frozen'}`}>
+            <div className="m2-card-top"><span>Mum’s grocery card</span><span className="m2-status">{!active ? mandate.status === 'expired' ? 'Expired' : 'Revoked' : card?.status === 'frozen' ? 'Paused' : 'Active'}</span></div>
+            {card && <div className="m2-card-number"><span>CONTROL CARD</span><b>{card.network === 'mastercard' ? 'Mastercard' : 'Visa'} ···· {card.last4}</b><small>the agent never sees reusable card details</small></div>}
+            {active && !card && <p className="m2-card-note">Card details are unavailable for this allowance. Wallet spending rules remain active.</p>}
+            <div className="m2-card-amount"><small>{!active ? 'Spending is off' : card?.status === 'frozen' ? 'Available when resumed' : 'Left this week'}</small><b>{active ? hkd(available) : 'HK$ 0'}</b></div>
             <div className="m2-meter" aria-hidden>{Array.from({ length: 20 }, (_, i) => <i key={i} className={i < Math.round(ratio * 20) ? 'on' : ''} />)}</div>
             <div className="m2-card-foot"><span>{hkd(spent)} used</span><span>{hkd(limit)} a week</span></div>
             <div className="m2-card-sticker"><Sticker name="kip" state={kipState} size={104} tilt={8} /></div>
           </div>
           <dl className="m2-rules">
             <div><dt>Most per order</dt><dd>{hkd(mandate.policy.per_order_limit_minor)}</dd></div>
-            <div><dt>Shop</dt><dd>Wellcome</dd></div>
+            <div><dt>{mandate.policy.allowed_merchant_ids.length > 1 ? 'Shops' : 'Shop'}</dt><dd>{mandate.policy.allowed_merchant_ids.map(storeName).join(', ')}</dd></div>
             <div><dt>Never buy</dt><dd>Alcohol</dd></div>
             {mandate.policy.approval_above_minor != null && <div><dt>Ask me first above</dt><dd>{hkd(mandate.policy.approval_above_minor)}</dd></div>}
             {mandate.policy.risk_review && <div><dt>Extra protection</dt><dd>Unusual purchases reviewed</dd></div>}
             <div><dt>Ends</dt><dd>{expires}</dd></div>
           </dl>
-          {active
-            ? <button className="m2-freeze" onClick={() => void freeze()} disabled={busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : 'Freeze the card'}</button>
+          {active ? card?.status === 'frozen'
+            ? <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}><Snowflake size={18} />{busy === 'unfreeze' ? 'Resuming…' : 'Unfreeze the card'}</button>
+            : <button className="m2-freeze" onClick={() => void freeze()} disabled={!card || busy === 'freeze'}><Snowflake size={18} />{busy === 'freeze' ? 'Freezing…' : card ? 'Freeze the card' : 'Card controls unavailable'}</button>
             : <button className="m2-cta" onClick={() => { setRiskReviewOn(Boolean(mandate.policy.risk_review)); setSetupOpen(true); }}>Start a new allowance<ArrowRight size={18} /></button>}
+          {active && <button className="m2-link m2-revoke-link" onClick={() => void revokeAllowance()} disabled={busy === 'revoke'}>Permanently revoke allowance</button>}
+          <button className="m2-receipts-trigger" onClick={showReceipts}><ReceiptText size={18} /><span><b>Receipts</b><small>{receipts.length ? `${receipts.length} purchases` : 'View past purchases'}</small></span><ArrowRight size={17} /></button>
+          <a className="m2-receipts-trigger" href="?card"><CreditCard size={18} /><span><b>Virtual card</b><small>Set up, freeze or check the card</small></span><ArrowRight size={17} /></a>
+          {receipts[0] && <button className="m2-latest-receipt" onClick={() => viewReceipt(receipts[0])}><span><small>LATEST RECEIPT</small><b>{merchantName(receipts[0].receipt.merchant_id)} · {new Date(receipts[0].receipt.paid_at || receipts[0].occurredAt).toLocaleDateString('en-HK', { day: 'numeric', month: 'short' })}</b></span><strong>{money(receipts[0].receipt.amount_minor)}</strong></button>}
         </section>
 
         <section className="m2-col m2-area-feed">
@@ -518,11 +688,12 @@ export default function SimpleApp() {
         </section>
 
         <section className="m2-col m2-area-shop" ref={shopRef}>
-          {!active ? (
+          {!canSpend ? (
             <div className="m2-panel m2-center">
               <Sticker name="kip" state="revoked" size={150} tilt={-4} />
-              <h2>Kip is asleep.</h2>
-              <p className="m2-muted">The card is {mandate.status === 'expired' ? 'expired' : 'frozen'}. Nobody can spend from it, not even Kumi.</p>
+              <h2>{!active ? 'Kip is asleep.' : 'Kip is taking a break.'}</h2>
+              <p className="m2-muted">{!active ? `The allowance is ${mandate.status === 'expired' ? 'expired' : 'revoked'}. Nobody can spend from it, not even Kumi.` : 'This virtual card is frozen. Kumi cannot shop until you unfreeze it.'}</p>
+              {active && <button className="m2-cta" onClick={() => void unfreeze()} disabled={busy === 'unfreeze'}>Unfreeze the card<ArrowRight size={18} /></button>}
             </div>
           ) : phase === 'pick' ? (
             <div className="m2-panel">
@@ -540,11 +711,14 @@ export default function SimpleApp() {
               </div>
               <p className="m2-muted m2-or">or start from a preset</p>
               <div className="m2-picks">
-                {PICKS.map((p) => { const Icon = p.icon; return <button key={p.id} className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
-                  <span className="m2-tile"><Icon size={24} strokeWidth={2.2} /></span>
-                  <span className="m2-pick-text"><b>{p.title}</b><small>{p.subtitle}</small></span>
-                  <span className="m2-pick-price">{products.length ? `~${hkd(estimate(p))}` : ''}</span>
-                </button>; })}
+                {visiblePicks.map((p) => { const Icon = p.icon; return <div key={p.id} className="m2-pick-row">
+                  <button className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
+                    <span className="m2-tile"><Icon size={24} strokeWidth={2.2} /></span>
+                    <span className="m2-pick-text"><b>{p.title}</b><small>{p.subtitle}</small></span>
+                    <span className="m2-pick-price">{products.length && !p.edited ? `~${hkd(estimate(p))}` : p.edited ? 'Personal' : ''}</span>
+                  </button>
+                  <button type="button" className="m2-edit-pick" onClick={() => editPreset(p)} aria-label={`Edit ${p.title}`} title={`Edit ${p.title}`}><Pencil size={16} /></button>
+                </div>; })}
               </div>
               <button className="m2-link" onClick={() => setShowCustom((v) => !v)}>{showCustom ? 'Hide the shelf' : 'Or pick items yourself'}</button>
               {showCustom && <div className="m2-shelf">
@@ -585,6 +759,7 @@ export default function SimpleApp() {
                 {phase === 'verdict' && verdict && <div className={`m2-stamp ${verdict.kind}`}>{stamp}</div>}
               </div>
               {phase === 'basket' && <>
+                <CartSyncPanel key={quote.id} token={TOKEN} mandateId={mandate.id} quote={quote} />
                 <button className="m2-cta" onClick={() => void checkout()}>Let Kip pay {hkd(quote.total_minor)}<ArrowRight size={18} /></button>
                 {routeLabel && <p className="m2-route">Kip will use <b>{routeLabel}</b>, the cheapest route it found.</p>}
                 <button className="m2-link" onClick={resetShop}>Start over</button>
@@ -609,6 +784,52 @@ export default function SimpleApp() {
         </section>
       </main>
     )}
+
+    {editingPreset && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingPreset(null); }}>
+      <section className="m2-modal m2-preset-modal" role="dialog" aria-modal="true" aria-labelledby="preset-editor-title">
+        <header className="m2-modal-head"><div><p className="m2-kicker">Make it yours</p><h2 id="preset-editor-title">Edit shopping preset</h2></div><button className="m2-icon-button" onClick={() => setEditingPreset(null)} aria-label="Close editor"><X size={20} /></button></header>
+        <label className="m2-field">Preset name<input value={editorTitle} maxLength={60} onChange={(event) => setEditorTitle(event.target.value)} /></label>
+        <div className="m2-editor-items-head"><b>Shopping list</b><small>Saved on this device</small></div>
+        <div className="m2-editor-items">{editorItems.map((item, index) => <div className="m2-editor-item" key={index}>
+          <input aria-label={`Item ${index + 1}`} value={item.name} maxLength={100} placeholder="e.g. jasmine rice" onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row))} />
+          <label><span>Qty</span><input aria-label={`Quantity for item ${index + 1}`} type="number" min="1" max="20" value={item.quantity || ''} onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value === '' ? 0 : Number(event.target.value) } : row))} /></label>
+          <input aria-label={`Unit for item ${index + 1} (optional)`} value={item.unit ?? ''} maxLength={24} placeholder="Unit" onChange={(event) => setEditorItems((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, unit: event.target.value } : row))} />
+          <button className="m2-icon-button danger" onClick={() => setEditorItems((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label={`Remove ${item.name || `item ${index + 1}`}`}><Trash2 size={17} /></button>
+        </div>)}</div>
+        <button className="m2-add-item" onClick={() => { if (editorItems.length < 20) setEditorItems((current) => [...current, { name: '', quantity: 1 }]); }} disabled={editorItems.length >= 20}>+ Add an item</button>
+        {presetError && <p className="m2-modal-error" role="alert">{presetError}</p>}
+        <div className="m2-modal-actions">
+          <button className="m2-ghost" onClick={() => resetPreset(editingPreset.id)}>{PICKS.some((item) => item.id === editingPreset.id) ? <><RotateCcw size={16} />Reset default</> : <><Trash2 size={16} />Delete copy</>}</button>
+          <button className="m2-ghost" onClick={duplicatePreset}>Make a copy</button>
+          <button className="m2-cta" onClick={savePreset}>Save preset</button>
+        </div>
+        <p className="m2-modal-note">When you shop, Kumi receives this edited list. If Kumi is unavailable, the original preset will not be substituted.</p>
+      </section>
+    </div>}
+
+    {profileOpen && <ProfileSheet token={TOKEN} online={online} mandate={mandate} onClose={() => setProfileOpen(false)}
+      onChangeRules={() => { setProfileOpen(false); setRiskReviewOn(Boolean(mandate?.policy.risk_review)); setSetupOpen(true); }} />}
+    {receiptsOpen && <div className="m2-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setReceiptsOpen(false); }}>
+      <section className="m2-modal m2-receipts-modal" role="dialog" aria-modal="true" aria-labelledby="receipts-title">
+        <header className="m2-modal-head"><div><p className="m2-kicker">Your purchase history</p><h2 id="receipts-title">{selectedReceiptRecord ? 'Receipt' : 'Receipts'}</h2></div><button className="m2-icon-button" onClick={() => { setReceiptsOpen(false); setSelectedReceipt(null); }} aria-label="Close receipts"><X size={20} /></button></header>
+        {selectedReceiptRecord ? <>
+          <button className="m2-back-link" onClick={() => setSelectedReceipt(null)}>← All receipts</button>
+          <article className="m2-paper-receipt" id="printable-receipt">
+            <div className="m2-paper-brand">{merchantName(selectedReceiptRecord.receipt.merchant_id).toUpperCase()} <span>MANDATE · SANDBOX</span></div>
+            <p className="m2-paper-date">{new Date(selectedReceiptRecord.receipt.paid_at || selectedReceiptRecord.occurredAt).toLocaleString('en-HK', { dateStyle: 'long', timeStyle: 'short' })}</p>
+            {receiptDetailLoading ? <p className="m2-muted">Loading item details…</p> : selectedReceiptRecord.quote ? <ul>{selectedReceiptRecord.quote.items.map((item) => <li key={item.product_id}><span>{item.quantity}× {item.title}</span><b>{money(item.line_total_minor)}</b></li>)}{selectedReceiptRecord.quote.charges.map((charge, index) => <li key={`${charge.label}-${index}`}><span>{charge.label}</span><b>{charge.amount_minor ? money(charge.amount_minor) : 'FREE'}</b></li>)}</ul> : <p className="m2-muted">{receiptDetailError || 'Item details are no longer available for this purchase.'}{receiptDetailError && <button className="m2-back-link" onClick={() => void openReceipt(selectedReceiptRecord)}>Try again</button>}</p>}
+            <div className="m2-paper-total"><span>Paid</span><b>{money(selectedReceiptRecord.receipt.amount_minor)}</b></div>
+            <dl><dt>Payment route</dt><dd>{selectedReceiptRecord.receipt.payment_route?.label ?? 'Sandbox wallet'}</dd><dt>Receipt ID</dt><dd>{selectedReceiptRecord.receipt.id}</dd><dt>Transaction</dt><dd>{selectedReceiptRecord.receipt.transaction_id}</dd></dl>
+          </article>
+          <button className="m2-cta m2-print-button" onClick={() => window.print()}><Printer size={17} />Print / Save PDF</button>
+        </> : <>
+          {receiptsLoading ? <div className="m2-receipt-loading"><Avatar name="stella" state="idle" size={64} /><p>Finding your receipts…</p></div> : receiptsError ? <div className="m2-receipts-state"><p role="alert">{receiptsError}</p><button className="m2-ghost" onClick={() => void loadReceipts(true)}>Try again</button></div> : receipts.length ? <div className="m2-receipt-list">{receipts.map((record) => <button className="m2-receipt-row" key={record.receipt.transaction_id} onClick={() => void openReceipt(record)}>
+            <span className="m2-receipt-icon"><ReceiptText size={19} /></span><span className="m2-receipt-row-text"><b>{merchantName(record.receipt.merchant_id)} groceries</b><small>{new Date(record.receipt.paid_at || record.occurredAt).toLocaleString('en-HK', { dateStyle: 'medium', timeStyle: 'short' })}</small></span><b className="m2-receipt-row-amount">{money(record.receipt.amount_minor)}</b><ArrowRight size={17} />
+          </button>)}</div> : <div className="m2-receipts-state"><Sticker name="stella" state="idle" size={104} tilt={-5} /><h3>No paid receipts yet</h3><p>Completed sandbox purchases will appear here. Refused orders are not receipts.</p></div>}
+          {!receiptsLoading && receipts.length > 0 && <button className="m2-refresh-receipts" onClick={() => void loadReceipts(true)}>Refresh history</button>}
+        </>}
+      </section>
+    </div>}
 
     <footer className="m2-foot">
       <button className="m2-link" onClick={() => setShowFine((v) => !v)}>How this works</button>

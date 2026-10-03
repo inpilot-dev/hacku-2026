@@ -298,11 +298,60 @@ cannot wear the owner down with approval requests.
 agent *and* whose owner is the user the token names; anything else is 404. `RevokeRequest.reason` and
 `CancelRequest.reason` are capped at 500 characters like the other free-text fields.
 
-New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`.
-`mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`.
+**Virtual cards (proposed v0.3, wallet, Timmy).** Confirming a mandate issues it a virtual card from a sandbox
+card issuer: a Luhn-valid 16-digit number on a sandbox Mastercard BIN, expiry = the mandate's expiry, and spending
+controls copied from the policy (per-order limit, HKD, allowed shops, blocked merchant category codes: gambling,
+quasi-cash and money transfer always, liquor stores when `alcohol` is blocked). A child mandate's card hangs under its
+parent's card. The mandate card is never presented to a shop. On the card rails, each approved authorization issues a
+**single-use virtual card** under it, locked to the shop, the authorized amount and the reservation's expiry; its last4
+is the `payment_credential.last4` the agent already receives (no new fields there). At payment the wallet presents that
+card to the issuer, which runs a card authorization (number, expiry, security code, card status up the chain, shop,
+category code, amount) and burns the card on approval. A cancelled or expired hold cancels its card; revoking a
+mandate cancels its card for good. The number is encrypted at rest and only the last4 ever leaves the issuer; the
+security code is derived, never stored.
+
+New endpoints: `GET /mandates/{mandate_id}/card` (owner or the mandate's agent; masked), `POST
+/mandates/{mandate_id}/card/freeze` and `/unfreeze` (owner only, `Idempotency-Key`, optional `reason`), `GET
+/mandates/{mandate_id}/card/authorizations` (owner or the mandate's agent; every approved and declined card
+authorization with its ISO 8583 response code). Freeze is reversible, unlike revoke: while a card in the mandate chain is
+frozen, `POST /authorizations` refuses with the new reason code **`CARD_FROZEN`** (`rule_id` `<mandate>/v<n>/card`), and
+`POST /payments` on an earlier authorization refuses with `CARD_FROZEN`, releases the hold and records a declined
+authorization (response code 62). FPS purchases are refused too: the card is the face of the whole mandate.
+
+New audit event types: `approval_granted`, `approval_denied`, `approval_expired`, `payment_refunded`, `card_frozen`,
+`card_unfrozen`. `mandate_confirmed` records `rails` (one account per rail) instead of a single `rail`, and `card`
+(card id, usage, network, last4; never the number).
 
 ## Local demo checkout adapter (Noah)
 
 `POST /demo/purchases` is a local-only adapter to complete the UI's scripted sandbox path while Abdullah's shopping worker is not integrated. It is disabled unless `MANDATE_ENABLE_DEMO_CHECKOUT=1`. The request uses the authenticated user’s mandate and quote plus a caller-stable transaction ID. The server checks the user owns the mandate and quote, derives the delegatee from that mandate, and calls the normal wallet authorization and payment methods. The browser receives the decision and receipt, but never an agent credential, signed authorization token, or single-use payment credential. A replay uses deterministic server idempotency keys derived from the transaction ID.
 
 This endpoint does not give the user control over an arbitrary actor, does not bypass the policy engine, and does not move real money. Remove it or replace its caller with Abdullah’s agent-run service when that service is integrated.
+
+## Proposed: store accounts and real carts (Abdullah)
+
+Status: **proposed, needs the group's OK**. Additive endpoints under the `stores` tag; nothing existing changes.
+
+**Store sign-in.** `POST /stores/{store_id}/connect` opens the store's own sign-in page (Wellcome: yuu Rewards, mobile
+number + SMS code) in an isolated browser context on the server. The client shows that one tab through
+`WS /stores/{store_id}/login/stream?ticket=` (ticket from `POST /stores/{store_id}/login/ticket`, single use, 60 s):
+the server sends JPEG frames, the client sends pointer and key events from a fixed set. The user types their code into
+the store's page; the service does not store or log it. When the store sets its login cookie, the session (cookies
+and localStorage) is saved server-side in a 0600 file and is never returned by any endpoint. `GET /stores` and
+`GET /stores/{store_id}` report `not_connected`, `awaiting_login`, `connected` or `expired`;
+`DELETE /stores/{store_id}/connection` forgets the session.
+
+**Real cart.** `POST /carts/sync {mandate_id, quote_id}` fills the user's real cart at the quote's store, only when the
+mandate is active and allows that store and the account is connected. It sets each quoted line to its quantity (read
+first, so a retry never doubles a line), reads the cart back and compares line by line. **It never checks out.**
+`checkout_ready` is true only when every line matches the quote and the cart holds no other selected item, because the
+store checks out everything selected.
+
+**Open questions for checkout (Timmy):**
+
+- The store's cart price can differ from the snapshot catalog: on 2026-10-03 milk was HK$38.00 in the catalog and
+  HK$40.00 in a logged-in cart, because cart prices follow the account's fulfilment store. Proposal: record the synced
+  cart as an observation (evidence) and re-quote from it, so the single-use card amount equals what the store will
+  charge. `cart_subtotal_minor` is evidence only; it never replaces the quote.
+- A run that splits a list across stores yields one quote per store. `AgentRun.quote_id` would become a list, and the
+  per-order limit needs defined semantics across several store orders.

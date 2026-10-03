@@ -28,6 +28,13 @@ How a capture works:
   - A product listed under two differently mapped categories, or a non-alcohol listing whose title looks
     alcoholic, is marked `conflicting`. A mandate that blocks alcohol then sends it to review.
 
+**Market Place** (marketplacehk.com) is the same DFI "superweb" build: same category IDs, card markup, product
+JSON-LD and Click & Collect wording ("free on orders over HK$50"), checked 2026-10-03. `--store marketplace`
+captures it with its own IDs (`marketplace_<sku>`, `ctx_marketplace_click_collect`) and evidence folder.
+`just capture` captures both and joins them with `catalog_capture.combine` into `data/catalog/stores.json`, which
+`just dev` and `just demo` load (the wallet reads one catalog file). On the first capture, 69 SKUs were sold by
+both shops and 21 of them had different guest prices (Market Place was usually dearer).
+
 The MCP wallet server's `get_catalog` tool needs an API that mounts this route. Point it at
 `just backend-observed` (port 8000). `dev_app:seeded_app`, which the MCP README uses, does not mount `GET /catalog`.
 
@@ -80,7 +87,10 @@ First run, 2026-10-03, Wellcome:
     finishing loading, in Steel and over plain HTTP alike (the response stalls partway). Whether it loads
     normally in an ordinary browser has not been checked.
   - ParknShop returns HTTP 403 (Access Denied) to both scripts and a normal browser session.
-  - Neither is captured, and no access control is bypassed.
+  - Neither is captured, and no access control is bypassed. ParknShop still answered 403 (Akamai) to the
+    Steel browser on 2026-10-03.
+  - Pinduoduo has no shopping cart (items are bought one at a time, mostly in its app), so there is no cart
+    to fill. Taobao would need its own signed cart API adapter and CNY prices; not attempted.
 
 ## Frontend integration status (Noah)
 

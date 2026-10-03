@@ -6,6 +6,7 @@ import placeholderCatalog from '../../../../services/api/mandate/payments/fixtur
 import { generated_at as evalGeneratedAt, git_commit as evalCommit, live_http as evalLive } from '../../../../evaluation/results/latest.json';
 import { api, ApiError } from '../lib/api';
 import { money, shortDate } from '../lib/format';
+import ReactiveCharacter from '../components/ReactiveCharacter';
 import { matchScriptedCatalogBasket } from './scriptedCatalogMatcher';
 
 const DEFAULT_TOKEN = 'dev-user-token';
@@ -568,7 +569,7 @@ function MandateOverviewContent({ mandate, active, busy, onSetup, onWallet, onRe
 }
 
 function AgentCharacter({ name, state, label, size = 48 }: { name: 'bean' | 'kip' | 'kumi' | 'stella'; state: string; label: string; size?: number }) {
-  return <img className="agent-character" src={`/agents/${name}-${state}.png`} alt={label} width={size} height={size} loading="lazy" />;
+  return <ReactiveCharacter className="agent-character" name={name} state={state} label={label} size={size} loading="lazy" />;
 }
 
 function Rule({ icon, label, value, detail }: { icon: React.ReactNode; label: string; value: string; detail: string }) { return <div className="rule-item"><span className="rule-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></div>; }
@@ -999,7 +1000,7 @@ function SafetyView({ token, mandate, health, catalogIsPlaceholder }: { token: s
         <div className="model-limit"><CircleHelp size={14} /><span>Bounded result applies only to this model, bound and listed assumptions. It does not prove the deployed wallet correct.</span></div>
       </section>
     </div>
-    <section className="honesty-grid"><div className="honesty-card"><span className="honesty-icon"><Eye size={18} /></span><strong>Catalog evidence</strong><p>{catalogIsPlaceholder ? 'Prices lack complete timestamped source and capture evidence; don’t present them as verified offers.' : 'Available products link to timestamped price sources and captures.'}</p></div><div className="honesty-card"><span className="honesty-icon"><WalletCards size={18} /></span><strong>Sandbox payment only</strong><p>No card is issued and no real funds move. A completed receipt is a local simulation.</p></div><div className="honesty-card"><span className="honesty-icon"><FileCheck2 size={18} /></span><strong>Evidence has limits</strong><p>An export without an independently retained checkpoint is not a verified audit history.</p></div></section>
+    <section className="honesty-grid"><div className="honesty-card"><span className="honesty-icon"><Eye size={18} /></span><strong>Catalog evidence</strong><p>{catalogIsPlaceholder ? 'Prices lack complete timestamped source and capture evidence; don’t present them as verified offers.' : 'Available products link to timestamped price sources and captures.'}</p></div><div className="honesty-card"><span className="honesty-icon"><WalletCards size={18} /></span><strong>Sandbox payment only</strong><p>Sandbox virtual cards are issued, but no card network is contacted and no real funds move. Receipts are local simulations.</p></div><div className="honesty-card"><span className="honesty-icon"><FileCheck2 size={18} /></span><strong>Evidence has limits</strong><p>An export without an independently retained checkpoint is not a verified audit history.</p></div></section>
     <div className="bottom-note"><span><Shield size={15} /> Live policy decisions come from the wallet service.</span><span>Prototype build · <button>Read safety notes</button></span></div></>;
 }
 

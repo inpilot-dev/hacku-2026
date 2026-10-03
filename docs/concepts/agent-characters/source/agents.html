@@ -125,8 +125,10 @@ const arc = (cx, cy, w, h, n = 11) => Array.from({ length: n }, (_, i) => { cons
 
 // faces: eyes at (±ex, ey)
 function eyes(kind, ex, ey, o = {}) {
+  if (STATE === 'blink' && ['capsule', 'dot'].includes(kind)) kind = 'sleep';
+  const gaze = STATE === 'look-left' ? -0.055 : STATE === 'look-right' ? 0.055 : 0;
   for (const s of [-1, 1]) {
-    const x = s * ex;
+    const x = s * ex + gaze;
     if (kind === 'capsule') { const e = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), M.ink); e.scale.set(0.11, 0.2, 0.06); place(e, x, ey); }
     if (kind === 'dot') { const e = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), M.ink); e.scale.set(0.11, 0.12, 0.06); place(e, x + (o.look?.[0] || 0), ey + (o.look?.[1] || 0)); }
     if (kind === 'googly') {
@@ -170,7 +172,7 @@ function badge(kind, pos) {
 }
 
 // ---------- the agents ----------
-const S = STATE;
+const S = ['blink', 'look-left', 'look-right'].includes(STATE) ? 'idle' : STATE;
 if (CHAR === 'kumi') { // shopping agent: a fuzzy shopping tote with groceries poking out
   const orange = '#ff8a1f';
   // groceries behind the front face
@@ -192,6 +194,7 @@ if (CHAR === 'kumi') { // shopping agent: a fuzzy shopping tote with groceries p
     h.position.set(0, 1.84, z); h.rotation.y = ry; char.add(h);
   }
   if (S === 'idle') { eyes('capsule', 0.3, 1.1); mouth('smile', 0.78); }
+  if (S === 'smile') { eyes('happy', 0.3, 1.1); mouth('open', 0.78); }
   if (S === 'happy') { eyes('happy', 0.3, 1.08); mouth('open', 0.78, 0.13); sparkles(); }
   if (S === 'sad') { eyes('capsule', 0.3, 1.08); brows('sad', 0.3, 1.36); mouth('sad', 0.78); tear(-0.42, 0.9); }
 }
@@ -202,6 +205,7 @@ if (CHAR === 'bean') { // planner: a fuzzy speech bubble that turns plain words 
   tail.scale.set(0.32, 0.4, 0.3); tail.position.set(-0.6, 0.62, 0.05); tail.rotation.z = -0.55; char.add(tail);
   glasses(0.33, 1.52);
   if (S === 'idle') { eyes('dot', 0.33, 1.52); mouth('smile', 1.18, 0.1); }
+  if (S === 'smile') { eyes('happy', 0.33, 1.52); mouth('open', 1.18, 0.1); }
   if (S === 'thinking') {
     eyes('dot', 0.33, 1.52, { look: [0.06, 0.07] }); mouth('o', 1.16);
     [[0.06, [0.95, 2.4, 0.5]], [0.09, [1.12, 2.6, 0.5]], [0.13, [1.35, 2.82, 0.5]]].forEach(([r, p]) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 24), new THREE.MeshPhysicalMaterial({ color: 0xf2f4f8, roughness: 0.3, clearcoat: 1 })); m.position.set(...p); root.add(m); });
@@ -221,6 +225,7 @@ if (CHAR === 'kip') { // wallet guardian: a kiss-lock coin purse
     k.position.set(s * 0.085, top, 0); if (S === 'approved') k.rotation.z = -s * 0.5; char.add(k);
   }
   if (S === 'idle') { eyes('capsule', 0.32, 1.12); mouth('smile', 0.8); }
+  if (S === 'smile') { eyes('happy', 0.32, 1.12); mouth('open', 0.8); }
   if (S === 'approved') {
     eyes('happy', 0.32, 1.1); mouth('open', 0.8, 0.12); sparkles();
     const face = canvasTex(256, 256, (x) => { x.fillStyle = '#f6cf6a'; x.fillRect(0, 0, 256, 256); x.strokeStyle = '#c9952a'; x.lineWidth = 14; x.beginPath(); x.arc(128, 128, 96, 0, 7); x.stroke(); x.fillStyle = '#b07a12'; x.font = '800 150px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('$', 128, 138); });
@@ -243,6 +248,7 @@ if (CHAR === 'stella') { // checker: verifies each purchase against the mandate
     v.set(v.x * rr * 1.0, v.y * rr * 1.0 + 1.12, v.z * 0.62);
   }, 240, 160), '#ff4fa6', { density: 110 });
   if (S === 'idle') { eyes('capsule', 0.26, 1.2); mouth('smile', 0.9, 0.12); }
+  if (S === 'smile') { eyes('happy', 0.26, 1.2); mouth('open', 0.9, 0.12); }
   if (S === 'pass') { eyes('happy', 0.26, 1.18); mouth('open', 0.92, 0.12); badge('ok', [1.15, 2.3, 0.4]); sparkles(); }
   if (S === 'fail') { eyes('capsule', 0.26, 1.18); brows('sad', 0.26, 1.42); mouth('sad', 0.92, 0.12); badge('no', [1.15, 2.3, 0.4]); }
 }
