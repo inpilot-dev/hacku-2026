@@ -192,17 +192,35 @@ export default function SimpleApp() {
     };
     setBusy('activate');
     try {
-      const result = await api.confirm(TOKEN, { draft_id: DRAFT_ID, policy });
+      const draftId = await freshDraftId(weeklyMinor, orderMinor);
+      const result = await api.confirm(TOKEN, { draft_id: draftId, policy });
       sessionStorage.removeItem('mandate-idempotency-confirm-draft-demo');
       localStorage.setItem(MANDATE_KEY, result.id);
       setMandateId(result.id); setMandate(result); setSetupOpen(false); resetShop();
       note('bean', `Allowance on: ${money(weeklyMinor)}/week, ${money(orderMinor)}/order`, 'good');
       await refresh(result.id);
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 409
-        ? 'This demo wallet only has one setup slot and it’s used. Restart the demo for a fresh wallet.'
-        : err instanceof Error ? err.message : 'The wallet could not switch this on.');
+      setError(err instanceof Error ? err.message : 'The wallet could not switch this on.');
     } finally { setBusy(''); }
+  }
+
+  /**
+   * A draft backs exactly one mandate, so every switch-on (including after a freeze) registers its own.
+   * The rules confirmed are the ones set on this screen; the draft only records who may act for whom.
+   * Falls back to the seeded draft when the draft API isn't mounted.
+   */
+  async function freshDraftId(weeklyMinor: number, orderMinor: number): Promise<string> {
+    try {
+      const draft = await api.draft(TOKEN, {
+        text: `Weekly allowance for Mum: ${money(orderMinor)} per order and ${money(weeklyMinor)} per week, only from ${STORE_ID}, no alcohol.`,
+        delegatee_id: 'agent_student',
+      });
+      sessionStorage.removeItem('mandate-idempotency-mandate-draft');
+      return draft.draft_id;
+    } catch (err) {
+      if (err instanceof ApiError && [404, 405].includes(err.status)) return DRAFT_ID;
+      throw err;
+    }
   }
 
   async function freeze() {
