@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -77,6 +77,8 @@ export const api = {
     method: 'POST', headers: { 'Idempotency-Key': await semanticSessionKey('agent-run', input) }, body: JSON.stringify(input),
   }),
   agentRun: (token: string, id: string) => request<AgentRun>(`/agent-runs/${encodeURIComponent(id)}`, token),
+  parseShoppingList: (token: string, input: ShoppingListParseRequest) => request<ShoppingListParseResponse>('/shopping-list/parse', token, { method: 'POST', body: JSON.stringify(input) }),
+  transcribeShoppingList: (token: string, input: TranscriptionRequest) => request<TranscriptionResponse>('/shopping-list/transcribe', token, { method: 'POST', body: JSON.stringify(input) }),
   demoPurchase: (token: string, input: DemoPurchaseRequest) => request<DemoPurchaseResponse>('/demo/purchases', token, { method: 'POST', body: JSON.stringify(input) }),
   paymentByTransaction: (token: string, transactionId: string) => request<Receipt>(`/payments/${encodeURIComponent(transactionId)}`, token),
   approval: (token: string, id: string) => request<ApprovalRequest>(`/approvals/${encodeURIComponent(id)}`, token),

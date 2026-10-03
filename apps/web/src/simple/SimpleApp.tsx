@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Carrot, Cherry, Snowflake, Wine } from 'lucide-react';
+import { ArrowRight, Carrot, Cherry, Mic, Snowflake, Square, Wine } from 'lucide-react';
 import './openai-tokens.css';
-import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Policy, Product, Quote, Receipt, RuleViolation } from '../../../../contracts/types';
+import type { ApprovalRequest, AuditEvent, BudgetResponse, CatalogResponse, Mandate, Policy, Product, Quote, Receipt, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../contracts/types';
 import { api, ApiError } from '../lib/api';
 import { money } from '../lib/format';
 
@@ -105,6 +105,24 @@ function eventText(event: AuditEvent): Omit<LogEntry, 'id' | 'at'> | null {
   }
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',', 2)[1] ?? '');
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the recording.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function audioFormat(mimeType: string): TranscriptionRequest['format'] {
+  if (mimeType.includes('ogg')) return 'ogg';
+  if (mimeType.includes('webm')) return 'webm';
+  if (mimeType.includes('mp4') || mimeType.includes('aac')) return 'm4a';
+  return 'ogg';
+}
+
+type Spoken = { kind: 'list'; items: ShoppingItem[] };
+
 export default function SimpleApp() {
   const [online, setOnline] = useState<boolean | null>(null);
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
@@ -132,6 +150,9 @@ export default function SimpleApp() {
   const [routeLabel, setRouteLabel] = useState('');
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [agentNote, setAgentNote] = useState('');
+  const [listText, setListText] = useState('');
+  const [voice, setVoice] = useState<'' | 'recording' | 'transcribing'>('');
+  const recorderRef = useRef<MediaRecorder | null>(null);
 
   const [log, setLog] = useState<LogEntry[]>([]);
   const [serverLog, setServerLog] = useState<LogEntry[] | null>(null);
@@ -245,35 +266,101 @@ export default function SimpleApp() {
   }
 
   /** Ask the agent service first; if it isn't mounted, use the preset basket and say so. */
-  async function packWithAgent(chosen: Pick): Promise<Quote | null> {
-    if (!mandate) return null;
+  async function packWithAgent(list: ShoppingItem[]): Promise<{ quote: Quote | null; message: string }> {
+    if (!mandate) return { quote: null, message: '' };
     try {
-      const run = await api.startAgentRun(TOKEN, { mandate_id: mandate.id, shopping_list: chosen.list.map((name) => ({ name, quantity: 1 })), auto_purchase: false });
+      const run = await api.startAgentRun(TOKEN, { mandate_id: mandate.id, shopping_list: list, auto_purchase: false });
       let current = run;
       for (let tries = 0; tries < 20 && !current.quote_id && !['failed', 'refused', 'completed'].includes(current.status); tries += 1) {
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
         current = await api.agentRun(TOKEN, run.id);
       }
-      if (current.quote_id) { setAgentNote(`Packed by ${current.provider === 'jev' ? 'the shopping agent' : current.provider}`); return await api.quoteById(TOKEN, current.quote_id); }
-      return null;
+      if (current.quote_id) {
+        setAgentNote(`Packed by ${current.provider === 'jev' ? 'the shopping agent' : current.provider}`);
+        note('kumi', current.message, 'info');
+        return { quote: await api.quoteById(TOKEN, current.quote_id), message: current.message };
+      }
+      return { quote: null, message: current.message || 'Kumi could not build a basket.' };
     } catch {
-      return null;
+      return { quote: null, message: '' };  // agent service not reachable
     }
   }
 
-  async function shop(chosen: Pick | 'custom') {
+  async function toggleRecording() {
+    if (voice === 'recording') { recorderRef.current?.stop(); return; }
+    if (voice) return;
+    setError('');
+    let stream: MediaStream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch {
+      setError('Microphone access was blocked. Allow it for this page, or type the list.'); return;
+    }
+    const mimeType = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      void transcribe(new Blob(chunks, { type: recorder.mimeType }));
+    };
+    recorderRef.current = recorder;
+    recorder.start();
+    setVoice('recording');
+    window.setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 30000);
+  }
+
+  async function transcribe(blob: Blob) {
+    setVoice('transcribing');
+    try {
+      const result = await api.transcribeShoppingList(TOKEN, { audio_base64: await blobToBase64(blob), format: audioFormat(blob.type) });
+      if (!result.text.trim()) setError('Kumi didn’t catch any words. Try again, or type the list.');
+      else setListText((current) => (current.trim() ? `${current.trim()}\n` : '') + result.text.trim());
+    } catch (err) {
+      setError(err instanceof Error ? `Could not transcribe that: ${err.message}` : 'Could not transcribe that.');
+    } finally { setVoice(''); }
+  }
+
+  async function shopFromText() {
+    const text = listText.trim();
+    if (!mandate || !active || !text || busy) return;
+    setError(''); setBusy('parse');
+    try {
+      const parsed = await api.parseShoppingList(TOKEN, { text });
+      if (!parsed.items.length) { setError('Kumi couldn’t find any items in that. Try “rice, milk, 3 apples”.'); return; }
+      note('kumi', `Heard: ${parsed.items.map((item) => `${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`).join(', ')}${parsed.source === 'rules' ? ' (split by simple rules)' : ''}`, 'info');
+      await shop({ kind: 'list', items: parsed.items });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Kumi could not read that list.');
+    } finally { setBusy(''); }
+  }
+
+  async function shop(chosen: Pick | 'custom' | Spoken) {
     if (!mandate || !active) return;
+    const spoken = chosen !== 'custom' && 'kind' in chosen;
     const lines = chosen === 'custom'
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
-      : chosen.items.filter((line) => productById.has(line.product_id));
-    if (!lines.length) { setError('That basket is empty in the current catalog.'); return; }
-    setError(''); setVerdict(null); setPick(chosen === 'custom' ? null : chosen); setPhase('packing');
+      : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
+    if (!spoken && !lines.length) { setError('That basket is empty in the current catalog.'); return; }
+    setError(''); setVerdict(null); setPick(chosen === 'custom' || spoken ? null : chosen); setPhase('packing');
     shopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
-      let result = chosen === 'custom' ? null : await packWithAgent(chosen);
+      let result: Quote | null = null;
+      if (chosen !== 'custom') {
+        const packed = await packWithAgent(spoken ? chosen.items : chosen.list.map((name) => ({ name, quantity: 1 })));
+        result = packed.quote;
+        if (!result && spoken) {
+          setError(packed.message || 'The shopping agent isn’t connected, so Kumi can’t read a list right now.');
+          if (packed.message) note('kumi', packed.message, 'bad');
+          setPhase('pick');
+          return;
+        }
+        if (!result) {
+          // The preset still goes to Kip, so the wallet's own check is shown either way.
+          if (packed.message) note('kumi', packed.message, 'bad');
+          setAgentNote(packed.message ? 'Kumi wouldn’t pack it · preset basket sent to Kip as a rule test' : 'Preset basket · agent not connected here');
+        }
+      }
       if (!result) {
-        if (chosen !== 'custom') setAgentNote('Preset basket · agent not connected here');
-        else setAgentNote('Picked by you');
+        if (chosen === 'custom') setAgentNote('Picked by you');
         result = await api.quote(TOKEN, { merchant_id: STORE_ID, delivery_context_id: PICKUP_CONTEXT_ID, items: lines });
       }
       setQuote(result);
@@ -438,6 +525,16 @@ export default function SimpleApp() {
           ) : phase === 'pick' ? (
             <div className="m2-panel">
               <div className="m2-panel-head"><div><p className="m2-kicker">Kumi’s turn</p><h2>What does Mum need this week?</h2></div><Sticker name="kumi" state="idle" size={84} tilt={6} /></div>
+              <div className="m2-ask">
+                <textarea value={listText} onChange={(e) => setListText(e.target.value)} rows={3} placeholder="Tell Kumi what Mum needs, e.g. “rice, two litres of milk, 3 apples”" aria-label="Shopping list for Kumi" disabled={busy === 'parse' || voice === 'transcribing'} />
+                <div className="m2-ask-actions">
+                  <button type="button" className={`m2-mic${voice === 'recording' ? ' on' : ''}`} onClick={() => void toggleRecording()} disabled={voice === 'transcribing' || busy === 'parse'} aria-label={voice === 'recording' ? 'Stop recording' : 'Speak the list'}>
+                    {voice === 'recording' ? <Square size={16} /> : <Mic size={16} />}{voice === 'recording' ? 'Stop' : voice === 'transcribing' ? 'Transcribing…' : 'Speak'}
+                  </button>
+                  <button type="button" className="m2-cta" onClick={() => void shopFromText()} disabled={!listText.trim() || busy === 'parse' || Boolean(voice) || !products.length}>{busy === 'parse' ? 'Reading your list…' : 'Ask Kumi to pack it'}<ArrowRight size={18} /></button>
+                </div>
+              </div>
+              <p className="m2-muted m2-or">or start from a preset</p>
               <div className="m2-picks">
                 {PICKS.map((p) => { const Icon = p.icon; return <button key={p.id} className={`m2-pick ${p.tone}`} onClick={() => void shop(p)} disabled={!products.length}>
                   <span className="m2-tile"><Icon size={24} strokeWidth={2.2} /></span>

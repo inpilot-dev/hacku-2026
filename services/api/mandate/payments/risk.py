@@ -7,7 +7,7 @@ flow and the owner reads the reasons before deciding. Each check has its own
 rule id (``<mandate>/v<n>/risk:<check>``), so an approval waives only the
 checks the owner saw.
 
-The habit checks (first purchase, large basket, new items, price jump) run
+The habit checks (first purchase, new shop, large basket, new items, price jump) run
 only on mandates with ``policy.risk_review`` on. The listing check runs on
 every purchase: text in a product listing that tries to instruct the shopping
 agent is never normal.
@@ -43,7 +43,8 @@ _INJECTION = re.compile("|".join(f"(?:{p})" for p in INJECTION_PATTERNS), re.IGN
 
 @dataclass(frozen=True)
 class PastPurchase:
-    """A paid purchase by the same owner: its total and the unit price paid for each product."""
+    """A paid purchase by the same owner: its shop, total and the unit price paid for each product."""
+    merchant_id: str
     total_minor: int
     unit_prices: dict[str, int]
 
@@ -84,6 +85,10 @@ def assess(mandate: dict, quote: dict, *, history: list[PastPurchase], mandate_p
     if mandate_purchases == 0:
         reasons.append(_flag(mandate, "first_purchase",
                              f"This is the first purchase under this mandate ({money(amount)})."))
+
+    if history and quote["merchant_id"] not in {p.merchant_id for p in history}:
+        reasons.append(_flag(mandate, "new_merchant", f"First order from {quote['merchant_id']}; earlier orders "
+                                                      f"were all from other shops."))
 
     if len(history) >= MIN_HISTORY:
         usual = int(median(p.total_minor for p in history))

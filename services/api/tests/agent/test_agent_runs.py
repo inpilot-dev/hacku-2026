@@ -59,7 +59,7 @@ class FakeSelector:
         self.offered = [p["id"] for p in products]
         picks = []
         for item in items:
-            match = next((p for p in products if item["name"].lower() in p["title"].lower()), None)
+            match = next((p for p in products if item["name"].lower().split()[-1] in p["title"].lower()), None)
             picks.append(Pick(item["name"], item["quantity"], match["id"] if match else None,
                               0.97 if match else 1.0, "" if match else "no matching product"))
         return Selection(picks, "jev-test")
@@ -102,13 +102,13 @@ def test_run_quotes_a_basket_the_user_can_load(env):
     run = client.get(f"/api/v1/agent-runs/{res.json()['id']}", headers=USER).json()
     assert run["status"] == "quoted" and run["provider"] == "jev" and run["model_id"] == "jev-test"
     assert "picked 2 of 3 items" in run["message"] and "eggs (no matching product)" in run["message"]
-    assert "categories your mandate blocks (alcohol) were not offered" in run["message"]
+
 
     quote = client.get(f"/api/v1/quotes/{run['quote_id']}", headers=USER).json()
     assert {(i["product_id"], i["quantity"]) for i in quote["items"]} == {("rice", 1), ("brocc", 2)}
     assert quote["total_minor"] == 8990 + 2 * 890
-    # Blocked and conflicting-category products are never offered to the selector.
-    assert set(selector.offered) == {"rice", "brocc"}
+    # Blocked products are offered (so a request can be named and refused); conflicting ones are not.
+    assert set(selector.offered) == {"rice", "brocc", "beer"}
 
 
 def test_over_limit_basket_is_quoted_with_a_warning(env):
@@ -199,3 +199,30 @@ def test_mandate_for_a_store_missing_from_the_catalog_explains_itself(env):
     run = client.get(f"/api/v1/agent-runs/{start(client, mandate, [('rice', 1)]).json()['id']}", headers=USER).json()
     assert run["status"] == "failed"
     assert "demo_store_a is not in the current catalog" in run["message"]
+
+
+def test_quantity_written_in_the_item_name_is_used(env):
+    client, confirm, _ = env
+    run_id = start(client, confirm(), [("2 jasmine rice", 1), ("broccoli x3", 1)]).json()["id"]
+    run = client.get(f"/api/v1/agent-runs/{run_id}", headers=USER).json()
+    quote = client.get(f"/api/v1/quotes/{run['quote_id']}", headers=USER).json()
+    assert {(i["product_id"], i["quantity"]) for i in quote["items"]} == {("rice", 2), ("brocc", 3)}
+
+
+def test_requested_blocked_product_is_named_and_never_packed(env):
+    client, confirm, _ = env
+    run = client.get(f"/api/v1/agent-runs/{start(client, confirm(), [('lager', 1), ('rice', 1)]).json()['id']}",
+                     headers=USER).json()
+    assert run["status"] == "quoted"
+    assert "lager (not packed: your mandate blocks alcohol)" in run["message"]
+    quote = client.get(f"/api/v1/quotes/{run['quote_id']}", headers=USER).json()
+    assert [i["product_id"] for i in quote["items"]] == ["rice"]
+
+
+def test_only_blocked_items_left_is_a_refusal_with_reasons(env):
+    client, confirm, _ = env
+    run = client.get(f"/api/v1/agent-runs/{start(client, confirm(), [('lager', 1), ('broccoli', 1)]).json()['id']}",
+                     headers=USER).json()
+    assert run["status"] == "refused" and run["quote_id"] is None
+    assert "no observed delivery or pickup fee covers" in run["message"]
+    assert "lager (not packed: your mandate blocks alcohol)" in run["message"]

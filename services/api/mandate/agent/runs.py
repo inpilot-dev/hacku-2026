@@ -25,6 +25,7 @@ from mandate.payments.errors import ApiError, conflict, invalid, not_found
 from mandate.payments.service import Wallet
 
 from .selector import JevSelector, Pick, SelectorError
+from .shopping_list import split_quantity
 
 
 @dataclass
@@ -100,8 +101,12 @@ class AgentRuns:
     def _run(self, run_id: str, mandate: dict, req: dict) -> None:
         agent = Actor(actor_id=mandate["delegatee_id"], role="agent", owner_id=mandate["owner_id"])
         policy = mandate["policy"]
-        items = [{"name": i["name"].strip(), "quantity": i["quantity"], "unit": i.get("unit")}
-                 for i in req["shopping_list"]]
+        items = []
+        for item in req["shopping_list"]:
+            name, quantity = item["name"].strip(), item["quantity"]
+            if quantity == 1:
+                name, quantity = split_quantity(name)  # "3 apples" from a typed or preset list
+            items.append({"name": name, "quantity": quantity, "unit": item.get("unit")})
         blocked = set(policy.get("blocked_categories", []))
 
         candidates: list[_Candidate] = []
@@ -113,9 +118,10 @@ class AgentRuns:
                 skipped.append(f"{merchant_id} is not in the current catalog")
                 continue
             contexts = self.wallet.catalog.delivery_context_ids(merchant_id)
-            # The agent does not propose what the mandate blocks or what needs a person's check;
-            # the wallet still enforces both at checkout.
-            products = [p for p in listing["products"] if p["available"] and p["category"] not in blocked
+            # Blocked-category products are offered so a request for one can be named and refused,
+            # but they are never packed (see below). Products whose category needs a person's check
+            # are not offered at all. The wallet still enforces every rule at checkout.
+            products = [p for p in listing["products"] if p["available"]
                         and not (blocked and p["category_status"] in ("unknown", "conflicting"))]
             if not contexts:
                 skipped.append(f"{merchant_id} has no observed delivery option")
@@ -125,7 +131,10 @@ class AgentRuns:
                 continue
             selection = self.selector.choose(items, products, req.get("instruction"))
             self._update(run_id, model_id=selection.model_id)
-            candidates.append(self._quote(agent, merchant_id, contexts[0], selection.picks))
+            category = {p["id"]: p["category"] for p in products}
+            picks = [Pick(p.item, p.quantity, None, p.probability, f"not packed: your mandate blocks {category[p.product_id]}")
+                     if p.product_id and category[p.product_id] in blocked else p for p in selection.picks]
+            candidates.append(self._quote(agent, merchant_id, contexts[0], picks))
 
         if not candidates:
             self._update(run_id, status="failed",
@@ -135,7 +144,10 @@ class AgentRuns:
         quoted = [c for c in candidates if c.quote]
         if not quoted:
             reasons = "; ".join(f"{c.merchant_id}: {c.problem}" for c in candidates)
-            self._update(run_id, status="failed", message=f"No basket could be quoted ({reasons}).")
+            missing = self._missing(candidates[0].picks)
+            refused = any("mandate blocks" in p.reason for p in candidates[0].picks)
+            self._update(run_id, status="refused" if refused else "failed",
+                         message=f"No basket could be quoted ({reasons})." + (f" {missing}" if missing else ""))
             return
         best = min(quoted, key=lambda c: (-sum(p.product_id is not None for p in c.picks), c.quote["total_minor"]))
         self._update(run_id, status="quoted", quote_id=best.quote["id"],
@@ -154,8 +166,18 @@ class AgentRuns:
                 "items": [{"product_id": pid, "quantity": qty} for pid, qty in lines.items()],
             })
         except ApiError as exc:
+            if exc.details.get("reason_code") == "SUBTOTAL_NOT_SUPPORTED":
+                subtotal = exc.details.get("subtotal_minor", 0) / 100
+                return _Candidate(merchant_id, picks, None,
+                                  f"the packable items come to HK${subtotal:.2f}, which no observed delivery or pickup "
+                                  "fee covers")
             return _Candidate(merchant_id, picks, None, exc.message)
         return _Candidate(merchant_id, picks, quote, "")
+
+    @staticmethod
+    def _missing(picks: list[Pick]) -> str:
+        missing = [p for p in picks if not p.product_id]
+        return ("Not added: " + "; ".join(f"{p.item} ({p.reason})" for p in missing) + ".") if missing else ""
 
     @staticmethod
     def _summary(best: _Candidate, policy: dict, stores: int) -> str:
@@ -168,11 +190,7 @@ class AgentRuns:
                  + (f" (best of {stores} stores: most items found, then lowest total)" if stores > 1 else "") + ":"]
         parts.append("; ".join(f"{p.item} → {titles[p.product_id]} ({p.probability:.0%})" for p in found) + ".")
         if missing:
-            parts.append("Not added: " + "; ".join(f"{p.item} ({p.reason})" for p in missing) + ".")
-            blocked = policy.get("blocked_categories") or []
-            if blocked:
-                parts.append(f"Products in categories your mandate blocks ({', '.join(blocked)}) were not offered "
-                             "to the agent.")
+            parts.append(AgentRuns._missing(missing))
         limit = policy.get("per_order_limit_minor")
         if limit is not None and quote["total_minor"] > limit:
             parts.append(f"This is over your HK${limit / 100:.2f} per-order limit, so the wallet will refuse checkout.")
