@@ -12,7 +12,7 @@ help:
 # Install Python (.venv) and npm dependencies
 install:
     uv venv .venv -q --allow-existing
-    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/api/requirements-verification.txt -r services/mcp-wallet/requirements.txt -r services/agent/requirements.txt "mcp>=1.10,<2"
+    uv pip install -q --python {{venv_python}} -r services/api/requirements-wallet.txt -r services/api/requirements-verification.txt -r services/mcp-wallet/requirements.txt -r services/agent/requirements.txt -r services/voice/requirements.txt "mcp>=1.10,<2"
     cd apps/web && npm ci
 
 # Run backend (:8000) and frontend (Vite dev server) together; Ctrl-C stops both
@@ -47,6 +47,11 @@ test:
     cd services/api && {{venv_python}} -m pytest -q
     cd services/mcp-wallet && {{venv_python}} -m pytest -q
     cd services/agent && {{venv_python}} -m pytest -q
+    cd services/voice && {{venv_python}} -m pytest -q
+
+# Voice approval call service (:8300); optional, see services/voice/README.md
+voice:
+    cd services/voice && {{venv_python}} -m uvicorn voice_call.app:create_app --factory --port 8300
 
 # Capture a fresh observed Wellcome catalog into data/catalog (makes ~8 HTTP requests)
 capture:
