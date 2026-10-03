@@ -25,7 +25,7 @@ export type Verdict =
   | { kind: 'review'; message: string; violations: RuleViolation[]; approval: ApprovalRequest; risk?: RiskAssessment | null }
   | { kind: 'uncertain'; message: string };
 export type Phase = 'pick' | 'packing' | 'basket' | 'paying' | 'verdict';
-export type ChatMessage = { id: string; who: Who; text: string; tone: 'good' | 'bad' | 'info' };
+export type ChatMessage = { id: string; who: Who; text: string; tone: 'good' | 'bad' | 'info'; startsConversation?: boolean };
 type Spoken = { kind: 'list'; items: ShoppingItem[] };
 
 export const PRESETS: Preset[] = [
@@ -159,8 +159,8 @@ export function useGroceries() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const [saved, setSaved] = useState<Record<string, SavedPreset>>(savedPresets);
 
-  const say = useCallback((who: Who, text: string, tone: ChatMessage['tone'] = 'info') => {
-    setMessages((current) => current[current.length - 1]?.who === who && current[current.length - 1]?.text === text ? current : [...current, { id: newId(), who, text, tone }]);
+  const say = useCallback((who: Who, text: string, tone: ChatMessage['tone'] = 'info', startsConversation = false) => {
+    setMessages((current) => current[current.length - 1]?.who === who && current[current.length - 1]?.text === text ? current : [...current, { id: newId(), who, text, tone, startsConversation }]);
   }, []);
   const accountNote = account.note;
   const note = useCallback((who: Who, text: string, tone: ChatMessage['tone']) => {
@@ -168,7 +168,15 @@ export function useGroceries() {
     accountNote(who, text, tone);
   }, [say, accountNote]);
 
-  useEffect(() => { api.catalog(TOKEN).then(setCatalog).catch(() => setCatalog(null)); }, []);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true); setCatalogError('');
+    try { setCatalog(await api.catalog(TOKEN)); }
+    catch { setCatalogError('Couldn’t load the products. Please try again.'); }
+    finally { setCatalogLoading(false); }
+  }, []);
+  useEffect(() => { void loadCatalog(); }, [loadCatalog]);
 
   // An unfinished checkout from an earlier visit is resolved from its saved transaction before anything else.
   useEffect(() => {
@@ -290,8 +298,8 @@ export function useGroceries() {
 
   async function shopFromText() {
     const text = listText.trim();
-    if (!mandate || !canSpend || !text || busy) return;
-    say('you', text);
+    if (!mandate || !canSpend || !text || busy || phase !== 'pick') return;
+    say('you', text, 'info', true);
     setListText('');
     setError(''); setBusy('parse');
     try {
@@ -307,8 +315,8 @@ export function useGroceries() {
 
   async function shop(chosen: Preset | 'custom' | Spoken) {
     if (!mandate || !canSpend || phase === 'packing' || phase === 'paying') return;
-    if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.');
-    else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`);
+    if (chosen === 'custom') say('you', 'Price the items I picked from the shelf.', 'info', true);
+    else if (!('kind' in chosen)) say('you', `Shop for ${chosen.title}: ${chosen.list.join(', ')}.`, 'info', true);
     const spoken = chosen !== 'custom' && 'kind' in chosen;
     const editedPreset = !spoken && chosen !== 'custom' && chosen.edited === true;
     const lines = chosen === 'custom'
@@ -341,7 +349,7 @@ export function useGroceries() {
         result = await api.quote(TOKEN, { merchant_id: STORE_ID, delivery_context_id: PICKUP_CONTEXT_ID, items: lines });
       }
       setQuote(result);
-      note('kumi', `Basket ready: ${result.items.reduce((n, item) => n + item.quantity, 0)} items · ${money(result.total_minor)}.`, 'info');
+      note('kumi', `Basket ready: ${result.items.reduce((n, item) => n + item.quantity, 0)} item${result.items.reduce((n, item) => n + item.quantity, 0) === 1 ? '' : 's'} · ${money(result.total_minor)}.`, 'info');
       try {
         const options = await api.paymentOptions(TOKEN, result.id);
         setPaymentComparison(options);
@@ -486,7 +494,7 @@ export function useGroceries() {
   const customCount = Object.values(custom).reduce((sum, q) => sum + q, 0);
   const customTotal = Object.entries(custom).reduce((sum, [id, q]) => sum + (productById.get(id)?.unit_price_minor ?? 0) * q, 0);
 
-  return {
+  return { catalogLoading, catalogError, loadCatalog,
     messages, error, setError, busy, phase, preset, quote, verdict, ruleTestBasket, agentNote, recoveryBlocked, canSpend, inFlight,
     paymentComparison, routeId, routeLabel, selectRoute: (id: string, label: string) => { setRouteId(id); setRouteLabel(label); },
     listText, setListText, voice, toggleRecording, shopFromText, shop, checkout, checkPaymentStatus, decide, resetShop,

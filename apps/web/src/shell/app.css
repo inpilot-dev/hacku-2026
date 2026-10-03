@@ -39,8 +39,7 @@
   --stella: #ac457c; --stella-soft: #fcf1f6; --stella-line: #f1dce7;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
     --background: #0d0d0d;
     --foreground: #f3f3f3;
     --card: #181818;
@@ -67,7 +66,6 @@
     --kip: #7bd8a0; --kip-soft: #10241a; --kip-line: #1b3a2a;
     --bean: #b9b2f0; --bean-soft: #1d1a2e; --bean-line: #2c2845;
     --stella: #f0a3c8; --stella-soft: #2a1520; --stella-line: #40202f;
-  }
 }
 
 @theme inline {
@@ -110,4 +108,13 @@
 
 @media print {
   .no-print { display: none !important; }
+}
+
+:root { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+[data-slot="card"] { box-shadow: 0 4px 22px rgb(0 0 0 / 2%); }
+[data-slot="textarea"] { field-sizing: content; max-height: 160px; }
+.shell-composer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

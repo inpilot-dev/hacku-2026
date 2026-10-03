@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { categoryLabel, money, periodWord } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import HistoryControls from '../components/HistoryControls';
 import Basket from '../components/Basket';
 import { Bubble, PageHeader, present, Sticker, Working } from '../components/chat';
 import PresetEditor from '../components/PresetEditor';
@@ -21,7 +22,7 @@ import { useGroceries, type Preset } from '../data/useGroceries';
  * basket at your allowed stores. The wallet checks your rules before anything is paid.
  */
 
-export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => void }) {
+export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: () => void; active: boolean }) {
   const account = useAccount();
   const g = useGroceries();
   const [editing, setEditing] = useState<Preset | null>(null);
@@ -29,8 +30,22 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
   const [search, setSearch] = useState('');
   const end = useRef<HTMLDivElement>(null);
   const m = account.mandate;
+  const [older, setOlder] = useState(0);
+  const following = useRef(true);
+  let currentStart = 0;
+  for (let i = g.messages.length - 1; i >= 0; i--) {
+    if (g.messages[i].startsConversation) { currentStart = i; break; }
+  }
+  const hidden = Math.max(0, Math.max(currentStart, g.messages.length - 6) - older);
+  const currentId = g.messages[currentStart]?.id;
+  useEffect(() => { setOlder(0); }, [currentId]);
+  useEffect(() => {
+    const track = () => { following.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240; };
+    window.addEventListener('scroll', track, { passive: true });
+    return () => window.removeEventListener('scroll', track);
+  }, []);
 
-  useEffect(() => { if (g.messages.length) end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [g.messages.length, g.phase]);
+  useEffect(() => { if (active && !older && following.current && g.messages.length) end.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, [g.messages.length, g.phase, active, older]);
 
   if (!account.loaded) return <div className="space-y-4"><Skeleton className="h-8 w-40" /><Skeleton className="h-32" /></div>;
   if (!m) return <div>
@@ -49,6 +64,9 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
       description={<>{account.active ? `${money(account.available)} left this ${per}` : 'Allowance not active'} · {m.policy.allowed_merchant_ids.length} store{m.policy.allowed_merchant_ids.length > 1 ? 's' : ''}</>}
       action={<Button variant="ghost" size="sm" onClick={onOpenWallet}>Allowance</Button>} />
 
+    {g.catalogError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{g.catalogError}</span><Button variant="outline" size="sm" onClick={() => void g.loadCatalog()}>Retry</Button></AlertDescription></Alert>}
+    {g.catalogLoading && <p className="mb-4 text-sm text-muted-foreground" role="status">Loading products…</p>}
+    {!g.catalogLoading && !g.catalogError && !g.products.length && <p className="mb-4 text-sm text-muted-foreground">No products are available at this store.</p>}
     {(g.error || account.error) && <Alert variant="destructive" className="mb-4"><XCircle />
       <AlertDescription className="flex items-start justify-between gap-3"><span>{g.error || account.error}</span>
         <button className="underline" onClick={() => { g.setError(''); account.setError(''); }}>Dismiss</button></AlertDescription></Alert>}
@@ -64,9 +82,10 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
       </AlertDescription>
     </Alert>}
 
+    <HistoryControls hidden={hidden} expanded={older > 0} onMore={() => setOlder((n) => n + 8)} onLatest={() => setOlder(0)} />
     <div className="space-y-3">
-      {g.messages.length === 0 && g.canSpend && <Bubble from="kumi">Hi{account.holder ? `, shopping for ${account.holder}` : ''}! Tell me what you need, or pick a preset. I’ll build a basket at your allowed stores, and Kip checks it against your rules before anything is paid.</Bubble>}
-      {g.messages.map((msg) => <Bubble key={msg.id} from={msg.who} tone={msg.tone}>{msg.who === 'you' ? msg.text : present(msg.text)}</Bubble>)}
+      {g.messages.length === 0 && g.canSpend && <Bubble from="kumi">{`What’s on your list${account.holder ? ` for ${account.holder}` : ''}?`} Pick a preset or tell me what you need.</Bubble>}
+      {g.messages.slice(hidden).map((msg) => <Bubble key={msg.id} from={msg.who} tone={msg.tone}>{msg.who === 'you' ? msg.text : present(msg.text)}</Bubble>)}
       {(g.phase === 'packing' || g.busy === 'parse') && <Working who="kumi">{g.busy === 'parse' ? 'Reading your list…' : `Packing${g.preset ? ` ${g.preset.title.toLowerCase()}` : ''} at your stores…`}</Working>}
       {g.quote && (g.phase === 'basket' || g.phase === 'paying' || g.phase === 'verdict') && <Basket g={g} />}
       <div ref={end} />
@@ -94,8 +113,8 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
       <section className="space-y-2">
         <Button variant="link" className="h-auto p-0 text-muted-foreground" onClick={() => setShelfOpen((v) => !v)}>{shelfOpen ? 'Hide the shelf' : 'Or pick items yourself'}</Button>
         {shelfOpen && <div className="space-y-3 rounded-xl border p-3">
-          <Input placeholder="Search Wellcome" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search products" />
-          <ul className="divide-y">{filtered.map((p) => { const q = g.custom[p.id] ?? 0; return <li key={p.id} className="flex min-h-12 items-center gap-3 py-1.5 text-sm">
+          <Input placeholder="Search products" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search products" />
+          <ul className="divide-y">{!filtered.length && <li className="py-4 text-center text-sm text-muted-foreground">No matching items.</li>}{filtered.map((p) => { const q = g.custom[p.id] ?? 0; return <li key={p.id} className="flex min-h-12 items-center gap-3 py-1.5 text-sm">
             <span className="min-w-0 flex-1">{p.title}{blocked.has(p.category) && <Badge variant="outline" className="ml-2 text-destructive">{categoryLabel(p.category)}</Badge>}</span>
             <span className="tabular-nums text-muted-foreground">{money(p.unit_price_minor)}</span>
             <span className="flex items-center gap-1">
@@ -111,7 +130,7 @@ export default function GroceriesTab({ onOpenWallet }: { onOpenWallet: () => voi
     </div>}
 
     {/* The list box only while picking: once a basket is up, its own buttons are the next step. */}
-    {g.canSpend && <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
+    {g.canSpend && g.phase === 'pick' && <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shell-composer z-10 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
       <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40" onSubmit={(e) => { e.preventDefault(); void g.shopFromText(); }}>
         <Textarea value={g.listText} onChange={(e) => g.setListText(e.target.value)} rows={2}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !g.voice) { e.preventDefault(); void g.shopFromText(); } }}

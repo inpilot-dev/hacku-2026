@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { Bubble, Linkified, PageHeader, shortUrl, Working } from '../components/chat';
+import HistoryControls from '../components/HistoryControls';
 import { isWorking, usePurchases } from '../data/usePurchases';
 
 /*
@@ -30,32 +31,45 @@ const STATUS_TEXT: Partial<Record<Purchase['status'], string>> = {
   paying: 'Paying at the shop…',
 };
 
-export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void }) {
+export default function BuyTab({ onOpenProfile, active, profileRevision }: { onOpenProfile: () => void; active: boolean; profileRevision: number }) {
   const p = usePurchases();
   const [text, setText] = useState('');
+  useEffect(() => { if (profileRevision > 0) p.setNeedsProfile(false); }, [profileRevision, p.setNeedsProfile]);
   const end = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  const [older, setOlder] = useState(0);
+  const hidden = Math.max(0, p.purchases.length - 1 - older);
+  const latest = p.purchases[p.purchases.length - 1];
+  const progress = latest ? `${latest.id}:${latest.status}:${latest.events.length}` : '';
+  useEffect(() => {
+    const track = () => { following.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240; };
+    window.addEventListener('scroll', track, { passive: true });
+    return () => window.removeEventListener('scroll', track);
+  }, []);
 
-  useEffect(() => { end.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [p.purchases]);
+  useEffect(() => { if (active && !older && following.current) end.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); }, [progress, active, older]);
 
   async function send(value = text) {
-    if (await p.start(value)) setText('');
+    if (await p.start(value)) { setText(''); setOlder(0); }
   }
 
   return <div className="flex flex-col">
     <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment') ? 'happy' : 'idle'}
-      description="Describe it. Kumi finds the best deal, checks out as a guest and waits for your OK."
-      action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={p.clear}>Clear</Button> : undefined} />
+      description="Find a match. Review the total before paying."
+      action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={() => { p.clear(); setOlder(0); }}>New conversation</Button> : undefined} />
 
     {p.purchases.length === 0 && <div className="mb-6 space-y-4">
-      <Bubble from="kumi">Hi! Tell me what you want and any must-haves: specs, brand, a price limit. I’ll find the best deal on the web, check out as a guest and show you the exact total before anything is paid.</Bubble>
+      <Bubble from="kumi">What are you looking for? Tell me your budget and any must-haves.</Bubble>
       <div className="grid gap-2 pl-[46px]">
         {SUGGESTIONS.map((s) => <button key={s} onClick={() => setText(s)}
           className="min-h-11 rounded-2xl border bg-card px-4 py-3 text-left text-sm transition-colors hover:bg-accent">{s}</button>)}
       </div>
     </div>}
 
+    <HistoryControls hidden={hidden} expanded={older > 0} onMore={() => setOlder((count) => count + 3)} onLatest={() => setOlder(0)} />
+    {p.refreshError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{p.refreshError}</span><Button variant="outline" size="sm" onClick={p.retry}>Retry</Button></AlertDescription></Alert>}
     <div className="space-y-6">
-      {p.purchases.map((purchase) => <Thread key={purchase.id} purchase={purchase} acting={p.acting === purchase.id}
+      {p.purchases.slice(hidden).map((purchase) => <Thread key={purchase.id} purchase={purchase} acting={p.acting === purchase.id}
         onApprove={() => void p.approve(purchase)} onCancel={() => void p.cancel(purchase)} />)}
       <div ref={end} />
     </div>
@@ -72,16 +86,16 @@ export default function BuyTab({ onOpenProfile }: { onOpenProfile: () => void })
 
     {/* The composer sits above the phone tab bar; while a purchase is open it stays in the flow so it never covers
         the approval buttons. */}
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
+    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] shell-composer z-10 bg-gradient-to-t from-background via-background to-transparent pt-4 md:bottom-0"><div className="mx-auto max-w-3xl px-4 pb-3">
       <form className="relative rounded-2xl border bg-card shadow-sm focus-within:ring-2 focus-within:ring-ring/40"
         onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={1000}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }}
-          placeholder={p.busy ? 'Finish or cancel the current purchase first' : 'What do you want to buy?'}
+          placeholder={p.restoring ? 'Checking saved purchases…' : p.busy ? 'Finish or cancel the current purchase first' : 'What do you want to buy?'}
           aria-label="What do you want to buy?" disabled={p.sending || p.busy}
           className="min-h-14 resize-none border-0 bg-transparent pr-14 shadow-none focus-visible:ring-0" />
         <Button type="submit" size="icon" className="absolute right-2 bottom-2 size-10 rounded-full"
-          disabled={!text.trim() || p.sending || p.busy} aria-label="Send"><ArrowUp /></Button>
+          disabled={!text.trim() || p.sending || p.busy} aria-label="Send">{p.sending ? <span className="text-xs">…</span> : <ArrowUp />}</Button>
       </form>
     </div></div>
   </div>;
@@ -105,7 +119,7 @@ function Thread({ purchase, acting, onApprove, onCancel }: { purchase: Purchase;
       {steps.length > 0 && <p className="pl-[46px] text-xs text-muted-foreground line-clamp-2">{steps[steps.length - 1].text}</p>}
     </div>}
 
-    {!working && purchase.status !== 'awaiting_approval' && <Bubble from={speaker(purchase)} tone={tone(purchase)}><Linkified text={purchase.message} /></Bubble>}
+    {!working && purchase.status !== 'awaiting_approval' && <Bubble from={speaker(purchase)} tone={tone(purchase)}><Linkified text={presentPurchase(purchase.message)} /></Bubble>}
     {purchase.status === 'awaiting_approval' && <Bubble from="kip">Kumi got to the shop’s card form. Here’s exactly what it will cost; I only pay once you approve this total.</Bubble>}
 
     {purchase.status === 'awaiting_approval' && purchase.order && purchase.choice && <Card className="gap-4">
@@ -138,7 +152,7 @@ function Thread({ purchase, acting, onApprove, onCancel }: { purchase: Purchase;
     {purchase.status === 'needs_account' && <AccountOnly options={purchase.options} prominent />}
 
     {steps.length > 0 && !working && <details className="pl-1 text-xs text-muted-foreground">
-      <summary className="cursor-pointer select-none">What the agent did ({steps.length} steps)</summary>
+      <summary className="inline-flex min-h-10 cursor-pointer items-center select-none">Activity ({steps.length})</summary>
       <ol className="mt-2 space-y-1 border-l pl-3">{steps.map((s, i) => <li key={i}>{s.text}</li>)}</ol>
     </details>}
     {working && <div className="pl-1"><Button variant="ghost" size="sm" onClick={onCancel} disabled={acting || purchase.status === 'paying'}>Stop</Button></div>}
@@ -169,4 +183,10 @@ function tone(p: Purchase): 'good' | 'bad' | 'info' {
   if (p.status === 'ordered' || p.status === 'stopped_before_payment') return 'good';
   if (p.status === 'failed' || p.status === 'expired') return 'bad';
   return 'info';
+}
+
+function presentPurchase(text: string) {
+  if (text.startsWith('Steel browser is not reachable')) return 'I couldn’t connect to the shopping browser. Please try again shortly.';
+  if (text.includes('OPENROUTER_KEY is not set') || text.startsWith('Missing TYPESAFE')) return 'The shopping service isn’t configured yet. Please try again later.';
+  return text;
 }

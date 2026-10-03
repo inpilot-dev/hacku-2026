@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ShoppingBag, ShoppingBasket, UserRound, Wallet } from 'lucide-react';
+import { Moon, Sun, ShoppingBag, ShoppingBasket, UserRound, Wallet } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Toaster } from '@/components/ui/sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -40,6 +41,16 @@ function Shell() {
   const account = useAccount();
   const [tab, setTab] = useState<TabId>(tabFromHash);
   const online = account.online;
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try { return localStorage.getItem('mandate-theme-v1') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
+  });
+  const [returnToBuy, setReturnToBuy] = useState(false);
+  const [profileRevision, setProfileRevision] = useState(0);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    try { localStorage.setItem('mandate-theme-v1', theme); } catch { /* Theme still works without storage. */ }
+  }, [theme]);
 
   useEffect(() => {
     const onHash = () => setTab(tabFromHash());
@@ -55,24 +66,28 @@ function Shell() {
   return <>
     <Tabs value={tab} onValueChange={go} className="min-h-dvh gap-0">
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur no-print">
-        <div className="mx-auto flex h-14 max-w-3xl items-center gap-4 px-4">
+        <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 sm:gap-4 px-4">
           <span className="text-[15px] font-semibold tracking-tight">Mandate</span>
           <TabsList className="hidden md:inline-flex">
             {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id} className="gap-1.5 px-3"><Icon />{label}</TabsTrigger>)}
           </TabsList>
           <Badge variant="outline" className={cn('ml-auto gap-1.5 font-normal', online === false && 'text-destructive')}>
             <span className={cn('size-1.5 rounded-full', online === false ? 'bg-destructive' : 'bg-success')} />
-            {online === false ? 'Wallet offline' : 'Sandbox'}
+            {online === false ? 'Offline' : online === null ? 'Connecting' : 'Sandbox'}
           </Badge>
+          <Button variant="ghost" size="icon" className="shrink-0 rounded-full" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
+            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} title={theme === 'light' ? 'Dark mode' : 'Light mode'}>
+            {theme === 'light' ? <Moon /> : <Sun />}
+          </Button>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 pb-48 md:pb-36">
         {/* Every tab stays mounted: a checkout or a purchase in progress keeps running while you look elsewhere. */}
-        <TabsContent value="buy" forceMount className="data-[state=inactive]:hidden"><BuyTab onOpenProfile={() => { go('profile'); }} /></TabsContent>
-        <TabsContent value="groceries" forceMount className="data-[state=inactive]:hidden"><GroceriesTab onOpenWallet={() => go('wallet')} /></TabsContent>
+        <TabsContent value="buy" forceMount className="data-[state=inactive]:hidden"><BuyTab profileRevision={profileRevision} active={tab === 'buy'} onOpenProfile={() => { setReturnToBuy(true); go('profile'); }} /></TabsContent>
+        <TabsContent value="groceries" forceMount className="data-[state=inactive]:hidden"><GroceriesTab active={tab === 'groceries'} onOpenWallet={() => go('wallet')} /></TabsContent>
         <TabsContent value="wallet" forceMount className="data-[state=inactive]:hidden"><WalletTab /></TabsContent>
-        <TabsContent value="profile" forceMount className="data-[state=inactive]:hidden"><ProfileTab /></TabsContent>
+        <TabsContent value="profile" forceMount className="data-[state=inactive]:hidden"><ProfileTab returning={returnToBuy} onSaved={() => { setProfileRevision((value) => value + 1); if (returnToBuy) { setReturnToBuy(false); go('buy'); } }} /></TabsContent>
       </main>
 
       {/* Phones: a bottom tab bar, clear of the home indicator. */}
@@ -85,7 +100,7 @@ function Shell() {
           </TabsTrigger>)}
         </TabsList>
       </nav>
-      <Toaster position="top-center" />
+      <Toaster position="top-center" theme={theme} />
     </Tabs>
     <AllowanceSetup open={account.setup !== null} change={account.setup === 'change'} onOpenChange={(open) => { if (!open) account.closeSetup(); }} />
     <ReceiptDialog />

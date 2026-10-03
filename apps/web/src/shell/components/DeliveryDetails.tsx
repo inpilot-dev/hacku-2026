@@ -16,10 +16,11 @@ import { TOKEN } from '../data/account';
 const EMPTY: ProfileInput = { full_name: '', email: '', phone: '', address_line1: '', address_line2: '', district: '', region: null, city: 'Hong Kong', country: 'Hong Kong', postal_code: '' };
 const REGIONS = ['Hong Kong Island', 'Kowloon', 'New Territories'];
 
-export default function DeliveryDetails() {
+export default function DeliveryDetails({ onSaved, returning }: { onSaved?: () => void; returning?: boolean }) {
   const [form, setForm] = useState<ProfileInput>(EMPTY);
   const [missing, setMissing] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function DeliveryDetails() {
         address_line2: p.address_line2 ?? '', district: p.district ?? '', region: p.region, city: p.city ?? 'Hong Kong',
         country: p.country ?? 'Hong Kong', postal_code: p.postal_code ?? '' });
       setMissing(p.missing);
-    }).catch((err) => { if (err instanceof ApiError && err.status === 404) setMissing(['full_name', 'email', 'phone', 'address_line1', 'district']); else setError('Could not load your delivery details.'); });
+    }).catch((err) => { if (err instanceof ApiError && err.status === 404) setMissing(['full_name', 'email', 'phone', 'address_line1', 'district']); else setError('Could not load your delivery details.'); }).finally(() => setLoading(false));
   }, []);
 
   const set = (key: keyof ProfileInput) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -41,12 +42,14 @@ export default function DeliveryDetails() {
       setMissing(saved.missing);
       setForm((f) => ({ ...f, region: saved.region }));
       toast.success('Delivery details saved');
+      if (!saved.missing.length) onSaved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.');
     } finally { setSaving(false); }
   }
 
   return <form className="grid gap-4" onSubmit={(e) => void save(e)}>
+    <fieldset disabled={loading || saving} className="contents">
     {missing && missing.length > 0 && <p className="text-sm text-muted-foreground">The one-time agent needs these before it can check out for you.</p>}
     <div className="grid gap-4 sm:grid-cols-2">
       <F id="full_name" label="Full name"><Input id="full_name" autoComplete="name" required value={form.full_name} onChange={set('full_name')} /></F>
@@ -66,9 +69,10 @@ export default function DeliveryDetails() {
     </div>
     {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
     <div className="flex items-center gap-3">
-      <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save details'}</Button>
+      <Button type="submit" disabled={loading || saving}>{loading ? 'Loading…' : saving ? 'Saving…' : returning ? 'Save and return to shopping' : 'Save details'}</Button>
       {missing && missing.length === 0 && <span className="text-xs text-success">Ready for checkout</span>}
     </div>
+    </fieldset>
   </form>;
 }
 

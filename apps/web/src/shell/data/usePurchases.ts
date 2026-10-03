@@ -26,41 +26,72 @@ export function usePurchases() {
   const [acting, setActing] = useState('');  // purchase id with an approve/cancel in flight
   const [error, setError] = useState('');
   const [needsProfile, setNeedsProfile] = useState(false);
-  const timer = useRef<number | null>(null);
+  const [refreshError, setRefreshError] = useState('');
+  const [retryTick, setRetryTick] = useState(0);
+  const [restoring, setRestoring] = useState(true);
+  const latest = useRef(purchases);
+  latest.current = purchases;
 
   const upsert = useCallback((next: Purchase) => {
     setPurchases((current) => current.some((p) => p.id === next.id) ? current.map((p) => (p.id === next.id ? next : p)) : [...current, next]);
   }, []);
 
-  // Restore this session's conversation.
+  // Merge restored runs: a delayed restore must never overwrite a new request.
   useEffect(() => {
+    let cancelled = false;
+    setRestoring(true);
     const ids = savedIds();
-    if (!ids.length) return;
-    void Promise.all(ids.map((id) => api.purchase(TOKEN, id).catch(() => null))).then((found) => {
-      setPurchases(found.filter((p): p is Purchase => p !== null));
+    if (!ids.length) { setRestoring(false); return; }
+    void Promise.all(ids.map(async (id) => {
+      try { return { purchase: await api.purchase(TOKEN, id), unavailable: false }; }
+      catch (error) { return { purchase: null, unavailable: !(error instanceof ApiError && error.status === 404) }; }
+    })).then((found) => {
+      if (cancelled) return;
+      setPurchases((current) => [...found.flatMap((r) => r.purchase && !current.some((p) => p.id === r.purchase!.id) ? [r.purchase] : []), ...current]);
+      setRefreshError(found.some((r) => r.unavailable) ? 'Couldn’t load your saved purchases. Retry to check their status.' : '');
+      setRestoring(found.some((r) => r.unavailable));
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [retryTick]);
 
-  // Poll every purchase that is still working.
+  // The next poll is scheduled even when an individual status request fails.
+  const workingIds = purchases.filter(isWorking).map((p) => p.id).join(',');
   useEffect(() => {
-    const working = purchases.filter(isWorking);
-    if (!working.length) return;
-    timer.current = window.setTimeout(async () => {
-      for (const p of working) {
-        try { upsert(await api.purchase(TOKEN, p.id)); } catch { /* keep the last state; try again next tick */ }
+    if (!workingIds) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      let failed = false;
+      for (const id of workingIds.split(',')) {
+        if (cancelled) return;
+        try {
+          const next = await api.purchase(TOKEN, id);
+          if (!cancelled) upsert(next);
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            const previous = latest.current.find((p) => p.id === id);
+            if (previous && previous.status !== 'paying' && !cancelled) upsert({ ...previous, status: 'failed', message: 'This search is no longer available. Please start a new search.' });
+            else failed = true;
+          } else failed = true;
+        }
       }
-    }, 2000);
-    return () => { if (timer.current) window.clearTimeout(timer.current); };
-  }, [purchases, upsert]);
+      if (!cancelled) {
+        setRefreshError(failed ? 'Connection interrupted. Retrying the saved purchase status…' : '');
+        timer = setTimeout(() => void poll(), 2000);
+      }
+    };
+    timer = setTimeout(() => void poll(), 2000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [workingIds, upsert, retryTick]);
 
   async function start(text: string): Promise<boolean> {
     const request = text.trim();
-    if (!request || sending) return false;
+    if (!request || sending || restoring || latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return false;
     setSending(true); setError(''); setNeedsProfile(false);
     try {
       const created = await api.startPurchase(TOKEN, request);
       upsert(created);
-      sessionStorage.setItem(IDS_KEY, JSON.stringify([...savedIds(), created.id].slice(-20)));
+      try { sessionStorage.setItem(IDS_KEY, JSON.stringify([...savedIds(), created.id].slice(-20))); } catch { /* The current request still exists on the server. */ }
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.details.reason === 'PROFILE_INCOMPLETE') setNeedsProfile(true);
@@ -87,10 +118,11 @@ export function usePurchases() {
   }
 
   function clear() {
+    if (latest.current.some((p) => isWorking(p) || p.status === 'awaiting_approval')) return;
     sessionStorage.removeItem(IDS_KEY);
-    setPurchases((current) => current.filter(isWorking));
+    setPurchases([]); setError(''); setNeedsProfile(false); setRefreshError('');
   }
 
-  const busy = purchases.some(isWorking) || purchases.some((p) => p.status === 'awaiting_approval');
-  return { purchases, start, approve, cancel, clear, sending, acting, error, setError, needsProfile, setNeedsProfile, busy };
+  const busy = restoring || purchases.some(isWorking) || purchases.some((p) => p.status === 'awaiting_approval');
+  return { purchases, refreshError, restoring, retry: () => setRetryTick((value) => value + 1), start, approve, cancel, clear, sending, acting, error, setError, needsProfile, setNeedsProfile, busy };
 }

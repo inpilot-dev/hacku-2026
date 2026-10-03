@@ -28,7 +28,7 @@ export default function Basket({ g }: { g: Groceries }) {
 
   return <Card className={cn(v?.kind === 'paid' && 'border-success/40', v?.kind === 'refused' && 'border-destructive/40')}>
     <CardHeader>
-      <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect · {g.agentNote || 'Basket'}</CardDescription>
+      <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect</CardDescription>
       <CardAction><Sticker who={v || g.phase === 'paying' ? 'kip' : 'kumi'} size={56}
         state={v?.kind === 'paid' ? 'approved' : v?.kind === 'refused' ? 'refused' : v || g.phase === 'paying' ? 'idle' : 'happy'} /></CardAction>
       <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0) : g.phase === 'paying' ? 'Checking your rules…' : 'Basket ready'}</CardTitle>
@@ -109,20 +109,22 @@ function sourceUrl(value: string) {
 function PaymentRoutes({ comparison, selected, onSelect }: { comparison: PaymentOptionsResponse; selected: string | null; onSelect: (id: string, label: string) => void }) {
   return <fieldset className="space-y-2">
     <legend className="mb-1 font-medium">Payment route</legend>
-    <p className="text-xs text-muted-foreground">{comparison.rule}</p>
+    <p className="text-xs text-muted-foreground">Compare fees and estimated rewards.</p>
     <RadioGroup value={selected ?? ''} onValueChange={(id) => { const o = comparison.options.find((x) => x.route_id === id); if (o) onSelect(o.route_id, o.label); }}>
       {comparison.options.map((o) => <Label key={o.route_id} htmlFor={`route-${o.route_id}`}
         className={cn('flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal', selected === o.route_id && 'border-primary', !o.eligible && 'cursor-not-allowed opacity-60')}>
         <RadioGroupItem id={`route-${o.route_id}`} value={o.route_id} disabled={!o.eligible} className="mt-0.5" />
         <span className="grid gap-0.5 text-sm">
-          <span className="font-medium">{o.label}{o.route_id === comparison.recommended_route_id && o.eligible && <Badge variant="secondary" className="ml-2">Recommended</Badge>}</span>
+          <span className="font-medium">{o.label.replace(/\s*\([^)]*\)/g, '')}{o.route_id === comparison.recommended_route_id && o.eligible && <Badge variant="secondary" className="ml-2">Recommended</Badge>}</span>
           {o.eligible ? <span className="text-xs text-muted-foreground">Charge {money(o.gross_minor)} · fee {money(o.fee_minor)} · reward ~{money(o.reward_minor)} · net {money(o.net_minor)}</span>
             : <span className="text-xs text-muted-foreground">{o.ineligible_reason || 'Unavailable for this purchase'}</span>}
-          {o.caveats.map((t, i) => <span key={i} className="text-xs text-muted-foreground">{t}</span>)}
+
         </span>
       </Label>)}
     </RadioGroup>
-    <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Sources</summary>
+    <details className="text-xs text-muted-foreground"><summary className="inline-flex min-h-10 cursor-pointer items-center">Fees, rewards & sources</summary>
+      <p>{comparison.rule}</p>
+      {comparison.options.map((o) => <div key={o.route_id} className="mt-3"><p className="font-medium">{o.label}</p>{o.caveats.map((text, i) => <p key={i} className="mt-1">{text}</p>)}</div>)}
       <p className="mt-1">Evaluated {new Date(comparison.evaluated_at).toLocaleString('en-HK')}. Rewards are estimates, not a reduction in the charge.</p>
       {comparison.evidence.map((s) => { const url = sourceUrl(s.url); return <p key={s.id} className="mt-1">{url ? <a href={url} target="_blank" rel="noopener noreferrer" className="underline">{s.title}<ExternalLink className="ml-1 inline size-3" /></a> : s.title}: {s.quote}</p>; })}
     </details>
