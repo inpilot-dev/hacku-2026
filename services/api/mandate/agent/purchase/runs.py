@@ -293,10 +293,18 @@ class PurchaseRuns:
 
         A shop that needs an account is not signed in to: it is offered to the shopper as a link instead."""
         options: list[dict] = []
-        for candidate in matches[:MAX_CHECKOUTS]:
-            if self._cancelled(run_id):
-                return False
+        failed_shops: dict[str, dict] = {}
+        skipped = 0
+        for candidate in matches:
+            if self._cancelled(run_id) or len(options) - skipped >= MAX_CHECKOUTS:
+                break
             host = urlparse(candidate.url).hostname or ""
+            if host in failed_shops:
+                # The same shop's checkout will stop the same way: record it without another attempt.
+                options.append({**_option(candidate), "checkout": failed_shops[host]["checkout"],
+                                "reason": failed_shops[host]["reason"]})
+                skipped += 1
+                continue
             option = {**_option(candidate), "checkout": "trying"}
             options.append(option)
             self._update(run_id, f"Checking out {candidate.title} on {host} as a guest.", status="checking_out",
@@ -317,9 +325,12 @@ class PurchaseRuns:
                 return True
             if summary.stage == "sign_in_required":
                 option.update(checkout="account_required", reason=f"{host} needs an account to check out")
+            elif summary.stage == "blocked":
+                option.update(checkout="failed", reason=f"{host} blocks automated browsers")
             else:
                 option.update(checkout="failed",
                               reason="; ".join(summary.problems) or f"checkout stopped at {phase} ({status})")
+            failed_shops[host] = option
             self._update(run_id, f"Could not check out on {host}: {option['reason']}.", options=options)
         accounts = [o for o in options if o["checkout"] == "account_required"]
         if accounts:

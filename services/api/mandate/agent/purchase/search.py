@@ -32,7 +32,7 @@ def web_search(query: str, client: httpx.Client | None = None, limit: int = 10) 
         raise SearchError(f"Web search answered HTTP {response.status_code}.")
     results, seen = [], set()
     for href, title in RESULT.findall(response.text):
-        url = parse_qs(urlparse(unescape(href)).query).get("uddg", [unescape(href)])[0]
+        url = unescape(parse_qs(urlparse(unescape(href)).query).get("uddg", [unescape(href)])[0])
         host = urlparse(url).hostname or ""
         if not url.startswith("http") or "duckduckgo.com" in host or NOT_SHOPS.search(host) or url in seen:
             continue

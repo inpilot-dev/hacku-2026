@@ -80,6 +80,8 @@ SUMMARY_SCHEMA = {
 }
 
 
+BOT_WALL = re.compile(r"access denied|verify you are (a )?human|are you a robot|unusual traffic|captcha|"
+                      r"request blocked|attention required", re.I)
 PASSWORD_JS = """[...document.querySelectorAll('input[type=password]')].some(e =>
   e.getBoundingClientRect().width > 20 && e.checkVisibility({checkOpacity: true, checkVisibilityCSS: true}))"""
 
@@ -211,7 +213,9 @@ def read_summary(tab: GuestTab, title: str, model: JsonModel) -> OrderSummary:
         ensure_ascii=False))
     fields = sorted({role for roles in tab.card_fields().values() for role in roles})
     summary = OrderSummary(stage=raw["stage"], url=page["url"], currency=raw["currency"], card_fields=fields)
-    if summary.stage != "payment" and "number" in fields:
+    if BOT_WALL.search(page["title"] + " " + page["text"][:400]):
+        summary.stage = "blocked"  # the shop refuses automated browsers
+    elif summary.stage != "payment" and "number" in fields:
         summary.stage = "payment"  # card fields on the page are evidence enough
     elif summary.stage != "payment" and tab.evaluate(PASSWORD_JS):
         summary.stage = "sign_in_required"  # a login form, whatever the page calls it
