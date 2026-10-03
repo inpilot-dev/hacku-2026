@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse } from '../../../../contracts/types';
+import type { AgentRun, AgentRunRequest, ApprovalDecisionResponse, ApprovalList, ApprovalRequest, AuditExport, BudgetResponse, CatalogResponse, Checkpoint, CheckpointRequest, ConfirmRequest, DemoPurchaseRequest, DemoPurchaseResponse, DraftRequest, DraftResponse, EventsResponse, Mandate, PaymentOptionsResponse, Quote, QuoteRequest, Receipt, RevokeResponse, VerificationRequest, VerificationResult, VerifierRequest, VerifierResult, ShoppingListParseRequest, ShoppingListParseResponse, TranscriptionRequest, TranscriptionResponse, StoreList, StoreConnection, StoreLoginTicket, CartSyncRequest, CartSyncResult } from '../../../../contracts/types';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -94,4 +94,16 @@ export const api = {
   createCheckpoint: (token: string, input: CheckpointRequest) => request<Checkpoint>('/audit/checkpoints', token, { method: 'POST', headers: { 'Idempotency-Key': sessionKey(`checkpoint-${input.stream_id}`) }, body: JSON.stringify(input) }),
   verifyAudit: (token: string, input: VerifierRequest) => request<VerifierResult>('/verifier/check', token, { method: 'POST', body: JSON.stringify(input) }),
   verifyModel: (token: string, input: VerificationRequest) => request<VerificationResult>('/verification/runs', token, { method: 'POST', body: JSON.stringify(input) }),
+  stores: (token: string) => request<StoreList>('/stores', token),
+  store: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}`, token),
+  connectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connect`, token, { method: 'POST' }),
+  storeLoginTicket: (token: string, storeId: string) => request<StoreLoginTicket>(`/stores/${encodeURIComponent(storeId)}/login/ticket`, token, { method: 'POST' }),
+  disconnectStore: (token: string, storeId: string) => request<StoreConnection>(`/stores/${encodeURIComponent(storeId)}/connection`, token, { method: 'DELETE' }),
+  syncCart: (token: string, input: CartSyncRequest) => request<CartSyncResult>('/carts/sync', token, { method: 'POST', body: JSON.stringify(input) }),
 };
+
+/** WebSocket URL for a store's sign-in stream on this origin (the dev server proxies it). */
+export function storeLoginStreamUrl(storeId: string, ticket: string) {
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${scheme}://${window.location.host}${API_ROOT}/stores/${encodeURIComponent(storeId)}/login/stream?ticket=${encodeURIComponent(ticket)}`;
+}

@@ -643,6 +643,8 @@ export type LoginStreamServerMessage = {
 } | {
   "type": "frame";
   "data": string;
+  "width": number;
+  "height": number;
 } | {
   "type": "notice" | "error";
   "text": string;

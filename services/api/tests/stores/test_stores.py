@@ -254,7 +254,7 @@ def test_stream_needs_a_pending_sign_in_and_a_single_use_ticket(env):
 
 
 def test_input_commands_are_validated_and_clamped():
-    assert input_commands({"type": "down", "x": 10, "y": 99999})[0][1]["y"] == VIEWPORT["height"]
+    assert input_commands({"type": "down", "x": 10, "y": 99999})[0][1]["y"] == 4096
     assert input_commands({"type": "down", "x": "10", "y": 5}) == []
     assert [p["type"] for _, p in input_commands({"type": "key", "key": "Enter"})] == ["keyDown", "keyUp"]
     assert input_commands({"type": "key", "key": "F12"}) == []

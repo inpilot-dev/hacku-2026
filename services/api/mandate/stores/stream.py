@@ -31,6 +31,7 @@ from .registry import SuperwebStore
 from .steel import CDP_URL, LoginWindow, StoreBrowserError
 
 VIEWPORT = {"width": 412, "height": 780}
+MAX_COORD = 4096  # frames report their own size; this only bounds nonsense input
 KEYS = {"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowRight": 39, "Delete": 46}
 YUU_HOSTS = ("yuurewards.com",)
 MAX_TEXT = 64
@@ -58,7 +59,7 @@ def input_commands(msg: object) -> list[tuple[str, dict]]:
         return []
     kind = msg.get("type")
     if kind in ("down", "up", "move"):
-        x, y = _num(msg.get("x"), 0, VIEWPORT["width"]), _num(msg.get("y"), 0, VIEWPORT["height"])
+        x, y = _num(msg.get("x"), 0, MAX_COORD), _num(msg.get("y"), 0, MAX_COORD)
         if x is None or y is None:
             return []
         event = {"down": "mousePressed", "up": "mouseReleased", "move": "mouseMoved"}[kind]
@@ -68,7 +69,7 @@ def input_commands(msg: object) -> list[tuple[str, dict]]:
             params["clickCount"] = 1
         return [("Input.dispatchMouseEvent", params)]
     if kind == "wheel":
-        x, y = _num(msg.get("x"), 0, VIEWPORT["width"]), _num(msg.get("y"), 0, VIEWPORT["height"])
+        x, y = _num(msg.get("x"), 0, MAX_COORD), _num(msg.get("y"), 0, MAX_COORD)
         dx, dy = _num(msg.get("dx", 0), -2000, 2000), _num(msg.get("dy", 0), -2000, 2000)
         if None in (x, y, dx, dy):
             return []
@@ -134,8 +135,12 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
         try:
             session = (await cdp.call("Target.attachToTarget", targetId=window.target_id, flatten=True))["sessionId"]
             await cdp.call("Page.enable", session)
-            await cdp.call("Emulation.setDeviceMetricsOverride", session, width=VIEWPORT["width"],
-                           height=VIEWPORT["height"], deviceScaleFactor=2, mobile=True)
+
+            async def phone_viewport() -> None:
+                await cdp.call("Emulation.setDeviceMetricsOverride", session, width=VIEWPORT["width"],
+                               height=VIEWPORT["height"], deviceScaleFactor=2, mobile=True)
+
+            await phone_viewport()
             await cdp.call("Page.startScreencast", session, format="jpeg", quality=70,
                            maxWidth=VIEWPORT["width"] * 2, maxHeight=VIEWPORT["height"] * 2)
             await send({"type": "viewport", **VIEWPORT})
@@ -146,9 +151,14 @@ async def relay_login(window: LoginWindow, store: SuperwebStore,
                         continue
                     method, params = event.get("method"), event.get("params", {})
                     if method == "Page.screencastFrame":
-                        await send({"type": "frame", "data": params["data"]})
+                        meta = params.get("metadata", {})
+                        await send({"type": "frame", "data": params["data"],
+                                    "width": round(meta.get("deviceWidth") or VIEWPORT["width"]),
+                                    "height": round(meta.get("deviceHeight") or VIEWPORT["height"])})
                         await cdp.call("Page.screencastFrameAck", session, sessionId=params["sessionId"])
                     elif method == "Page.frameNavigated" and not params["frame"].get("parentId"):
+                        # A navigation that swaps renderer drops the override, so set it again.
+                        await phone_viewport()
                         if not allowed_url(params["frame"].get("url", ""), store):
                             await send({"type": "notice", "text": f"Only the {store.name} sign-in can be used here."})
                             await cdp.call("Page.navigate", session, url=store.login_url())
