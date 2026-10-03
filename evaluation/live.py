@@ -27,7 +27,7 @@ from mandate.payments.drafts import InMemoryDrafts
 from .common import AGENT, PRESPEND, RACE_BASKET, Api, hkd, key, txn
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON = ROOT / "services" / "api" / ".venv" / "bin" / "python"
+PYTHON = sys.executable  # the venv running the evaluation, wherever it lives
 
 
 class AnyEvalDraft(InMemoryDrafts):
