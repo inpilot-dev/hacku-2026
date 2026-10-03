@@ -4,7 +4,7 @@
 **Owner:** Noah
 **Baseline inspected:** `main` at `0468327` on 2 October 2026
 **Goal:** an integrated first version on Saturday morning; submission freeze Sunday, 4 October, 13:00 Asia/Hong_Kong
-**Status (3 October 2026, main `4fd35df`):** Noah-owned frontend and shared-app integration is connected to the merged wallet, deterministic draft parser, Jev shopping-run API, audit/checkpoint/verifier services and Z3 model. The current one-screen experience links to the full dashboard and Safety Lab. The 390px browser flow, sandbox checkout/refusal/revocation, live audit checkpoint and tamper detection, Z3 variants, and opt-in unusual-purchase approval have been exercised. No real funds move. The API enforces observed pickup-fee coverage and rejects agent requests that weaken mandate constraints. A second physical-machine rehearsal is still outstanding; Seungbin PR #12 is an open WIP evaluation extension and its model-dependent scenarios are not part of the current `main` integration.
+**Status (3 October 2026, main `f8d7d13`):** Noah-owned frontend and shared-app integration is connected to the merged wallet, typed/voice shopping-list flow, audit/checkpoint/verifier services and Z3 model. The current one-screen experience links to the full dashboard and Safety Lab. The 390px browser flow, sandbox checkout/refusal/revocation, live audit checkpoint and tamper detection, Z3 variants, and opt-in unusual-purchase approval have been exercised. No real funds move. The API enforces observed pickup-fee coverage and rejects agent requests that weaken mandate constraints. A second physical-machine rehearsal is still outstanding; Seungbin PR #12 is an open WIP evaluation extension and its model-dependent scenarios are not part of the current `main` integration.
 
 ## 1. Product and scope
 
@@ -30,7 +30,7 @@ Extensions after integration: conversational draft UX, character animation, frid
 
 The repository contains the React/Vite client, shared FastAPI app, Timmy's wallet, Abdullah's observed Wellcome catalog and draft/shopping-run APIs, and Seungbin's independent audit/verifier/Z3 services. Their routers are mounted by the shared app. External Jev selection still depends on configured credentials and network access; the default one-screen path honestly labels its preset-basket fallback.
 
-| Area | Current state at `3ce69f2` | Consequence for Noah |
+| Area | Current state at `f8d7d13` | Consequence for Noah |
 |---|---|---|
 | Wallet | Timmy's routes, service, models, signing, SQLite storage and sandbox rail are present | Compose and consume wallet APIs; do not reimplement policy or ledger |
 | Shared app | `mandate.app:app` mounts wallet, catalog, demo, agent, audit and verification routes, health and the built SPA | Keep this as the single entrypoint and preserve JSON errors for unknown API paths |
@@ -394,3 +394,12 @@ Noah's UI now exposes **Review unusual purchases** in both the one-screen and cl
 The Vite production build passed after the UI integration and all 157 API tests passed after the latest team sync. A live browser flow enabled the rule, activated a mandate, quoted the preset basket because Jev was not configured, and showed the first-purchase reason. Nothing was paid while pending. Selecting **Approve once** completed the same sandbox transaction for HK$151.80 and updated the remaining budget to HK$648.20. No real funds moved.
 
 At the next sync, GitHub `main` added shopping-list input and voice transcription (PR #15) plus first-purchase-from-a-new-shop review (PR #16). The simple UI now accepts typed lists and recorded speech; local faster-whisper transcribes audio, and the parser uses OpenRouter with a transparent fixed-rule fallback. The agent still selects from the bounded catalog and the wallet still prices and enforces the mandate. The risk review history now includes shop identity, and the UI displays all reasons supplied by the wallet. These changes were merged locally with the risk-review UI as `4fd35df`. The Vite build passed and all 157 API tests passed after the sync. No live external-model or microphone round-trip was exercised in this validation. Timmy PR #14 remains an optional open webhook proposal; Seungbin PR #12 remains WIP. The second physical-machine rehearsal is still outstanding.
+
+
+## 17. Clean setup and integration readiness — 3 October 2026
+
+A fresh `git fetch origin` found no commits beyond `f8d7d13`; local `main` matched `origin/main`. The current one-origin demo was rebuilt and started through `scripts/run-demo.sh` with a newly installed repository virtual environment. The SPA and assets loaded in the browser, and `/api/v1/health` and `/api/v1/catalog` returned HTTP 200. The demo was stopped normally and its ephemeral payment ledger was removed. This verifies setup and restart on this Mac; it does not substitute for rehearsal on a second physical machine.
+
+This Mac does not have the `just` executable. The documented direct setup fallback was run instead: Python requirements installed with `uv`, `npm ci` completed with no reported vulnerabilities, and the Vite production build passed. The full repository test recipe also passed: API 157, MCP wallet 5, and agent 30 tests. The only warnings were the existing Starlette/httpx TestClient deprecation notices.
+
+The pushed implementation and updated handoff are at `f8d7d13`. The only remaining Noah definition-of-done item requiring a different device is the backup-machine start/reset and user-visible demo rehearsal.

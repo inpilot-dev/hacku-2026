@@ -88,3 +88,10 @@ The latest UI accepts a typed list or a short microphone recording. Audio transc
 A first purchase from a shop not present in the owner's purchase history can now trigger wallet review alongside the other unusual-purchase reasons. The exact returned reasons are shown together in the review screen; approval applies only once to that basket and reason set.
 
 After syncing these team changes, the frontend production build passed and all 157 API tests passed. Microphone capture and external model-provider round trips were not part of this local validation.
+
+
+## Fresh setup rehearsal — 3 October 2026
+
+The documented direct setup fallback was exercised on the current Mac: create/reuse `.venv` with `uv`, install the API, verification, agent and wallet dependencies, run `npm ci`, then build and launch `scripts/run-demo.sh` with `PYTHON_BIN` set to `.venv/bin/python`. The single-origin SPA loaded in a browser; health and catalog returned HTTP 200. The demo stopped normally and removed its ephemeral ledger. This machine lacks the `just` command, so `just install` / `just demo` themselves could not be run here; their documented direct commands succeeded. Rehearse this sequence on the backup computer before submission.
+
+The repository's complete test recipe passed after the latest sync: 157 API tests, 5 MCP wallet tests and 30 agent tests. The frontend production build passed; `npm ci` reported no vulnerabilities. Starlette emitted its existing `httpx` TestClient deprecation warning.
