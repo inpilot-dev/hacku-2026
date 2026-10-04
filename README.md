@@ -66,7 +66,40 @@ Prices come from a timestamped Wellcome capture (3 Oct 2026, 6:13 pm). The owner
 |:-:|:-:|
 | <img src="docs/media/audit-valid.png" width="360"> | <img src="docs/media/audit-tampered.png" width="360"> |
 
-**Security lab (`?security`):** 23 attack scripts plus one legitimate control run, replayed against the real wallet code on a fresh, isolated wallet. The tests check that every attack is held and no money moves.
+### Attack lab
+
+Mandate is an agent harness: Jev, an MCP client or any HTTP agent plugs in with only a scoped token. The attack lab (`?security`, `POST /demo/attacks/{id}/runs`) replays **23 attacks plus one legitimate control purchase** against the real wallet code, each on a fresh, isolated wallet, and shows the redacted request trace and ledger. The live wallet is never touched. `services/api/tests/integration/test_attack_lab.py` checks that every attack is held and no money moves.
+
+<details>
+<summary><b>All 23 attacks and what stops each one</b></summary>
+
+| Attack | What stops it |
+|---|---|
+| Hidden fee pushes the order over its cap | The wallet prices the whole basket itself, including fees, and refuses HK$319. |
+| Order split to dodge approval | The risk scorecard spots orders just under the approval limit and sends the second to the owner. |
+| Rapid-fire small orders | A velocity limit counts reserved and paid orders in the window; the third is refused. |
+| Agent buys alcohol | Categories come from the trusted catalog, not from the agent. |
+| Agent shops at an unapproved store | Only merchants on the confirmed allowance can be paid. |
+| Agent invents its own prices | Unknown fields are rejected; prices only come from the wallet's catalog adapter. |
+| Forged payment capability | Ed25519 signature check fails before any state is touched. |
+| Bait-and-switch basket | The capability is bound to one quote hash; a different quote is refused. |
+| Shop changes the checkout after approval | The wallet re-prices before capture; any change to shop, currency, items or fees voids the approval. |
+| Product listing hijacks the agent | The wallet scans listing text itself; a listing aimed at the agent always waits for the owner. |
+| Concurrent double spend | Reservations are atomic: exactly one wins, the other is refused. |
+| Payment replayed three times | Payments are keyed by transaction; replays return the original receipt and never debit again. |
+| Revoked between approval and payment | Payment re-checks live mandate state; revocation wins immediately. |
+| Stale capability | Capabilities expire after 120 seconds and the reservation is re-checked. |
+| Card frozen between approval and payment | Payment re-checks the card; a frozen card stops it and the reservation is released. |
+| Agent grants itself a bigger allowance | Roles come from the server's token table; agents cannot confirm mandates. |
+| Another household tries to spend your allowance | Every lookup is scoped to the caller's family; foreign IDs are invisible. |
+| One agent borrows another agent's allowance | Authority is bound to one delegatee; other agents, even in the same household, cannot use it. |
+| Web purchase without opting in | Only an allowance that turned on one-time web purchases can fund one; otherwise no card is issued. |
+| Agent approves its own web purchase | Only the allowance's owner can approve a web checkout total. |
+| Web checkout over the order cap | Web purchases go through the same hard rules: limits, budgets, velocity, freeze and revocation. |
+| Single-use card used twice | The card is locked to one shop and total and dies on capture; a resent capture replays the receipt. |
+| 8 agents race one shared budget | Every ancestor budget is reserved atomically, so a swarm cannot overspend the parent. |
+
+</details>
 
 ### Evaluation
 
