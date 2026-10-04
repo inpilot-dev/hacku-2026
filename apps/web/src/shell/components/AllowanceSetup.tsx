@@ -45,6 +45,7 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
   const [askOn, setAskOn] = useState(false);
   const [askAbove, setAskAbove] = useState('100');
   const [riskReview, setRiskReview] = useState(false);
+  const [webPurchases, setWebPurchases] = useState(false);
   const [blocked, setBlocked] = useState<Category[]>(['alcohol']);
   const [allowed, setAllowed] = useState<Record<string, boolean>>({ wellcome: true, marketplace: true });
   const [review, setReview] = useState<Policy | null>(null);
@@ -62,6 +63,7 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
     setAskOn(start?.approval_above_minor != null);
     setAskAbove(start?.approval_above_minor != null ? dollars(start.approval_above_minor) : '100');
     setRiskReview(start?.risk_review ?? false);
+    setWebPurchases(start?.web_purchases ?? false);
     setBlocked(start?.blocked_categories ?? ['alcohol']);
     setAllowed(start ? Object.fromEntries(start.allowed_merchant_ids.map((id) => [id, true])) : { wellcome: true, marketplace: true });
   }, [open]);
@@ -102,6 +104,7 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
       expires_at: fourWeeksIso(),
       approval_above_minor: rules.askMinor,
       risk_review: riskReview,
+      web_purchases: webPurchases,
     });
     setStep('review');
   }
@@ -172,6 +175,7 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
       {step === 'stores' && <div className="grid gap-3">
         <p className="text-sm text-muted-foreground">Tick the stores the agent may shop at. Connecting an account lets it fill that store’s real cart.</p>
         <StoreAccounts online={account.online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} />
+        <SwitchRow id="web" label="Allow one-time web purchases" hint="Buy anything from other shops on the web. You approve each exact total; the per-order limit and budget still apply, and each order gets its own single-use card." checked={webPurchases} onChange={setWebPurchases} />
       </div>}
 
       {step === 'review' && review && <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
@@ -179,6 +183,7 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
         <Row k="Budget" v={`${money(review.period_limits[0].limit_minor)} per ${periodWord(review.period_limits[0].period)}`} />
         <Row k="Most per order" v={`${money(review.per_order_limit_minor)}, including fees`} />
         <Row k="Stores" v={review.allowed_merchant_ids.map(storeName).join(', ')} />
+        <Row k="Web purchases" v={review.web_purchases ? 'Allowed, each one approved by you' : 'Off'} />
         <Row k="Never buy" v={review.blocked_categories.map(categoryLabel).join(', ') || 'Nothing blocked'} />
         <Row k="Ask me above" v={review.approval_above_minor == null ? 'Off' : money(review.approval_above_minor)} />
         <Row k="Unusual purchases" v={review.risk_review ? 'Reviewed' : 'Not reviewed'} />

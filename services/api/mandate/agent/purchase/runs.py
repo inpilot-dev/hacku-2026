@@ -152,7 +152,7 @@ class PurchaseRuns:
             run["status"] = "paying"
             run["message"] = "Approved: paying at the shop."
             run["updated_at"] = _now()
-        self.executor.submit(self._guard, run_id, self._pay, run_id, entry[0])
+        self.executor.submit(self._guard, run_id, self._pay, actor, run_id, entry[0])
         return self.get(actor, run_id)
 
     def cancel(self, actor: Actor, run_id: str) -> dict:
@@ -417,7 +417,7 @@ class PurchaseRuns:
                      message=f"Ready to buy {candidate.title} from {order['shop']} for {summary.total_text} "
                              f"(delivery: {summary.shipping_text or 'not shown'}).{note} Approve to pay.")
 
-    def _pay(self, run_id: str, tab) -> None:
+    def _pay(self, actor: Actor, run_id: str, tab) -> None:
         card = None
         try:
             with self._lock:
@@ -433,7 +433,8 @@ class PurchaseRuns:
             if urlparse(summary.url).hostname != urlparse(url).hostname:
                 self._update(run_id, status="failed", message="The checkout moved to another site. Nothing was paid.")
                 return
-            card = self.cards.issue(approved, urlparse(url).hostname or "")
+            card = self.cards.issue(approved, urlparse(url).hostname or "", actor=actor, purchase_id=run_id,
+                                    title=title, url=url)
             self._update(run_id, f"Card ending {card.last4} issued ({card.funded}).",
                          card={"last4": card.last4, "source": self.cards.name})
             details = self.cards.reveal(card)
@@ -477,8 +478,13 @@ class PurchaseRuns:
         number = raw["order_number_quote"] if quoted(raw["order_number_quote"], page["text"]) else None
         outcome = raw["outcome"]
         if outcome == "confirmed":
+            settled = ""
+            try:
+                self.cards.settle(card)
+            except CardError as exc:
+                settled = f" The wallet could not record the payment yet: {exc}"
             self._update(run_id, "Order confirmed.", status="ordered",
-                         message="Ordered." + (f" The shop shows: {number}." if number else ""))
+                         message="Ordered." + (f" The shop shows: {number}." if number else "") + settled)
         elif outcome == "verification":
             self._update(run_id, "The bank asks for confirmation.", status="needs_user",
                          message="Your bank wants to confirm this payment. Finish it in the store window.")

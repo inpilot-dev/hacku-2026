@@ -132,6 +132,7 @@ function WalletCard({ onRevoke }: { onRevoke: () => void }) {
         <Rule k="Never buy" v={m.policy.blocked_categories.map(categoryLabel).join(', ') || 'Nothing blocked'} />
         {m.policy.approval_above_minor != null && <Rule k="Ask me above" v={money(m.policy.approval_above_minor)} />}
         {m.policy.risk_review && <Rule k="Unusual purchases" v="Reviewed" />}
+        {m.policy.web_purchases && <Rule k="Web purchases" v="Allowed, you approve each" />}
         <Rule k="Ends" v={shortDate(m.policy.expires_at)} />
         {card && <Rule k="Always declined" v={card.controls.blocked_mccs.map((mcc) => MCC_NAMES[mcc] ?? `MCC ${mcc}`).join(', ')} />}
         {card && <Rule k="Single-use cards" v={String(card.single_use_cards.used + card.single_use_cards.active + card.single_use_cards.cancelled)} />}

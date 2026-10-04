@@ -131,6 +131,7 @@ class CardIssuer(Protocol):
     def cancel_mandate_card(self, conn: sqlite3.Connection, mandate_id: str, now) -> None: ...
     def mandate_card(self, conn: sqlite3.Connection, mandate_id: str) -> dict | None: ...
     def card(self, conn: sqlite3.Connection, card_id: str) -> dict | None: ...
+    def checkout_details(self, conn: sqlite3.Connection, card_id: str) -> dict: ...
 
 
 class SandboxCardIssuer:
@@ -388,6 +389,18 @@ class SandboxCardIssuer:
             cvv=self._cvv(pan, row["exp_month"], row["exp_year"]), merchant_id=merchant_id,
             mcc=mcc_for(merchant_id), amount_minor=amount_minor, currency=currency, reservation_id=reservation_id,
         ), now)
+
+    def checkout_details(self, conn, card_id: str) -> dict:
+        """An active single-use card's data, for the code that types it into a shop's payment form.
+
+        The caller must keep it out of state, logs and answers; nothing else in the wallet reads a PAN.
+        """
+        row = conn.execute("SELECT * FROM virtual_cards WHERE id = ?", (card_id,)).fetchone()
+        if row is None or row["usage"] != "single_use" or row["status"] != "active":
+            raise CardIssuanceError(f"Card {card_id} is not an active single-use card.")
+        pan = self._decrypt(row["pan_ciphertext"], card_id)
+        return {"pan": pan, "cvv": self._cvv(pan, row["exp_month"], row["exp_year"]),
+                "exp_month": row["exp_month"], "exp_year": row["exp_year"]}
 
     def reveal_for_test(self, conn, card_id: str) -> CardPresentment:
         """Full card data for tests that play a shop or a fraudster. No API exposes it."""

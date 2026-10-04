@@ -388,7 +388,25 @@ another preference (`spec.preference`). It then tries the shop's **guest** check
   to the best deal for the shopper to buy themselves.
 
 **Paying (Timmy).** Approve re-reads the checkout total, takes a single-use card from a `CardSource`
-(`issue`/`reveal`/`close`, `services/api/mandate/agent/purchase/cards.py`) and types it into the shop's payment fields
-over CDP, so no model sees it. The wallet should provide that source; only a test card ships here. The shop's one
-final button is clicked only when the server runs with `MANDATE_LIVE_PAYMENTS=1`; otherwise the run ends as
-`stopped_before_payment`. Open question: which mandate/policy check gates `approve` for web purchases.
+(`issue`/`reveal`/`settle`/`close`, `services/api/mandate/agent/purchase/cards.py`) and types it into the shop's payment
+fields over CDP, so no model sees it. The shop's one final button is clicked only when the server runs with
+`MANDATE_LIVE_PAYMENTS=1`; otherwise the run ends as `stopped_before_payment`.
+
+The app uses the wallet's source (`services/api/mandate/payments/web_cards.py`). This is how a web purchase is gated:
+
+- **Opt-in per allowance.** `Policy.web_purchases` (default `false`) lets an allowance pay web shops that are not in
+  `allowed_merchant_ids`. It applies only when every mandate in the chain has it on. The newest active allowance
+  of the owner that qualifies is used. Without one, approval fails with "No allowance allows web purchases".
+- **`issue`.** The wallet turns the approved total into a `web_checkout` quote (merchant = the shop's hostname, one
+  line with category `unknown`) and runs the normal authorization. Every hard rule applies: per-order limit, period
+  budgets, velocity, card freeze and revocation. Review reasons (unknown category, approval threshold, risk score)
+  are answered by the owner's approve click, because only the owner can approve a web purchase. On approval the
+  amount is reserved and a single-use card is held, locked to that hostname and total.
+- **`settle`.** Called when the shop confirms the order. It captures the card, moves the amount from reserved to
+  paid and writes a receipt (`GET /payments/web_<purchase id>`). The catalog re-pricing step is skipped for
+  `web_checkout` quotes; the run has already re-read the page total before issuing.
+- **`close`.** Nothing was ordered (dry run, declined, form not filled). It cancels the card and releases the
+  amount.
+
+Still open: the authorization TTL is the wallet's 120 s. A run that ends in `needs_user` (3-D Secure, unclear
+result) is not settled, so its reservation expires and releases the amount.

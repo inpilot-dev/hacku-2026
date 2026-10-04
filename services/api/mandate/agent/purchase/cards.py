@@ -5,14 +5,19 @@ the code that types them into the shop's payment fields, and closes it when the
 order does not go through. Card numbers never enter run state, events, logs,
 API answers or exception text.
 
-Real cards are Timmy's part: his wallet provides a CardSource. Until then only
-the test card exists, which real shops decline.
+Real cards are Timmy's part: the wallet's source (mandate/payments/web_cards.py)
+authorizes the approved total against the owner's allowance and holds a
+single-use sandbox card for it. The test card here is for runs without a wallet.
+When the shop confirms the order the run calls ``settle``; ``close`` means
+nothing was ordered.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+
+from mandate.payments.auth import Actor
 
 
 
@@ -30,8 +35,10 @@ class IssuedCard:
 class CardSource(Protocol):
     name: str
 
-    def issue(self, amount_minor: int, merchant: str) -> IssuedCard: ...
+    def issue(self, amount_minor: int, merchant: str, *, actor: Actor, purchase_id: str, title: str,
+              url: str) -> IssuedCard: ...
     def reveal(self, card: IssuedCard) -> dict: ...  # {pan, cvv, exp_month, exp_year, name}
+    def settle(self, card: IssuedCard) -> None: ...  # the shop confirmed the order
     def close(self, card: IssuedCard) -> None: ...
 
 
@@ -40,16 +47,19 @@ class TestCardSource:
 
     name = "test"
 
-    def issue(self, amount_minor: int, merchant: str) -> IssuedCard:
+    def issue(self, amount_minor: int, merchant: str, **_purchase) -> IssuedCard:
         return IssuedCard("test_card", "4242", f"HK${amount_minor / 100:,.2f} (test card, not funded)")
 
     def reveal(self, card: IssuedCard) -> dict:
         return {"pan": "4242424242424242", "cvv": "123", "exp_month": 12, "exp_year": 2030, "name": ""}
+
+    def settle(self, card: IssuedCard) -> None:
+        pass
 
     def close(self, card: IssuedCard) -> None:
         pass
 
 
 def card_source_from_env() -> CardSource:
-    """The test card until the wallet provides real cards (Timmy's part)."""
+    """The test card, for runs built without a wallet (app.py passes the wallet's source)."""
     return TestCardSource()

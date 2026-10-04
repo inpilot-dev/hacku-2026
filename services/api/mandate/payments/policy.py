@@ -13,6 +13,8 @@ from datetime import datetime
 from .clock import parse
 
 REVIEW_CODES = {"CATEGORY_REVIEW_REQUIRED", "APPROVAL_REQUIRED", "RISK_REVIEW_REQUIRED"}
+# Quotes read from a web shop's checkout page rather than priced from the catalog.
+WEB_CHECKOUT = "web_checkout"
 
 
 def rule_id(mandate: dict, rule: str) -> str:
@@ -137,7 +139,13 @@ def evaluate(chain: list[dict], quote: dict, budgets: list[dict], now: datetime,
             ev.add(state)
 
         ev.rule_ids.append(rule_id(m, "allowed_merchants"))
-        if quote["merchant_id"] not in p["allowed_merchant_ids"]:
+        if quote.get("source") == WEB_CHECKOUT:
+            # A web purchase can be at any shop the agent finds, so the mandate opts in to that as a whole.
+            if not p.get("web_purchases"):
+                ev.add(violation("MERCHANT_NOT_ALLOWED", m, "allowed_merchants",
+                                 f"{quote['merchant_id']} is a web shop and this allowance does not allow web "
+                                 f"purchases."))
+        elif quote["merchant_id"] not in p["allowed_merchant_ids"]:
             ev.add(violation("MERCHANT_NOT_ALLOWED", m, "allowed_merchants",
                              f"{quote['merchant_id']} is not an approved shop."))
 
