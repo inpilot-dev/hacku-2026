@@ -135,7 +135,7 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
     {purchase.status === 'awaiting_approval' && purchase.order && purchase.choice && <Card className="checkout-card gap-4">
       <CardHeader>
         <CardDescription className="flex items-center gap-1.5"><Store className="size-3.5" />{purchase.order.shop}</CardDescription>
-        <div className="checkout-product"><ProductVisual title={purchase.choice.title} /><CardTitle className="text-base leading-snug">{purchase.choice.title}</CardTitle></div>
+        <div className="checkout-product"><ProductVisual title={purchase.choice.title} imageUrl={purchase.choice.image_url} /><CardTitle className="text-base leading-snug">{purchase.choice.title}</CardTitle></div>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="checkout-total flex items-baseline justify-between"><span className="text-muted-foreground">Total at checkout</span>
@@ -172,7 +172,7 @@ function Thread({ purchase, acting, checking, onApprove, onCancel }: { purchase:
 function MatchCard({ candidate, index }: { candidate: PurchaseCandidate; index: number }) {
   const checks = candidate.checks.filter((c) => c.ok);
   return <article className="shop-match result-arrive" style={{ animationDelay: `${Math.min(index, 5) * 90}ms` }}>
-    <ProductVisual title={candidate.title} />
+    <ProductVisual title={candidate.title} imageUrl={candidate.image_url} />
     <div className="shop-match-copy">
       <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="shop-match-title">{candidate.title}<ExternalLink aria-hidden="true" className="size-3 shrink-0" /></a>
       <span className="shop-match-price">{candidate.price_text ?? (candidate.price_minor != null ? money(candidate.price_minor) : 'Price not shown')}</span>

@@ -890,6 +890,7 @@ export type PurchaseCandidate = {
   "title": string;
   "price_minor": number | null;
   "price_text": string | null;
+  "image_url": string | null;
   "currency": string | null;
   "in_stock": boolean | null;
   "matches": boolean;

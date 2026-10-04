@@ -70,6 +70,7 @@ class Assessment:
     title: str = ""
     price_minor: int | None = None
     price_text: str | None = None
+    image_url: str | None = None  # the page's og:image, shown as the product photo
     currency: str | None = None
     in_stock: bool | None = None
     checks: list[Check] = field(default_factory=list)
@@ -87,6 +88,7 @@ class Assessment:
 
     def as_dict(self) -> dict:
         return {"url": self.url, "title": self.title, "price_minor": self.price_minor, "price_text": self.price_text,
+                "image_url": self.image_url,
                 "currency": self.currency, "in_stock": self.in_stock, "matches": self.matches,
                 "unverified": self.unverified,
                 "checks": [c.__dict__ for c in self.checks], "problems": self.problems}
@@ -151,6 +153,8 @@ def assess(page: dict, spec: PurchaseSpec, model: JsonModel) -> Assessment:
     }
     raw = model.ask("page_assessment", _schema(len(spec.requirements)), PROMPT, json.dumps(request, ensure_ascii=False))
     result = Assessment(url=page["url"], kind=raw["kind"], title=(raw["title"] or page["title"]).strip())
+    image = page.get("image") or ""
+    result.image_url = image if image.startswith("https://") else None
     if result.kind == "listing":
         result.product_links = [links[i]["href"] for i in raw["product_links"] if 0 <= i < len(links)]
         return result

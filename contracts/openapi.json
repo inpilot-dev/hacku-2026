@@ -9050,6 +9050,7 @@
           "title",
           "price_minor",
           "price_text",
+          "image_url",
           "currency",
           "in_stock",
           "matches",
@@ -9083,6 +9084,17 @@
                 "type": "null"
               }
             ]
+          },
+          "image_url": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Product photo from the page's og:image, if any."
           },
           "currency": {
             "oneOf": [

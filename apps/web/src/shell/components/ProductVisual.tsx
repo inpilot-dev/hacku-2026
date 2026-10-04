@@ -1,7 +1,12 @@
+import { useState } from 'react';
 import { Carrot, Cherry, Milk, Package2, Wine } from 'lucide-react';
 
-/** Category artwork, not a photograph of a particular merchant product. */
-export default function ProductVisual({ title, kind }: { title: string; kind?: 'charger' | 'earbuds' | 'phone' }) {
+/** The shop's product photo when the page has one; otherwise category artwork. */
+export default function ProductVisual({ title, kind, imageUrl }: { title: string; kind?: 'charger' | 'earbuds' | 'phone'; imageUrl?: string | null }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  if (imageUrl && broken !== imageUrl) {
+    return <span className="product-art product-art-photo"><img src={imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(imageUrl)} /></span>;
+  }
   const category = kind ?? (/charger|充電/i.test(title) ? 'charger' : /earbud|headphone|earphone/i.test(title) ? 'earbuds' : /phone|smartphone/i.test(title) ? 'phone' : 'other');
   if (category === 'other') {
     const Icon = /milk|牛奶/i.test(title) ? Milk : /apple|grape|berry|fruit|kiwi/i.test(title) ? Cherry : /broccoli|vegetable|carrot|green/i.test(title) ? Carrot : /wine|champagne|alcohol/i.test(title) ? Wine : Package2;
