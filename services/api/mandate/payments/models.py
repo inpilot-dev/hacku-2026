@@ -61,6 +61,7 @@ class Policy(Strict):
     approval_above_minor: NonNegInt | None
     velocity_limit: VelocityLimit | None = None
     risk_review: StrictBool = False
+    web_purchases: StrictBool = False
 
 
 class ConfirmRequest(Strict):

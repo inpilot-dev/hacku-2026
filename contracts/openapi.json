@@ -4712,6 +4712,11 @@
             "type": "boolean",
             "default": false,
             "description": "Optional; when true, purchases that fit every hard rule but look unusual are scored: signals such as a basket well above the owner's usual (median paid basket, shrunk toward a quarter of the order cap while history is short), a basket near the order cap, a new shop, never-bought items, a unit price at least 25% above the last price paid, orders split just under the approval threshold, a burst of purchases, a budget used up early in the period and an unusual hour each add points. A total at or above the threshold returns requires_review with each signal as a RISK_REVIEW_REQUIRED reason; decisions carry risk_assessment. A child mandate must keep it on if its parent has it on. Listing text that tries to instruct the agent is always reviewed, whatever this is set to. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
+          },
+          "web_purchases": {
+            "type": "boolean",
+            "default": false,
+            "description": "Optional; when true, the owner can pay one-time web purchases (POST /purchases) from this allowance at any web shop, instead of only allowed_merchant_ids. The owner approves each exact checkout total; the wallet then authorizes it as a web_checkout quote (per-order limit, period budgets, velocity, card freeze and revocation all apply; review reasons are answered by the owner's approval) and holds a single-use card locked to that shop and total. It takes effect only when every mandate in the chain has it on. Proposed v0.3 addition (wallet, Timmy). Additive: older clients can ignore it."
           }
         },
         "required": [
