@@ -1,6 +1,6 @@
 # Mandate — HacKU 2026
 
-Mandate is a shopping-agent prototype with a wallet that enforces user-approved spending limits. The browser builds or reviews a basket; the wallet calculates the total and decides whether it may proceed. All payments in this repository use a local simulator. **No real funds move.**
+Mandate is a shopping-agent prototype with a wallet that enforces user-approved spending limits. The browser builds or reviews a basket; the wallet calculates the total and decides whether it may proceed. The primary wallet uses a local simulator. A separate durable local sandbox exercises capture, cancellation and refund recovery against a persisted exact quote. **No real funds move; no retailer order is submitted.**
 
 ## Run the prototype
 
@@ -51,3 +51,7 @@ This starts a fresh, disposable local wallet and serves the built web app and AP
 - [Noah’s local demo and reset runbook](docs/noah-demo-runbook.md)
 - [Overall product and technical plan](docs/mandate-build-plan.md)
 - [Observed catalog capture and evidence notes](services/agent/README.md)
+
+## Commerce comparison and recovery
+
+Permission previews, store comparisons, bounded exact-pack planning, participant records, durable sandbox recovery and owner-signed credential exports are available in the grocery/wallet screens. See [the feature map and validation boundaries](docs/commerce-improvements.md) for setup, worker commands and the human-study protocol. Live model/search checks and human time savings remain unmeasured until real evidence is collected.

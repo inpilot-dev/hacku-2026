@@ -35,6 +35,14 @@ class AgentRunRequest(_Strict):
     auto_purchase: StrictBool = False
 
 
+class AgentComparison(_Strict):
+    merchant_id: StrictStr
+    quote: dict | None
+    matched_items: StrictInt
+    missing_items: list[StrictStr]
+    problem: StrictStr
+
+
 class AgentRun(_Strict):
     id: StrictStr
     mandate_id: StrictStr
@@ -49,6 +57,7 @@ class AgentRun(_Strict):
     message: StrictStr
     created_at: StrictStr
     updated_at: StrictStr
+    comparisons: list[AgentComparison] = Field(default_factory=list)
 
 
 class DraftRequest(_Strict):

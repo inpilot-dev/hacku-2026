@@ -269,3 +269,17 @@ CREATE TABLE IF NOT EXISTS card_authorizations (
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS card_authorizations_by_mandate ON card_authorizations(mandate_id, created_at);
+
+-- Additive commerce records; durable sandbox holds share the wallet's budget rows.
+CREATE TABLE IF NOT EXISTS commerce_studies (
+    id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, body_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS commerce_jobs (
+    id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, mandate_id TEXT NOT NULL,
+    operation_key TEXT NOT NULL, request_hash TEXT NOT NULL, body_json TEXT NOT NULL,
+    lease_until REAL NOT NULL DEFAULT 0, UNIQUE(owner_id, operation_key)
+);
+
+CREATE TABLE IF NOT EXISTS commerce_sandbox_objects (
+    id TEXT PRIMARY KEY, body_json TEXT NOT NULL
+);

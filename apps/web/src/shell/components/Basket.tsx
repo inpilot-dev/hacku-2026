@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocale } from '@/lib/locale';
 import { CheckCircle2, ExternalLink, ReceiptText, ShoppingCart, XCircle } from 'lucide-react';
 import type { CartSyncResult, PaymentOptionsResponse, Quote, RiskAssessment } from '../../../../../contracts/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,6 +23,7 @@ import './store-login.css';
 /* The priced basket and what the wallet decided about it. */
 
 export default function Basket({ g }: { g: Groceries }) {
+  const { t } = useLocale();
   const account = useAccount();
   const quote = g.quote!;
   const blocked = new Set<string>(account.mandate?.policy.blocked_categories ?? []);
@@ -33,7 +35,7 @@ export default function Basket({ g }: { g: Groceries }) {
       <CardDescription>{storeName(quote.merchant_id)} · Click &amp; Collect</CardDescription>
       <CardAction><Sticker who={v || g.phase === 'paying' ? 'kip' : 'kumi'} size={56}
         state={v?.kind === 'paid' ? 'approved' : v?.kind === 'refused' ? 'refused' : v || g.phase === 'paying' ? 'idle' : 'happy'} motion={g.phase === 'paying' ? 'working' : undefined} /></CardAction>
-      <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0) : g.phase === 'paying' ? 'Checking your rules…' : 'Basket ready'}</CardTitle>
+      <CardTitle className="text-lg">{v ? verdictTitle(v.kind, quote.total_minor, v.kind === 'paid' ? v.receipt.amount_minor : 0, t) : g.phase === 'paying' ? t('Checking your rules…', '檢查授權中…') : t('Basket ready', '購物籃已準備好')}</CardTitle>
     </CardHeader>
     <CardContent className="space-y-4 text-sm">
       <ul className="basket-products">
@@ -44,7 +46,7 @@ export default function Basket({ g }: { g: Groceries }) {
             <span className="basket-product-price">{money(item.line_total_minor)}</span></li>; })}
         {quote.charges.map((c, i) => <li key={`c${i}`} className="flex justify-between gap-4 text-muted-foreground"><span>{c.label}</span><span>{c.amount_minor ? money(c.amount_minor) : 'Free'}</span></li>)}
       </ul>
-      <div className="basket-total flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{money(quote.total_minor)}</span></div>
+      <div className="basket-total flex justify-between font-semibold"><span>{t('Total', '總額')}</span><span className="tabular-nums">{money(quote.total_minor)}</span></div>
 
       {g.phase === 'basket' && <>
         {g.ruleTestBasket
@@ -61,9 +63,9 @@ export default function Basket({ g }: { g: Groceries }) {
           onClick={() => void account.receipts.open({ receipt: v.receipt, quote, occurredAt: v.receipt.paid_at })}>
           <span className="printed-ticket-brand">MANDATE · SANDBOX</span>
           <strong>{storeName(v.receipt.merchant_id)}</strong>
-          <span className="printed-ticket-paid"><CheckCircle2 className="size-4" aria-hidden="true" />Payment confirmed</span>
+          <span className="printed-ticket-paid"><CheckCircle2 className="size-4" aria-hidden="true" />{t('Payment confirmed', '付款已確認')}</span>
           <strong className="printed-ticket-total">{money(v.receipt.amount_minor)}</strong>
-          <span className="printed-ticket-open">View your receipt →</span>
+          <span className="printed-ticket-open">{t('View your receipt →', '查看收據 →')}</span>
         </button></div>
       </div>}
 
@@ -72,9 +74,9 @@ export default function Basket({ g }: { g: Groceries }) {
         ? <ul className="space-y-2">{v.violations.map((x, i) => <li key={`${x.rule_id}-${i}`} className="flex gap-2"><XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
           <span><span className="font-medium">{reasonTitle(x)}</span><span className="block text-xs text-muted-foreground">{x.message}</span></span></li>)}</ul>
         : <p className="text-muted-foreground">{v.message}</p>)}
-      {v?.kind === 'uncertain' && <Alert><AlertTitle>Payment status unknown</AlertTitle><AlertDescription>{v.message}</AlertDescription></Alert>}
+      {v?.kind === 'uncertain' && <Alert><AlertTitle>{t('Payment status unknown', '付款狀態不明')}</AlertTitle><AlertDescription>{v.message}</AlertDescription></Alert>}
       {v?.kind === 'review' && <div className="space-y-3">
-        <p className="text-muted-foreground">Kip paused this order for you. Nothing is reserved or paid while it waits.</p>
+        <p className="text-muted-foreground">{t('Kip paused this order for you. Nothing is reserved or paid while it waits.', 'Kip 暫停訂單，等待你的確認，期間不會預留或付款。')}</p>
         {v.risk && v.risk.score > 0 && <RiskMeter risk={v.risk} />}
         {v.violations.length > 0 && <ul className="space-y-2">{v.violations.map((x, i) => { const pts = v.risk?.signals.find((s) => s.check === riskCheck(x))?.points;
           return <li key={`${x.rule_id}-${i}`}><span className="font-medium">{reasonTitle(x)}</span>{pts ? <Badge variant="secondary" className="ml-2">+{pts}</Badge> : null}
@@ -84,12 +86,12 @@ export default function Basket({ g }: { g: Groceries }) {
     </CardContent>
     <CardFooter className="flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap">
       {g.phase === 'basket' && <>
-        <Button className="checkout-pay min-h-11 flex-1" disabled={Boolean(g.paymentComparison && !g.routeId)} onClick={() => void g.checkout()}>Pay {money(quote.total_minor)} in the sandbox</Button>
+        <Button className="checkout-pay min-h-11 flex-1" disabled={Boolean(g.paymentComparison && !g.routeId)} onClick={() => void g.checkout()}>{t(`Pay ${money(quote.total_minor)} in the sandbox`, `在沙盒支付 ${money(quote.total_minor)}`)}</Button>
         <Button variant="ghost" className="min-h-11" onClick={g.resetShop}>Start over</Button>
       </>}
       {v?.kind === 'review' && <>
-        <Button className="min-h-11 flex-1" onClick={() => void g.decide(true)} disabled={g.busy === 'decide'}>Approve once</Button>
-        <Button variant="outline" className="min-h-11" onClick={() => void g.decide(false)} disabled={g.busy === 'decide'}>Say no</Button>
+        <Button className="min-h-11 flex-1" onClick={() => void g.decide(true)} disabled={g.busy === 'decide'}>{t('Approve once', '批准一次')}</Button>
+        <Button variant="outline" className="min-h-11" onClick={() => void g.decide(false)} disabled={g.busy === 'decide'}>{t('Say no', '拒絕')}</Button>
       </>}
       {v?.kind === 'uncertain' && <Button className="min-h-11 flex-1" disabled={Boolean(g.busy)} onClick={() => void g.checkPaymentStatus()}>{g.busy === 'payment-status' ? 'Checking…' : 'Check payment status'}</Button>}
       {v?.kind === 'paid' && <Button variant="outline" className="min-h-11" onClick={() => void account.receipts.open({ receipt: v.receipt, quote, occurredAt: v.receipt.paid_at })}><ReceiptText />Receipt</Button>}
@@ -99,11 +101,11 @@ export default function Basket({ g }: { g: Groceries }) {
   </Card>;
 }
 
-function verdictTitle(kind: string, total: number, paid: number) {
-  if (kind === 'paid') return `Paid ${money(paid)}`;
-  if (kind === 'refused') return 'Refused. Nothing was paid.';
-  if (kind === 'review') return `Approve ${money(total)}?`;
-  return 'Still checking';
+function verdictTitle(kind: string, total: number, paid: number, t: (en: string, zh: string) => string) {
+  if (kind === 'paid') return t(`Paid ${money(paid)}`, `已支付 ${money(paid)}`);
+  if (kind === 'refused') return t('Refused. Nothing was paid.', '已拒絕，沒有付款。');
+  if (kind === 'review') return t(`Approve ${money(total)}?`, `批准 ${money(total)}？`);
+  return t('Still checking', '仍在核對');
 }
 
 function RiskMeter({ risk }: { risk: RiskAssessment }) {
@@ -122,16 +124,17 @@ function sourceUrl(value: string) {
 }
 
 function PaymentRoutes({ comparison, selected, onSelect }: { comparison: PaymentOptionsResponse; selected: string | null; onSelect: (id: string, label: string) => void }) {
+  const { t } = useLocale();
   return <fieldset className="space-y-2">
-    <legend className="mb-1 font-medium">Payment route</legend>
-    <p className="text-xs text-muted-foreground">Compare fees and estimated rewards.</p>
+    <legend className="mb-1 font-medium">{t('Payment route', '付款方式')}</legend>
+    <p className="text-xs text-muted-foreground">{t('Compare fees and estimated rewards.', '比較費用及預計回贈。')}</p>
     <RadioGroup value={selected ?? ''} onValueChange={(id) => { const o = comparison.options.find((x) => x.route_id === id); if (o) onSelect(o.route_id, o.label); }}>
       {comparison.options.map((o) => <Label key={o.route_id} htmlFor={`route-${o.route_id}`}
         className={cn('flex cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal', selected === o.route_id && 'border-primary', !o.eligible && 'cursor-not-allowed opacity-60')}>
         <RadioGroupItem id={`route-${o.route_id}`} value={o.route_id} disabled={!o.eligible} className="mt-0.5" />
         <span className="grid gap-0.5 text-sm">
           <span className="font-medium">{o.label.replace(/\s*\([^)]*\)/g, '')}{o.route_id === comparison.recommended_route_id && o.eligible && <Badge variant="secondary" className="ml-2">Recommended</Badge>}</span>
-          {o.eligible ? o.rank === null ? <span className="text-xs text-muted-foreground">Fee not verified · net cost unavailable · manual sandbox choice</span> : <span className="text-xs text-muted-foreground">Charge {money(o.gross_minor)} · fee {money(o.fee_minor)} · reward ~{money(o.reward_minor)} · net {money(o.net_minor)}</span>
+          {o.eligible ? o.rank === null ? <span className="text-xs text-muted-foreground">{t('Fee not verified · net cost unavailable · manual sandbox choice', '費用未核實 · 無法計算淨成本 · 可手動選作沙盒測試')}</span> : <span className="text-xs text-muted-foreground">{t('Charge', '收取')} {money(o.gross_minor)} · {t('fee', '費用')} {money(o.fee_minor)} · {t('reward', '回贈')} ~{money(o.reward_minor)} · {t('net', '淨成本')} {money(o.net_minor)}</span>
             : <span className="text-xs text-muted-foreground">{o.ineligible_reason || 'Unavailable for this purchase'}</span>}
 
         </span>

@@ -141,6 +141,12 @@ class AgentRuns:
                          message=f"No basket was built: {'; '.join(skipped)}. "
                                  "Set up a new mandate that allows a store in the current catalog.")
             return
+        self._update(run_id, comparisons=[{
+            "merchant_id": c.merchant_id, "quote": c.quote,
+            "matched_items": sum(p.product_id is not None for p in c.picks),
+            "missing_items": [p.item for p in c.picks if p.product_id is None],
+            "problem": c.problem,
+        } for c in candidates])
         quoted = [c for c in candidates if c.quote]
         if not quoted:
             reasons = "; ".join(f"{c.merchant_id}: {c.problem}" for c in candidates)

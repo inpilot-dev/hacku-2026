@@ -1,3 +1,5 @@
+import { useLocale } from '@/lib/locale';
+import CommerceTools from '../components/CommerceTools';
 import { useEffect, useState } from 'react';
 import { Snowflake, Wallet } from 'lucide-react';
 import type { CardAuthorization } from '../../../../../contracts/types';
@@ -25,10 +27,11 @@ const MCC_NAMES: Record<string, string> = { '7995': 'Gambling', '6051': 'Quasi-c
 
 export default function WalletTab() {
   const a = useAccount();
+  const { t } = useLocale();
   const [revokeOpen, setRevokeOpen] = useState(false);
 
   return <div className="space-y-6">
-    <PageHeader title="Wallet" description="Your card, what’s left on it, and every purchase." />
+    <PageHeader title={t("Wallet", "錢包")} description="Your card, what’s left on it, and every purchase." />
     {a.error && <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">{a.error}
       <button className="ml-2 underline" onClick={() => a.setError('')}>Dismiss</button></p>}
 
@@ -40,19 +43,20 @@ export default function WalletTab() {
     </Card> : <WalletCard onRevoke={() => setRevokeOpen(true)} />}
 
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />Receipts</CardTitle><CardDescription>Paid grocery orders, kept by Stella.</CardDescription>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />{t("Receipts", "收據")}</CardTitle><CardDescription>Paid grocery orders, kept by Stella.</CardDescription>
         {a.receipts.records.length > 0 && <CardAction><Button variant="ghost" size="sm" onClick={() => void a.receipts.load(true)}>Refresh</Button></CardAction>}</CardHeader>
       <CardContent><ReceiptList /></CardContent>
     </Card>
 
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />Activity</CardTitle><CardDescription>{a.fromServer ? 'From the wallet’s audit trail' : 'This session'}</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Sticker who="stella" size={32} />{t("Activity", "活動")}</CardTitle><CardDescription>{a.fromServer ? 'From the wallet’s audit trail' : 'This session'}</CardDescription></CardHeader>
       <CardContent>{a.log.length ? <ol className="space-y-2 text-sm">{a.log.map((e) => <li key={e.id} className="flex gap-3">
         <time className="w-12 shrink-0 tabular-nums text-muted-foreground">{new Date(e.at).toLocaleTimeString('en-HK', { hour: '2-digit', minute: '2-digit', hour12: false })}</time>
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', e.tone === 'good' ? 'bg-success' : e.tone === 'bad' ? 'bg-destructive' : 'bg-muted-foreground')} />
         <span>{e.text}</span></li>)}</ol> : <p className="text-sm text-muted-foreground">Nothing yet.</p>}</CardContent>
     </Card>
 
+    <CommerceTools />
     <p className="text-center text-xs text-muted-foreground">
       <a className="underline underline-offset-2" href="?classic">Full dashboard</a> · <a className="underline underline-offset-2" href="?security">Security lab</a> · <a className="underline underline-offset-2" href="?about">About</a>
     </p>
@@ -60,7 +64,7 @@ export default function WalletTab() {
     <Dialog open={revokeOpen} onOpenChange={setRevokeOpen}>
       <DialogContent>
         <DialogHeader><DialogTitle>Revoke this allowance?</DialogTitle>
-          <DialogDescription>Its virtual card is cancelled for good and any holds are released. You can set up a new allowance afterwards.</DialogDescription></DialogHeader>
+          <DialogDescription>{t('Its virtual card is cancelled. Local sandbox holds are released; external TEST payment holds stay until the provider confirms cancellation or recovery. You can set up a new allowance afterwards.', '虛擬卡會取消。本機沙盒預留會釋放；外部測試付款額度會保留至付款服務確認取消或復原。之後可設定新授權。')}</DialogDescription></DialogHeader>
         <DialogFooter><DialogClose asChild><Button variant="outline">Keep it</Button></DialogClose>
           <Button variant="destructive" disabled={a.busy === 'revoke'} onClick={async () => { if (await a.revoke()) setRevokeOpen(false); }}>{a.busy === 'revoke' ? 'Revoking…' : 'Revoke'}</Button></DialogFooter>
       </DialogContent>

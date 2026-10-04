@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from mandate.commerce.routes import build_commerce_router
 from mandate.payments.clock import iso
 from mandate.payments.dev_app import create_app
 from mandate.payments.drafts import InMemoryDrafts
@@ -37,6 +38,7 @@ def build_app():
     app, wallet = create_app(draft_lookup=drafts)
     app.title = "Mandate family wallet"
     app.version = "0.1.0"
+    app.include_router(build_commerce_router(wallet), prefix="/api/v1")
     app.include_router(build_demo_router(wallet), prefix="/api/v1")
     app.include_router(build_attack_lab_router(), prefix="/api/v1")
     app.include_router(build_catalog_router(wallet), prefix="/api/v1")

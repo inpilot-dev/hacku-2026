@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ApprovalRequest, CatalogResponse, PaymentOptionsResponse, Quote, Receipt, RiskAssessment, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../../contracts/types';
+import type { AgentComparison, ApprovalRequest, CatalogResponse, PaymentOptionsResponse, Quote, Receipt, RiskAssessment, RuleViolation, ShoppingItem, TranscriptionRequest } from '../../../../../contracts/types';
 import { api, ApiError } from '@/lib/api';
 import { money } from '@/lib/format';
 import { newId } from '@/lib/utils';
@@ -241,6 +241,8 @@ export function useGroceries() {
   }, [mandateId]);
 
   /** Ask the agent service first; if it isn't mounted, use the preset basket and say so. */
+  const [storeComparisons, setStoreComparisons] = useState<AgentComparison[]>([]);
+
   async function packWithAgent(list: ShoppingItem[]): Promise<{ quote: Quote | null; message: string }> {
     if (!mandate) return { quote: null, message: '' };
     try {
@@ -253,6 +255,7 @@ export function useGroceries() {
         if (next.message && next.message !== current.message) note('kumi', next.message, 'info');
         current = next;
       }
+      setStoreComparisons(current.comparisons ?? []);
       if (current.quote_id) {
         setAgentNote(`Packed by ${current.provider === 'jev' ? 'the shopping agent' : current.provider}`);
         return { quote: await api.quoteById(TOKEN, current.quote_id), message: current.message };
@@ -323,6 +326,7 @@ export function useGroceries() {
       ? Object.entries(custom).filter(([, q]) => q > 0).map(([product_id, quantity]) => ({ product_id, quantity }))
       : spoken ? [] : chosen.items.filter((line) => productById.has(line.product_id));
     if (!spoken && !lines.length && !editedPreset) { setError('That basket is empty in the current catalog.'); return; }
+    setStoreComparisons([]);
     setPaymentComparison(null); setRouteId(null); setRouteLabel('');
     setRuleTestBasket(false);
     setError(''); setVerdict(null); setPreset(chosen === 'custom' || spoken ? null : chosen); setPhase('packing');
@@ -494,7 +498,7 @@ export function useGroceries() {
   const customCount = Object.values(custom).reduce((sum, q) => sum + q, 0);
   const customTotal = Object.entries(custom).reduce((sum, [id, q]) => sum + (productById.get(id)?.unit_price_minor ?? 0) * q, 0);
 
-  return { catalogLoading, catalogError, loadCatalog,
+  return { evidence: catalog?.evidence ?? [], storeComparisons, catalogLoading, catalogError, loadCatalog,
     messages, error, setError, busy, phase, preset, quote, verdict, ruleTestBasket, agentNote, recoveryBlocked, canSpend, inFlight,
     paymentComparison, routeId, routeLabel, selectRoute: (id: string, label: string) => { setRouteId(id); setRouteLabel(label); },
     listText, setListText, voice, toggleRecording, shopFromText, shop, checkout, checkPaymentStatus, decide, resetShop,

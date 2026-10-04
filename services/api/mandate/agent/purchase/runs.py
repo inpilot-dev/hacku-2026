@@ -223,7 +223,11 @@ class PurchaseRuns:
         for query in (f"{spec.search_query} Hong Kong buy online", f"{spec.search_query} 香港 網購",
                       f"buy {spec.item} online Hong Kong price"):
             try:
-                found = [r["url"] for r in self.search(query)]
+                observations = self.search(query)
+                found = [r["url"] for r in observations]
+                provenance = sorted({f"{r.get('provider', 'injected search')} observed {r['observed_at']}" for r in observations if r.get('observed_at')})
+                if provenance:
+                    self._update(run_id, 'Search sources: ' + '; '.join(provenance) + '. These are search observations, not verified checkout prices.')
             except SearchError as exc:
                 search_error = exc
                 self._update(run_id, f"A web search failed: {exc}")

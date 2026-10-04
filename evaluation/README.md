@@ -66,3 +66,7 @@ the team agrees.
 - Latency is in-process on one laptop. It is not a network or production figure.
 - In concurrency scenarios either request may win. The winner counts as the legitimate attempt and the loser
   must be refused with `PERIOD_BUDGET_EXCEEDED`.
+
+## Model and participant evidence
+
+`PYTHONPATH=services/api .venv/bin/python -m evaluation.model_quality` runs ten author-written synthetic selector cases only when TypeSafe credentials are configured; otherwise records `not_configured` and exits 2. Provider cost and independent held-out quality remain unmeasured. `python -m evaluation.study_summary RAW_EXPORT.json` summarizes exactly paired participant-entered trials and retains failures; scripted browser tests are excluded. Follow [the measurement protocol](../docs/commerce-improvements.md) before claiming human time savings.

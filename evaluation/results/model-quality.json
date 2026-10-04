@@ -1,0 +1,9 @@
+{
+  "generated_at": "2026-10-04T04:30:01.810598+00:00",
+  "status": "not_configured",
+  "scope": "Live selector on ten author-written synthetic cases; in-process deterministic wallet checks, no provider payment, no held-out/user-study claim.",
+  "cases": [],
+  "model_id": null,
+  "price_mode": "synthetic",
+  "cost": "not_observed"
+}

@@ -1,3 +1,4 @@
+import { LocaleProvider, useLocale } from '@/lib/locale';
 import BrandLogo from '../components/BrandLogo';
 import { useEffect, useState } from 'react';
 import { Moon, Sun, ShoppingBag, ShoppingBasket, UserRound, Wallet } from 'lucide-react';
@@ -36,11 +37,12 @@ function tabFromHash(): TabId {
 }
 
 export default function AppShell() {
-  return <AccountProvider><TooltipProvider><Shell /></TooltipProvider></AccountProvider>;
+  return <LocaleProvider><AccountProvider><TooltipProvider><Shell /></TooltipProvider></AccountProvider></LocaleProvider>;
 }
 
 function Shell() {
   const account = useAccount();
+  const { locale, setLocale, t } = useLocale();
   const [tab, setTab] = useState<TabId>(tabFromHash);
   const online = account.online;
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -72,12 +74,13 @@ function Shell() {
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-2 sm:gap-4 px-4">
           <span className="text-[17px] font-semibold tracking-tight"><BrandLogo /></span>
           <TabsList className="hidden md:inline-flex">
-            {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id} className="gap-1.5 px-3"><Icon />{label}</TabsTrigger>)}
+            {TABS.map(({ id, label, icon: Icon }) => <TabsTrigger key={id} value={id} className="gap-1.5 px-3"><Icon />{t(label, ({ Buy: '購物', Groceries: '日用品', Wallet: '錢包', Profile: '個人資料' } as Record<string, string>)[label])}</TabsTrigger>)}
           </TabsList>
           <Badge variant="outline" className={cn('ml-auto gap-1.5 font-normal', online === false && 'text-destructive')}>
             <span className={cn('size-1.5 rounded-full', online === false ? 'bg-destructive' : online === null ? 'bg-muted-foreground' : 'bg-success')} />
             {online === false ? 'Offline' : online === null ? 'Connecting' : 'Sandbox'}
           </Badge>
+          <Button variant="ghost" size="sm" onClick={() => setLocale(locale === 'en' ? 'zh-HK' : 'en')}>{locale === 'en' ? '繁中' : 'English'}</Button>
           <Button variant="ghost" size="icon" className="shrink-0 rounded-full" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}
             aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} title={theme === 'light' ? 'Dark mode' : 'Light mode'}>
             {theme === 'light' ? <Moon /> : <Sun />}

@@ -32,6 +32,8 @@ def ts_type(schema):
             optional = "" if name in required else "?"
             fields.append(f"  {json.dumps(name)}{optional}: {ts_type(value)};")
         return "{\n" + "\n".join(fields) + "\n}"
+    if set(schema) <= {"title", "description", "default", "examples"}:
+        return "unknown"
     raise ValueError(f"Unsupported schema shape: {schema}")
 
 

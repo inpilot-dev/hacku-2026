@@ -38,15 +38,15 @@ export type CatalogResponse = {
 export type PeriodLimit = {
   "period": "calendar_week" | "calendar_month";
   "limit_minor": number;
-  "timezone": "Asia/Hong_Kong";
+  "timezone": string;
 };
 
 export type Policy = {
-  "currency": Currency;
+  "currency": string;
   "per_order_limit_minor": number;
   "period_limits": Array<PeriodLimit>;
   "allowed_merchant_ids": Array<string>;
-  "blocked_categories": Array<Category>;
+  "blocked_categories": Array<"produce" | "dairy" | "eggs" | "meat" | "seafood" | "bakery" | "pantry" | "beverage_non_alcoholic" | "alcohol" | "household" | "unknown">;
   "expires_at": string;
   "approval_above_minor": number | null;
   "velocity_limit"?: VelocityLimit | null;
@@ -130,6 +130,7 @@ export type AgentRun = {
   "message": string;
   "created_at": string;
   "updated_at": string;
+  "comparisons"?: Array<AgentComparison>;
 };
 
 export type QuoteItemRequest = {
@@ -948,4 +949,68 @@ export type Purchase = {
   "live_payments": boolean;
   "created_at": string;
   "updated_at": string;
+};
+
+export type CredentialTemplate = {
+  "mandate_id": string;
+  "public_x": string;
+};
+
+export type CredentialVerify = {
+  "credential": string;
+};
+
+export type PlanInput = {
+  "mandate_id": string;
+  "items": Array<QuoteItemRequest>;
+};
+
+export type PreviewInput = {
+  "policy": Policy;
+  "parent_mandate_id"?: string | null;
+};
+
+export type StudyFinish = {
+  "actions": number;
+  "errors": number;
+  "outcome": "ready" | "failed" | "abandoned";
+  "source_url": string;
+  "observed_at": string;
+  "note"?: string;
+};
+
+export type StudyStart = {
+  "participant": string;
+  "task_id": string;
+  "mode": "manual" | "agent";
+  "quote_id": string;
+  "setup_seconds": number;
+  "execution_mode": "human" | "scripted" | "model" | "fallback";
+};
+
+export type AgentComparison = {
+  "merchant_id": string;
+  "quote": Quote | null;
+  "matched_items": number;
+  "missing_items": Array<string>;
+  "problem": string;
+};
+
+export type HTTPValidationError = {
+  "detail"?: Array<ValidationError>;
+};
+
+export type ValidationError = {
+  "loc": Array<string | number>;
+  "msg": string;
+  "type": string;
+  "input"?: unknown;
+  "ctx"?: Record<string, unknown>;
+};
+
+export type SandboxStart = {
+  "mandate_id": string;
+  "quote_id": string;
+  "approved_quote_hash": string;
+  "scenario"?: "happy" | "order_failure" | "lost_capture_response" | "pending_refund" | "failed_refund";
 };

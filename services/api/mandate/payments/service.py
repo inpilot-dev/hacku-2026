@@ -365,6 +365,11 @@ class Wallet:
                 "ON c.parent_mandate_id = t.id) "
                 "SELECT COUNT(*) FROM reservations WHERE mandate_id IN (SELECT id FROM tree) "
                 "AND status IN ('reserved', 'paid') AND created_at > ?", (m["id"], since)).fetchone()[0]
+            counts[m["id"]] += conn.execute(
+                "WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT c.id FROM mandates c JOIN tree t ON c.parent_mandate_id=t.id) "
+                "SELECT COUNT(*) FROM commerce_jobs WHERE mandate_id IN (SELECT id FROM tree) "
+                "AND json_extract(body_json,'$.budget_state') IN ('held','spent') "
+                "AND json_extract(body_json,'$.created_at') > ?", (m["id"], since)).fetchone()[0]
         return counts
 
     # risk
@@ -594,6 +599,9 @@ class Wallet:
                     if approval is not None and body["status"] != "approved":
                         body["approval_request"] = self._approval_out(approval)
                     return 200, body
+
+            if conn.execute("SELECT 1 FROM commerce_jobs WHERE owner_id=? AND json_extract(body_json,'$.status') IN ('unknown','needs_operator') LIMIT 1", (actor.family_id,)).fetchone():
+                raise conflict("Resolve the external payment before another authorization; its funds remain reserved.")
 
             leaf = self._load_mandate(conn, req["mandate_id"])
             if leaf is None or not self._can_see_mandate(actor, leaf):

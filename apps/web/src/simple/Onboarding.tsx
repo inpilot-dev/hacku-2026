@@ -1,3 +1,4 @@
+import RulePreview from '../shell/components/RulePreview';
 import { useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
 import type { Category, Mandate, PeriodLimit, Policy, StoreConnection } from '../../../../contracts/types';
@@ -174,6 +175,7 @@ export default function Onboarding({ token, online, initialRiskReview = false, i
         <div><dt>Unusual purchase review</dt><dd>{reviewPolicy.risk_review ? 'On' : 'Off'}</dd></div>
         <div><dt>Expires</dt><dd>{new Date(reviewPolicy.expires_at).toLocaleString('en-HK', { timeZone: 'Asia/Hong_Kong' })} HKT</dd></div>
       </dl>
+      {reviewPolicy && <RulePreview policy={reviewPolicy} token={token} />}
       <p className="m2-muted ob-small">You may pause or revoke this permission. The agent cannot increase these limits. Payments in this prototype are simulated; no real funds move.</p>
       <button className="m2-cta" onClick={() => void activate()} disabled={busy === 'activate' || online === false}>{busy === 'activate' ? 'Activating…' : start ? 'Confirm and replace permission' : 'Confirm and activate permission'}<Check size={18} /></button>
       <button className="m2-link" disabled={Boolean(busy)} onClick={() => setStep('stores')}>Edit stores or rules</button>

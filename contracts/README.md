@@ -423,3 +423,7 @@ When there is no ranked route, `recommended_route_id` is null; omitted route sel
 422 `NO_OBSERVED_FEE_ROUTE` and reserves nothing. Guest web checkout needs a card: if none is ranked,
 the owner-approved sandbox uses the first eligible card by route ID, without a cost recommendation.
 No real payment integration or merchant acceptance is established by this behavior.
+
+## Commerce extensions
+
+Owner-only `/commerce` inputs and agent candidate comparisons are included in OpenAPI and generated types. Commerce responses are currently extensible objects with frontend types; see [the feature map and response boundaries](../docs/commerce-improvements.md). Planning proposals are not executable quotes. Durable recovery uses a local sandbox and never moves real funds.

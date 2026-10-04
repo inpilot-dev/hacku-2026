@@ -1,5 +1,6 @@
 # Node frontend build and dependencies
 node_modules/
+node_modules
 dist/
 *.tsbuildinfo
 
@@ -7,6 +8,7 @@ dist/
 __pycache__/
 .pytest_cache/
 .venv/
+.venv
 
 # Local wallet database and signing keys
 services/api/.data/

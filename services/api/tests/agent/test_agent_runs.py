@@ -101,6 +101,9 @@ def test_run_quotes_a_basket_the_user_can_load(env):
     assert res.status_code == 202, res.text
     run = client.get(f"/api/v1/agent-runs/{res.json()['id']}", headers=USER).json()
     assert run["status"] == "quoted" and run["provider"] == "jev" and run["model_id"] == "jev-test"
+    assert run["comparisons"][0]["matched_items"] == 2
+    assert run["comparisons"][0]["missing_items"] == ["eggs"]
+    assert run["comparisons"][0]["quote"]["id"] == run["quote_id"]
     assert "picked 2 of 3 items" in run["message"] and "eggs (no matching product)" in run["message"]
 
 

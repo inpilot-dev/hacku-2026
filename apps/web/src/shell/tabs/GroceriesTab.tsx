@@ -1,3 +1,6 @@
+import StoreComparison from '../components/StoreComparison';
+import { useLocale } from '@/lib/locale';
+import CommerceTools from '../components/CommerceTools';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowUp, Store, Carrot, Cherry, Mic, Minus, Pencil, Plus, Square, Wine, XCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -25,6 +28,7 @@ import { useGroceries, type Preset } from '../data/useGroceries';
 
 export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: () => void; active: boolean }) {
   const account = useAccount();
+  const { t } = useLocale();
   const g = useGroceries();
   const [editing, setEditing] = useState<Preset | null>(null);
   const [shelfOpen, setShelfOpen] = useState(false);
@@ -50,7 +54,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
 
   if (!account.loaded || (account.refreshError && !m)) return <div className="space-y-4"><Skeleton className="h-8 w-40" /><Skeleton className="h-32" /></div>;
   if (!m) return <div>
-    <PageHeader title="Groceries" who="kumi" description="Repeat shopping under an allowance you set." />
+    <PageHeader title={t("Groceries", "日用品")} who="kumi" description="Repeat shopping under an allowance you set." />
     <Card><CardHeader><div className="mb-2"><Sticker who="bean" size={72} /></div><CardTitle>Set up an allowance first</CardTitle>
       <CardDescription>Choose a budget, a per-order limit, the stores and anything never to buy. The agent can only shop within it.</CardDescription></CardHeader>
       <CardContent><Button onClick={() => account.openSetup('new')}>Set up an allowance</Button></CardContent></Card>
@@ -61,12 +65,12 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
   const filtered = g.products.filter((p) => p.title.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 24);
 
   return <div className="flex flex-col">
-    <PageHeader title="Groceries" who="kumi" state={g.verdict?.kind === 'paid' ? 'happy' : g.verdict?.kind === 'refused' ? 'sad' : 'idle'}
+    <PageHeader title={t("Groceries", "日用品")} who="kumi" state={g.verdict?.kind === 'paid' ? 'happy' : g.verdict?.kind === 'refused' ? 'sad' : 'idle'}
       description={<>{account.active ? `${money(account.available)} left this ${per}` : 'Allowance not active'} · {m.policy.allowed_merchant_ids.length} store{m.policy.allowed_merchant_ids.length > 1 ? 's' : ''}</>}
       action={<Button variant="ghost" size="sm" onClick={onOpenWallet}>Allowance</Button>} />
 
     <KumiStage activity={g.phase === 'packing' || g.busy === 'parse' ? 'searching' : g.error || g.verdict?.kind === 'refused' ? 'error' : g.phase === 'paying' || g.verdict?.kind === 'uncertain' || g.verdict?.kind === 'review' ? 'idle' : g.quote ? 'found' : 'idle'}
-      title={g.verdict?.kind === 'refused' ? 'Kip stopped this purchase' : g.verdict?.kind === 'uncertain' ? 'Payment is not confirmed' : g.verdict?.kind === 'review' ? 'Kip needs your approval' : g.verdict?.kind === 'paid' ? 'Sandbox payment confirmed' : g.phase === 'paying' ? 'Over to Kip for the payment' : g.error ? undefined : g.quote ? 'Your basket is ready to review' : undefined}
+      title={g.verdict?.kind === 'refused' ? t('Kip stopped this purchase', 'Kip 已阻止這次購買') : g.verdict?.kind === 'uncertain' ? t('Payment is not confirmed', '付款尚未確認') : g.verdict?.kind === 'review' ? t('Kip needs your approval', 'Kip 需要你的批准') : g.verdict?.kind === 'paid' ? t('Sandbox payment confirmed', '模擬付款已確認') : g.phase === 'paying' ? 'Over to Kip for the payment' : g.error ? undefined : g.quote ? 'Your basket is ready to review' : undefined}
       detail={g.verdict?.kind === 'refused' ? 'Nothing was paid. Check the rules below.' : g.verdict?.kind === 'uncertain' ? 'Check the saved transaction before trying again.' : g.verdict?.kind === 'review' ? 'Nothing is paid while it waits for you.' : g.verdict?.kind === 'paid' ? 'No real retailer order was placed.' : g.phase === 'paying' ? 'Waiting for a confirmed payment result.' : g.error ? undefined : g.quote ? 'This is a priced basket. Store cart confirmation is separate.' : undefined} />
 
     {g.catalogError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{g.catalogError}</span><Button variant="outline" size="sm" onClick={() => void g.loadCatalog()}>Retry</Button></AlertDescription></Alert>}
@@ -92,7 +96,7 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
       {g.messages.length === 0 && g.canSpend && <Bubble from="kumi">{`What’s on your list${account.holder ? ` for ${account.holder}` : ''}?`} Pick a preset or tell me what you need.</Bubble>}
       {g.messages.slice(hidden).map((msg) => <Bubble key={msg.id} from={msg.who} tone={msg.tone}>{msg.who === 'you' ? msg.text : present(msg.text)}</Bubble>)}
       {(g.phase === 'packing' || g.busy === 'parse') && <Working who="kumi">{g.busy === 'parse' ? 'Reading your list…' : `Packing${g.preset ? ` ${g.preset.title.toLowerCase()}` : ''} at your stores…`}</Working>}
-      {g.quote && (g.phase === 'basket' || g.phase === 'paying' || g.phase === 'verdict') && <Basket g={g} />}
+      {g.quote && (g.phase === 'basket' || g.phase === 'paying' || g.phase === 'verdict') && <><Basket g={g} /><StoreComparison comparisons={g.storeComparisons} evidence={g.evidence} /><CommerceTools quote={g.quote} /></>}
       <div ref={end} />
     </div>
 

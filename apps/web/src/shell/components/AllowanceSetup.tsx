@@ -1,3 +1,5 @@
+import { useLocale } from '@/lib/locale';
+import RulePreview from './RulePreview';
 import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Category, PeriodLimit, Policy } from '../../../../../contracts/types';
@@ -36,6 +38,7 @@ type Step = 'rules' | 'stores' | 'review';
 
 export default function AllowanceSetup({ open, onOpenChange, change }: { open: boolean; onOpenChange: (open: boolean) => void; change: boolean }) {
   const account = useAccount();
+  const { t } = useLocale();
   const start = change ? account.mandate?.policy ?? null : null;
   const [step, setStep] = useState<Step>('rules');
   const [holder, setHolder] = useState('');
@@ -148,34 +151,34 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
       {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
       {step === 'rules' && <div className="grid gap-4">
-        <Field label="Who it’s for" htmlFor="holder"><Input id="holder" value={holder} maxLength={40} placeholder="Me" onChange={(e) => setHolder(e.target.value)} /></Field>
-        <Field label="Budget resets">
+        <Field label={t("Who it’s for", "為誰購物")} htmlFor="holder"><Input id="holder" value={holder} maxLength={40} placeholder="Me" onChange={(e) => setHolder(e.target.value)} /></Field>
+        <Field label={t("Budget resets", "預算重設")}>
           <ToggleGroup type="single" variant="outline" value={period} onValueChange={(v) => v && setPeriod(v as PeriodLimit['period'])}>
-            <ToggleGroupItem value="calendar_week" className="px-4">Weekly</ToggleGroupItem>
-            <ToggleGroupItem value="calendar_month" className="px-4">Monthly</ToggleGroupItem>
+            <ToggleGroupItem value="calendar_week" className="px-4">{t('Weekly', '每週')}</ToggleGroupItem>
+            <ToggleGroupItem value="calendar_month" className="px-4">{t('Monthly', '每月')}</ToggleGroupItem>
           </ToggleGroup>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label={`${period === 'calendar_month' ? 'Monthly' : 'Weekly'} budget (HK$)`} htmlFor="budget"><Input id="budget" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value)} /></Field>
-          <Field label="Most per order (HK$)" htmlFor="per-order"><Input id="per-order" inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} /></Field>
+          <Field label={t("Most per order (HK$)", "每單上限（港元）")} htmlFor="per-order"><Input id="per-order" inputMode="numeric" value={perOrder} onChange={(e) => setPerOrder(e.target.value)} /></Field>
         </div>
-        <SwitchRow id="ask" label="Ask me before bigger orders" checked={askOn} onChange={setAskOn} />
-        {askOn && <Field label="Ask above (HK$)" htmlFor="ask-above"><Input id="ask-above" inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} /></Field>}
-        <SwitchRow id="risk" label="Review unusual purchases" hint="Pause first-time or unusually large baskets, new items and sharp price rises." checked={riskReview} onChange={setRiskReview} />
-        <Field label="Never buy">
+        <SwitchRow id="ask" label={t("Ask me before bigger orders", "較大訂單先詢問我")} checked={askOn} onChange={setAskOn} />
+        {askOn && <Field label={t("Ask above (HK$)", "超過此金額先詢問（港元）")} htmlFor="ask-above"><Input id="ask-above" inputMode="numeric" value={askAbove} onChange={(e) => setAskAbove(e.target.value)} /></Field>}
+        <SwitchRow id="risk" label={t("Review unusual purchases", "審核異常購物")} hint="Pause first-time or unusually large baskets, new items and sharp price rises." checked={riskReview} onChange={setRiskReview} />
+        <Field label={t("Never buy", "禁止購買")}>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Categories always refused">
             {BLOCKABLE.map((c) => { const on = blocked.includes(c); return <button key={c} type="button" aria-pressed={on}
               onClick={() => setBlocked((cur) => on ? cur.filter((x) => x !== c) : [...cur, c])}
               className={cn('min-h-9 rounded-full border px-3 text-sm transition-colors', on ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-accent')}>{categoryLabel(c)}</button>; })}
           </div>
         </Field>
-        <p className="text-xs text-muted-foreground">Lasts 4 weeks.</p>
+        <p className="text-xs text-muted-foreground">{t('Lasts 4 weeks.', '有效期四週。')}</p>
       </div>}
 
       {step === 'stores' && <div className="grid gap-3">
         <p className="text-sm text-muted-foreground">Tick the stores the agent may shop at. Connecting an account lets it fill that store’s real cart.</p>
         <StoreAccounts online={account.online} picked={allowed} onPick={(id, on) => setAllowed((a) => ({ ...a, [id]: on }))} />
-        <SwitchRow id="web" label="Allow one-time web purchases" hint="Buy anything from other shops on the web. You approve each exact total; the per-order limit and budget still apply, and each order gets its own single-use card." checked={webPurchases} onChange={setWebPurchases} />
+        <SwitchRow id="web" label={t("Allow one-time web purchases", "允許一次性網上購物")} hint="Buy anything from other shops on the web. You approve each exact total; the per-order limit and budget still apply, and each order gets its own single-use card." checked={webPurchases} onChange={setWebPurchases} />
       </div>}
 
       {step === 'review' && review && <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
@@ -190,12 +193,13 @@ export default function AllowanceSetup({ open, onOpenChange, change }: { open: b
         <Row k="Expires" v={`${new Date(review.expires_at).toLocaleDateString('en-HK', { dateStyle: 'medium', timeZone: 'Asia/Hong_Kong' })}`} />
       </dl>}
 
+      {step === 'review' && review && <RulePreview policy={review} token={TOKEN} />}
       <DialogFooter className="gap-2">
-        {step !== 'rules' && <Button variant="ghost" disabled={busy} onClick={() => setStep(step === 'review' ? 'stores' : 'rules')}>Back</Button>}
-        {step === 'rules' && <Button onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>Next</Button>}
-        {step === 'stores' && <Button onClick={toReview}>Review</Button>}
+        {step !== 'rules' && <Button variant="ghost" disabled={busy} onClick={() => setStep(step === 'review' ? 'stores' : 'rules')}>{t('Back', '返回')}</Button>}
+        {step === 'rules' && <Button onClick={() => { setError(''); if (rulesValid()) setStep('stores'); }}>{t('Next', '下一步')}</Button>}
+        {step === 'stores' && <Button onClick={toReview}>{t('Review', '檢視')}</Button>}
         {step === 'review' && <Button onClick={() => void activate()} disabled={busy || account.online === false}>
-          {busy ? 'Activating…' : change ? 'Confirm and replace' : 'Confirm and activate'}</Button>}
+          {busy ? t('Activating…', '啟用中…') : change ? t('Confirm and replace', '確認及替換') : t('Confirm and activate', '確認及啟用')}</Button>}
       </DialogFooter>
     </DialogContent>
   </Dialog>;
