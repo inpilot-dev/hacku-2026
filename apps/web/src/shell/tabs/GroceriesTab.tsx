@@ -65,9 +65,9 @@ export default function GroceriesTab({ onOpenWallet, active }: { onOpenWallet: (
       description={<>{account.active ? `${money(account.available)} left this ${per}` : 'Allowance not active'} · {m.policy.allowed_merchant_ids.length} store{m.policy.allowed_merchant_ids.length > 1 ? 's' : ''}</>}
       action={<Button variant="ghost" size="sm" onClick={onOpenWallet}>Allowance</Button>} />
 
-    <KumiStage activity={g.phase === 'packing' || g.busy === 'parse' ? 'searching' : g.error ? 'error' : g.quote ? 'found' : 'idle'}
-      title={g.quote ? 'Your basket is ready to review' : undefined}
-      detail={g.quote ? 'This is a priced basket. Store cart confirmation is separate.' : undefined} />
+    <KumiStage activity={g.phase === 'packing' || g.busy === 'parse' ? 'searching' : g.error || g.verdict?.kind === 'refused' ? 'error' : g.phase === 'paying' || g.verdict?.kind === 'uncertain' || g.verdict?.kind === 'review' ? 'idle' : g.quote ? 'found' : 'idle'}
+      title={g.verdict?.kind === 'refused' ? 'Kip stopped this purchase' : g.verdict?.kind === 'uncertain' ? 'Payment is not confirmed' : g.verdict?.kind === 'review' ? 'Kip needs your approval' : g.verdict?.kind === 'paid' ? 'Sandbox payment confirmed' : g.phase === 'paying' ? 'Over to Kip for the payment' : g.error ? undefined : g.quote ? 'Your basket is ready to review' : undefined}
+      detail={g.verdict?.kind === 'refused' ? 'Nothing was paid. Check the rules below.' : g.verdict?.kind === 'uncertain' ? 'Check the saved transaction before trying again.' : g.verdict?.kind === 'review' ? 'Nothing is paid while it waits for you.' : g.verdict?.kind === 'paid' ? 'No real retailer order was placed.' : g.phase === 'paying' ? 'Waiting for a confirmed payment result.' : g.error ? undefined : g.quote ? 'This is a priced basket. Store cart confirmation is separate.' : undefined} />
 
     {g.catalogError && <Alert className="mb-4"><AlertDescription className="flex items-center justify-between gap-3"><span>{g.catalogError}</span><Button variant="outline" size="sm" onClick={() => void g.loadCatalog()}>Retry</Button></AlertDescription></Alert>}
     {g.catalogLoading && <p className="mb-4 text-sm text-muted-foreground" role="status">Loading products…</p>}

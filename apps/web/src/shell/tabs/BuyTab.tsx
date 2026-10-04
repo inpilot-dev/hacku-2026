@@ -56,7 +56,7 @@ export default function BuyTab({ onOpenProfile, active, profileRevision }: { onO
   }
 
   return <div className="flex flex-col">
-    <PageHeader title="Buy anything" who="kumi" state={p.purchases.some((x) => x.status === 'ordered' || x.status === 'stopped_before_payment' || (!isWorking(x) && x.candidates.some((c) => c.matches))) ? 'happy' : 'idle'}
+    <PageHeader title="Buy anything" who="kumi" state={latest?.status === 'failed' ? 'sad' : latest && !isWorking(latest) && latest.status !== 'cancelled' && latest.candidates.some((c) => c.matches) ? 'happy' : 'idle'}
       description="Find a match. Review the total before paying."
       action={p.purchases.length > 0 && !p.busy ? <Button variant="ghost" size="sm" onClick={() => { p.clear(); setOlder(0); }}>New conversation</Button> : undefined} />
 
