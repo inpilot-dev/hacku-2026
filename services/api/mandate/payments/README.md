@@ -29,6 +29,8 @@ Set `MANDATE_DEMO_TOKENS` for real demo tokens, as described in `auth.py`.
 
 | Guarantee | Mechanism |
 |---|---|
+| Delivery and merchant fees count towards caps | Quote total = item subtotal + every applicable charge; policy and reservations use that total |
+| Checkout remains bound to its approval | Re-price before capture; changed merchant, currency, delivery context, revision, items or charges cancels the reservation, even at the same total |
 | No overspend under concurrency | `BEGIN IMMEDIATE` around check-and-reserve; a guarded `UPDATE`; a table `CHECK (paid + reserved <= limit)` |
 | One payment per transaction | Unique `transaction_id` on reservations, decisions and payments; a replay returns the stored receipt |
 | Idempotency | `(actor, operation, key)` plus a request hash; a changed payload returns 409; refusals replay too |

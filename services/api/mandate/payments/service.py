@@ -906,11 +906,12 @@ class Wallet:
                                                original["delivery_context_id"])
                 except CatalogError as exc:
                     return refuse("QUOTE_CHANGED", "quote", f"The basket can no longer be priced: {exc}", True)
-                fields = ("revision", "items", "charges", "subtotal_minor", "total_minor")
+                fields = ("merchant_id", "currency", "delivery_context_id", "revision",
+                          "items", "charges", "subtotal_minor", "total_minor")
                 if any(fresh[f] != quote[f] for f in fields):
                     return refuse("QUOTE_CHANGED", "quote",
-                                  f"The shop's price changed from {rules.money(quote['total_minor'])} to "
-                                  f"{rules.money(fresh['total_minor'])}; a new quote is needed.", True)
+                                  f"The shop's checkout changed (approved total {rules.money(quote['total_minor'])}, "
+                                  f"current total {rules.money(fresh['total_minor'])}); a new quote is needed.", True)
 
             # Commit: reserved -> paid in every period, exactly once.
             cur = conn.execute("UPDATE reservations SET status = 'paid', closed_at = ? WHERE id = ? AND status = 'reserved'",
