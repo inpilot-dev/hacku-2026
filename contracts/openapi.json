@@ -7129,7 +7129,8 @@
           },
           "fee_minor": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Integer HKD cents. For an eligible route with rank null, this is a sandbox scenario assumption, not an observed charge; clients must display cost as unavailable."
           },
           "reward_minor": {
             "type": "integer",
@@ -7137,7 +7138,8 @@
           },
           "net_minor": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Integer HKD cents. For an eligible route with rank null, this is a sandbox scenario assumption, not an observed charge; clients must display cost as unavailable."
           },
           "reward_counted": {
             "type": "boolean"
@@ -7151,7 +7153,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "description": "Cost rank among eligible routes with observed fees only. Null means unranked; an eligible unranked route remains a manual sandbox choice, not a cost recommendation."
           },
           "evidence_ids": {
             "type": "array",

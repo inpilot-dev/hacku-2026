@@ -499,7 +499,7 @@ export default function SimpleApp() {
       try {
         const options = await api.paymentOptions(TOKEN, result.id);
         setPaymentComparison(options);
-        const chosenRoute = options.options.find((o) => o.eligible && o.route_id === options.recommended_route_id) ?? options.options.find((o) => o.eligible);
+        const chosenRoute = options.options.find((o) => o.eligible && o.route_id === options.recommended_route_id);
         setRouteId(chosenRoute?.route_id ?? null); setRouteLabel(chosenRoute?.label ?? '');
       } catch { setRouteId(null); setRouteLabel(''); }
       setPhase('basket');

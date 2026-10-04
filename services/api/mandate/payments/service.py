@@ -656,9 +656,13 @@ class Wallet:
             if ev.status == "approved":
                 amount = quote["total_minor"]
                 options = self.routes.rank(amount, self._spent_by_route(conn, leaf["owner_id"], now))
-                eligible = [o for o in options if o["eligible"]]
+                eligible = [o for o in options if o["eligible"] and o["rank"] is not None]
                 recommended = eligible[0]["route_id"] if eligible else None
                 wanted = req.get("payment_route_id") or recommended
+                if wanted is None:
+                    raise invalid("No payment route has an observed fee. Select a sandbox route explicitly; "
+                                  "no lowest-cost recommendation is available.",
+                                  reason_code="NO_OBSERVED_FEE_ROUTE")
                 chosen = next((o for o in options if o["route_id"] == wanted), None)
                 if chosen is None:
                     raise invalid(f"Unknown payment route {wanted!r}.")
@@ -1040,9 +1044,13 @@ class Wallet:
         if not eligible:
             reasons = "; ".join(f"{o['label']}: {o['ineligible_reason']}" for o in cards)
             raise conflict(f"No card can pay {rules.money(amount_minor)} ({reasons}).", reason_code="NO_CARD_ROUTE")
+        # Owner-approved sandbox checkout still needs a card. Without observed fees,
+        # choose by stable identity, never by assumed cost or savings.
+        ranked_cards = [o for o in eligible if o["rank"] is not None]
+        chosen_card = ranked_cards[0] if ranked_cards else min(eligible, key=lambda o: o["route_id"])
         _, body = self.authorize(actor, f"web-authorize:{purchase_id}", {
             "transaction_id": f"web_{purchase_id}", "mandate_id": leaf["id"], "quote_id": quote["id"],
-            "payment_route_id": eligible[0]["route_id"],
+            "payment_route_id": chosen_card["route_id"],
         }, owner_present=True)
         return body
 
@@ -1123,7 +1131,7 @@ class Wallet:
             now = self._now()
             options = self.routes.rank(q["total_minor"], self._spent_by_route(conn, actor.family_id, now))
         evidence_ids = list(dict.fromkeys(i for o in options for i in o["evidence_ids"]))
-        eligible = [o for o in options if o["eligible"]]
+        eligible = [o for o in options if o["eligible"] and o["rank"] is not None]
         return {
             "quote_id": quote_id,
             "currency": "HKD",

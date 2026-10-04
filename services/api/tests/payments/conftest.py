@@ -50,10 +50,11 @@ class Harness:
         assert res.status_code == 201, res.text
         return res.json()
 
-    def authorize(self, mandate_id, quote_id, txn=None, headers=None):
+    # Most safety tests exercise card holds explicitly, independent of cost recommendation.
+    def authorize(self, mandate_id, quote_id, txn=None, headers=None, route_id="card_hsbc_red"):
         return self.client.post("/api/v1/authorizations", headers=headers or {**AGENT, **key()},
                                 json={"transaction_id": txn or str(uuid.uuid4()), "mandate_id": mandate_id,
-                                      "quote_id": quote_id})
+                                      "quote_id": quote_id, "payment_route_id": route_id})
 
     def pay(self, approved: dict, headers=None, **override):
         body = {"transaction_id": approved["transaction_id"], "quote_id": approved["claims"]["quote_id"],

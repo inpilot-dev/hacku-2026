@@ -202,7 +202,7 @@ function App() {
     void api.paymentOptions(token, quote.id).then((result) => {
       if (cancelled) return;
       setPaymentOptions(result);
-      setSelectedPaymentRouteId(result.recommended_route_id ?? result.options.find((option) => option.eligible)?.route_id ?? '');
+      setSelectedPaymentRouteId(result.recommended_route_id ?? '');
       setPaymentOptionsState('ready');
     }).catch((error) => {
       if (cancelled) return;
@@ -814,12 +814,12 @@ function PaymentRoutePicker({ options, state, selectedRouteId, onSelect, disable
   return <section className="payment-route-picker" aria-label="Payment route selection">
     <label htmlFor="payment-route">Payment route <small>Wallet-ranked by total cost after eligible, evidenced rewards.</small></label>
     <select id="payment-route" value={selected?.route_id ?? ''} onChange={(event) => onSelect(event.target.value)} disabled={disabled || eligible.length === 0}>
-      {eligible.length === 0 && <option value="">No eligible payment route</option>}
+      <option value="">{eligible.length === 0 ? 'No eligible payment route' : 'Choose a payment route'}</option>
       {options.options.map((option) => <option key={option.route_id} value={option.route_id} disabled={!option.eligible}>
-        {option.label} · net {money(option.net_minor)}{option.route_id === options.recommended_route_id ? ' · recommended' : ''}{!option.eligible ? ' · unavailable' : ''}
+        {option.label}{option.rank === null ? ' · cost not verified' : ` · net ${money(option.net_minor)}`}{option.route_id === options.recommended_route_id ? ' · recommended' : ''}{!option.eligible ? ' · unavailable' : ''}
       </option>)}
     </select>
-    {selected && <div className="payment-route-detail"><span>Fee {money(selected.fee_minor)} · reward {money(selected.reward_minor)}{selected.route_id === options.recommended_route_id ? ' · wallet recommendation' : ''}</span>
+    {selected && <div className="payment-route-detail"><span>{selected.rank === null ? 'Fee not verified · net cost unavailable · manual sandbox choice' : <>Fee {money(selected.fee_minor)} · reward {money(selected.reward_minor)}{selected.route_id === options.recommended_route_id ? ' · wallet recommendation' : ''}</>}</span>
       {selected.caveats.length > 0 && <small>{selected.caveats.join(' ')}</small>}
       <PaymentRouteEvidence ids={selected.evidence_ids} evidence={options.evidence} />
     </div>}

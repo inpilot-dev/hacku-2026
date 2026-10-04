@@ -131,7 +131,7 @@ function PaymentRoutes({ comparison, selected, onSelect }: { comparison: Payment
         <RadioGroupItem id={`route-${o.route_id}`} value={o.route_id} disabled={!o.eligible} className="mt-0.5" />
         <span className="grid gap-0.5 text-sm">
           <span className="font-medium">{o.label.replace(/\s*\([^)]*\)/g, '')}{o.route_id === comparison.recommended_route_id && o.eligible && <Badge variant="secondary" className="ml-2">Recommended</Badge>}</span>
-          {o.eligible ? <span className="text-xs text-muted-foreground">Charge {money(o.gross_minor)} · fee {money(o.fee_minor)} · reward ~{money(o.reward_minor)} · net {money(o.net_minor)}</span>
+          {o.eligible ? o.rank === null ? <span className="text-xs text-muted-foreground">Fee not verified · net cost unavailable · manual sandbox choice</span> : <span className="text-xs text-muted-foreground">Charge {money(o.gross_minor)} · fee {money(o.fee_minor)} · reward ~{money(o.reward_minor)} · net {money(o.net_minor)}</span>
             : <span className="text-xs text-muted-foreground">{o.ineligible_reason || 'Unavailable for this purchase'}</span>}
 
         </span>

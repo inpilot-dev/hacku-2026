@@ -16,7 +16,7 @@ export default function PaymentRouteCard({ comparison, selected, onSelect }: {
     {comparison.options.map((option) => <label key={option.route_id} className={`conversation-route${selected === option.route_id ? ' selected' : ''}`}>
       <input type="radio" name="payment-route" checked={selected === option.route_id} disabled={!option.eligible} onChange={() => onSelect(option.route_id, option.label)} />
       <span><strong>{option.label}</strong>{option.route_id === comparison.recommended_route_id && option.eligible && <small>Recommended by the wallet</small>}
-        {option.eligible ? <><small>Charge {money(option.gross_minor)} · fee {money(option.fee_minor)} · estimated reward {money(option.reward_minor)}</small><b>Estimated net cost {money(option.net_minor)}</b></> : <small>{option.ineligible_reason || 'Unavailable for this purchase'}</small>}
+        {option.eligible ? option.rank === null ? <small>Fee not verified · net cost unavailable · manual sandbox choice</small> : <><small>Charge {money(option.gross_minor)} · fee {money(option.fee_minor)} · estimated reward {money(option.reward_minor)}</small><b>Estimated net cost {money(option.net_minor)}</b></> : <small>{option.ineligible_reason || 'Unavailable for this purchase'}</small>}
         {option.caveats.map((text, i) => <small key={i}>{text}</small>)}
       </span>
     </label>)}

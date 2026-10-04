@@ -3,8 +3,8 @@
 The rule, stated so a user can check any decision against it:
 
     net cost = basket total + route fee - reward value (HKD cents).
-    Rank eligible routes by net cost, lowest first. Ties go to a route that
-    holds funds at the rail, then to the route id. Fees always count. A reward
+    Rank eligible routes with observed fees by net cost, lowest first. Ties go to a route that
+    holds funds at the rail, then to the route id. Unverified fees never establish a cost ranking. A reward
     counts only when its rate and its cash value were both observed; inferred
     or unpublished rewards are shown and counted as zero.
 
@@ -23,7 +23,8 @@ from pathlib import Path
 
 DEFAULT_PATH = Path(__file__).with_name("fixtures") / "payment_routes.json"
 
-RULE = ("Net cost = basket total + route fee - reward value. Lowest net cost wins; ties go to a route that "
+RULE = ("Net cost = basket total + route fee - reward value. Only routes with observed fees are ranked. "
+        "Lowest net cost wins among those routes; ties go to a route that "
         "holds funds at the rail, then route id. Rewards count only when observed with a source.")
 
 
@@ -88,7 +89,8 @@ class RouteBook:
                                 reward.get("value_source")) if s]
         caveats = []
         if fee["status"] != "observed":
-            caveats.append(f"Fee is {fee['status']}: {fee['note']}")
+            caveats.append(f"Fee is {fee['status']}: {fee['note']} Not ranked or recommended by cost; "
+                          "fee and net-cost figures are sandbox assumptions, not verified charges.")
         if reward["status"] != "observed":
             caveats.append(f"Reward not counted: {reward['note']}")
         if route.get("network_note"):
@@ -115,13 +117,14 @@ class RouteBook:
         }
 
     def rank(self, amount_minor: int, spent_by_route: dict[str, int]) -> list[dict]:
-        """Every route with its economics; eligible ones carry rank 1..n by the stated rule."""
+        """Only eligible routes with observed fees carry a cost rank; others remain manual choices."""
         options = [self.option(r, amount_minor, spent_by_route.get(r["id"], 0)) for r in self.routes]
-        eligible = sorted((o for o in options if o["eligible"]),
-                          key=lambda o: (o["net_minor"], not o["holds_funds_at_rail"], o["route_id"]))
-        for i, o in enumerate(eligible, start=1):
+        observed_fees = {r["id"] for r in self.routes if r["fee"]["status"] == "observed"}
+        ranked = sorted((o for o in options if o["eligible"] and o["route_id"] in observed_fees),
+                        key=lambda o: (o["net_minor"], not o["holds_funds_at_rail"], o["route_id"]))
+        for i, o in enumerate(ranked, start=1):
             o["rank"] = i
-        return eligible + [o for o in options if not o["eligible"]]
+        return ranked + [o for o in options if o["rank"] is None]
 
     def evidence(self, ids: list[str]) -> list[dict]:
         return [{"id": i, **self.sources[i]} for i in ids]

@@ -32,7 +32,7 @@ export type TabId = (typeof TABS)[number]['id'];
 
 function tabFromHash(): TabId {
   const hash = window.location.hash.replace('#', '');
-  return TABS.some((t) => t.id === hash) ? (hash as TabId) : 'buy';
+  return TABS.some((t) => t.id === hash) ? (hash as TabId) : 'groceries';
 }
 
 export default function AppShell() {

@@ -37,21 +37,20 @@ def test_options_rank_by_net_cost_and_show_the_spread(h):
     out = options(h, q["id"])
     assert out["rule"].startswith("Net cost = basket total + route fee - reward value")
     ranked = [(o["route_id"], o["net_minor"], o["reward_minor"], o["rank"]) for o in out["options"]]
-    # HSBC Red: 4% RewardCash on HK$297 = HK$11.88, RC1 = HK$1 (both observed). The others publish no reward;
-    # Tap & Go wins the tie with FPS because it holds funds at the rail.
-    assert ranked == [("card_hsbc_red", 28512, 1188, 1), ("tng_single_use_card", 29700, 0, 2),
-                      ("fps_edda", 29700, 0, 3)]
-    assert out["recommended_route_id"] == "card_hsbc_red"
+    # HSBC Red has an observed reward, but its fee is inferred; only FPS has a ranked observed fee.
+    assert ranked == [("fps_edda", 29700, 0, 1), ("tng_single_use_card", 29700, 0, None),
+                      ("card_hsbc_red", 28512, 1188, None)]
+    assert out["recommended_route_id"] == "fps_edda"
     assert {e["id"] for e in out["evidence"]} >= {"src_hsbc_red_rebate", "src_hsbc_rewardcash_value"}
     tng = next(o for o in out["options"] if o["route_id"] == "tng_single_use_card")
     assert any("Reward not counted" in c for c in tng["caveats"])
 
 
-def test_authorization_uses_the_recommended_route_and_logs_the_ranking(h):
+def test_explicit_card_choice_is_not_presented_as_a_cost_recommendation(h):
     m = h.confirm()
     auth = h.authorize(m["id"], h.quote()["id"]).json()
     route = auth["payment_route"]
-    assert (route["route_id"], route["rank"], route["recommended_route_id"]) == ("card_hsbc_red", 1, "card_hsbc_red")
+    assert (route["route_id"], route["rank"], route["recommended_route_id"]) == ("card_hsbc_red", None, "fps_edda")
     assert auth["payment_credential"]["rail"] == "card_network_token"
 
     paid = h.pay(auth).json()
@@ -62,7 +61,7 @@ def test_authorization_uses_the_recommended_route_and_logs_the_ranking(h):
     with h.wallet.db.read() as conn:
         logged = json.loads(conn.execute("SELECT payload_json FROM audit_events "
                                          "WHERE type = 'authorization_approved'").fetchone()[0])
-    assert [o["route_id"] for o in logged["payment_options"]] == ["card_hsbc_red", "tng_single_use_card", "fps_edda"]
+    assert [o["route_id"] for o in logged["payment_options"]] == ["fps_edda", "tng_single_use_card", "card_hsbc_red"]
 
 
 def test_agent_can_pick_another_eligible_route(h):
@@ -73,7 +72,7 @@ def test_agent_can_pick_another_eligible_route(h):
                               "payment_route_id": "tng_single_use_card"})
     auth = res.json()
     assert auth["payment_route"]["route_id"] == "tng_single_use_card"
-    assert auth["payment_route"]["recommended_route_id"] == "card_hsbc_red"
+    assert auth["payment_route"]["recommended_route_id"] == "fps_edda"
     assert auth["payment_credential"]["network"] == "mastercard" and len(auth["payment_credential"]["last4"]) == 4
     assert h.pay(auth).json()["receipt"]["payment_route"]["reward_minor"] == 0
 
@@ -108,3 +107,46 @@ def test_spend_this_month_moves_the_reward_tier(h):
                      "990000,39600,'2026-10-01T00:00:00+08:00','2026-10-02T10:00:00+08:00')")
     red = next(o for o in options(h, q["id"], USER)["options"] if o["route_id"] == "card_hsbc_red")
     assert red["reward_minor"] == 479
+
+
+def test_default_authorization_uses_only_an_observed_fee_route(h):
+    m = h.confirm()
+    auth = h.authorize(m["id"], h.quote()["id"], route_id=None).json()
+    assert auth["status"] == "approved"
+    assert auth["payment_route"]["route_id"] == "fps_edda"
+    assert auth["payment_route"]["rank"] == 1
+
+
+def test_no_observed_fee_means_no_automatic_choice_or_reservation(h):
+    from copy import deepcopy
+    book = deepcopy(h.wallet.routes)
+    for route in book.routes:
+        route["fee"]["status"] = "unverified"
+    h.wallet.routes = book
+    m = h.confirm()
+    q = h.quote()
+    out = options(h, q["id"])
+    assert out["recommended_route_id"] is None
+    assert all(o["rank"] is None for o in out["options"])
+    refused = h.authorize(m["id"], q["id"], route_id=None)
+    assert refused.status_code == 422
+    assert refused.json()["error"]["details"]["reason_code"] == "NO_OBSERVED_FEE_ROUTE"
+    assert h.budget(m["id"])[0]["reserved_minor"] == 0
+    explicit = h.authorize(m["id"], q["id"]).json()
+    assert explicit["status"] == "approved"
+    assert explicit["payment_route"]["rank"] is None
+    assert explicit["payment_route"]["recommended_route_id"] is None
+
+
+def test_observed_fee_restores_cost_ranking_without_counting_unverified_rewards():
+    from copy import deepcopy
+    book = deepcopy(RouteBook.load())
+    red = book.get("card_hsbc_red")
+    red["fee"]["status"] = "observed"  # synthetic test condition, not a merchant claim
+    assert book.rank(29700, {})[0]["route_id"] == "card_hsbc_red"
+    red["reward"]["status"] = "unverified"
+    red["reward"]["note"] = "Synthetic unverified reward for this test."
+    ranked = book.rank(29700, {})
+    option = next(o for o in ranked if o["route_id"] == red["id"])
+    assert option["reward_minor"] == 0 and option["reward_counted"] is False
+    assert option["net_minor"] == 29700

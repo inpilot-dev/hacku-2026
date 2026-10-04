@@ -410,3 +410,16 @@ The app uses the wallet's source (`services/api/mandate/payments/web_cards.py`).
 
 Still open: the authorization TTL is the wallet's 120 s. A run that ends in `needs_user` (3-D Secure, unclear
 result) is not settled, so its reservation expires and releases the amount.
+
+
+## Payment cost evidence and ranking
+
+`eligible` means the sandbox rail can take the amount; it does not establish real merchant acceptance.
+Only eligible routes whose fee is observed receive a `rank` and can be recommended by cost.
+An eligible route with `rank: null` remains an explicit manual sandbox choice, but its fee/net numeric
+fields are compatibility-only scenario assumptions, not verified charges; clients must show cost as
+unavailable instead of displaying those figures. Observed rewards can still be evaluated separately.
+When there is no ranked route, `recommended_route_id` is null; omitted route selection fails with
+422 `NO_OBSERVED_FEE_ROUTE` and reserves nothing. Guest web checkout needs a card: if none is ranked,
+the owner-approved sandbox uses the first eligible card by route ID, without a cost recommendation.
+No real payment integration or merchant acceptance is established by this behavior.
