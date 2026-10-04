@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   server: {
+    // Cloudflare quick tunnels get a random subdomain per run.
+    allowedHosts: ['.trycloudflare.com'],
     proxy: { '/api': { target: process.env.MANDATE_API_ORIGIN ?? 'http://127.0.0.1:8000', changeOrigin: true, ws: true } },
   },
 });
