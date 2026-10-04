@@ -11,7 +11,7 @@ from ..config import env_value
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Mercury answered page questions like DeepSeek V4 Flash, about 4x faster (6 s vs 27 s on a product page).
-MODEL = os.environ.get("MANDATE_PURCHASE_MODEL", "inception/mercury-2.5")
+MODEL = os.environ.get("MANDATE_PURCHASE_MODEL", "deepseek/deepseek-v4-flash")
 SPEC_MODEL = os.environ.get("MANDATE_PURCHASE_SPEC_MODEL", "deepseek/deepseek-v4-flash")
 
 
