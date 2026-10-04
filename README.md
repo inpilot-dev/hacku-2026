@@ -11,9 +11,21 @@
 </p>
 
 <p align="center">
-  <a href="docs/media/mandate-reel.mp4"><img src="docs/media/reel-poster.jpg" width="720" alt="Watch the 52-second Mandate reel"></a><br>
-  <sub>▶ <a href="docs/media/mandate-reel.mp4">Watch the 52-second reel</a> · all payments run in a local sandbox. <b>No real funds move.</b></sub>
+  <a href="docs/media/mandate-demo.mp4"><img src="docs/media/demo-poster.jpg" width="720" alt="Watch the 2-minute Mandate demo"></a><br>
+  <sub>▶ <a href="docs/media/mandate-demo.mp4"><b>Watch the 2-minute demo</b></a> · <a href="docs/media/mandate-reel.mp4">52-second reel</a> · all payments run in a local sandbox. <b>No real funds move.</b></sub>
 </p>
+
+### In the demo
+
+| | Scene | What it shows |
+|:-:|---|---|
+| 1 | **Ask once. See the options.** | Kumi searches shops for a 65W charger under HK$400 and lays out each match with photo, price and why it qualifies (recorded search sample, not live) |
+| 2 | **Kumi packs the basket** | Picks from a preset list using timestamped Wellcome prices. It never sets a price |
+| 3 | **Sneak in champagne? Refused.** | Kip, the wallet, refuses the HK$1,406 basket: blocked category, over the order cap and the weekly budget. Nothing is paid |
+| 4 | **Two orders race. One wins.** | Two HK$300 orders hit HK$400 left at once. The naive wallet pays both; Mandate approves one, measured over real HTTP, and a Z3 model checks the design |
+| 5 | **A log you can check** | One old amount is edited; the independent verifier reports `HASH_MISMATCH` |
+| 6 | **Attack lab** | Attacks run one by one against a throwaway wallet; money moved stays HK$0.00 |
+| 7 | **Checked, not just claimed** | 20/20 safety scenarios, HK$0 overspend in the race, 5/5 tampered logs detected |
 
 ## The idea
 
