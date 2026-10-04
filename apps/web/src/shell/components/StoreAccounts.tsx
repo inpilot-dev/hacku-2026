@@ -96,7 +96,7 @@ export default function StoreAccounts({ online, picked, onPick, allowedIds, onSt
         {onPick && <Checkbox id={`pick-${store.store_id}`} checked={Boolean(picked?.[store.store_id])}
           onCheckedChange={(on) => onPick(store.store_id, on === true)} aria-label={`The agent may shop at ${store.name}`} />}
         <label htmlFor={onPick ? `pick-${store.store_id}` : undefined} className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm font-medium">{store.name}
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium">{store.name}
             {allowedIds?.includes(store.store_id) && <Badge variant="secondary" className="font-normal">In allowance</Badge>}</span>
           <span className={store.status === 'connected' ? 'text-xs text-success' : 'text-xs text-muted-foreground'}>{STATUS_TEXT[store.status]}</span>
         </label>

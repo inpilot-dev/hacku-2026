@@ -51,7 +51,7 @@ export function Bubble({ from, children, tone = 'info', state }: { from: 'you' |
   return <div className="chat-arrive flex items-start gap-2.5 pr-6">
     <Sticker who={from} state={state ?? (tone === 'bad' ? badPose(from) : tone === 'good' ? goodPose(from) : 'idle')} size={36} className="mt-0.5 shrink-0" />
     <div className={cn('min-w-0 max-w-[85%] rounded-3xl rounded-tl-md border px-4 py-2.5', tone === 'bad' && 'border-destructive/30')} style={tint(from)}>
-      <p className="mb-0.5 text-xs font-semibold" style={{ color: `var(--${from})` }}>{who.name}<span className="ml-1.5 font-normal opacity-70">{who.role}</span></p>
+      <p className="mb-0.5 text-xs font-semibold" style={{ color: `var(--${from})` }}>{who.name}<span className="ml-1.5 font-normal">{who.role}</span></p>
       <div className="text-sm leading-relaxed whitespace-pre-line break-words">{children}</div>
     </div>
   </div>;
