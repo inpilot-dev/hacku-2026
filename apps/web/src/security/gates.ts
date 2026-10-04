@@ -9,7 +9,7 @@ import { money } from '../lib/format';
 export const GATES = [
   { id: 'identity', name: 'Identity', detail: 'role + household scope' },
   { id: 'price', name: 'Trusted price', detail: 'catalog, not the agent' },
-  { id: 'rules', name: 'Owner’s rules', detail: 'shops, categories, expiry' },
+  { id: 'rules', name: 'Owner’s rules', detail: 'shops, categories, risk' },
   { id: 'budget', name: 'Budget lock', detail: 'atomic, every parent' },
   { id: 'capability', name: 'Signed capability', detail: 'single use, 120 s' },
 ] as const;
@@ -36,6 +36,9 @@ const REASON: Record<string, string> = {
   RESERVATION_EXPIRED: 'Reservation expired', MANDATE_VERSION_CHANGED: 'Rules changed', QUOTE_EXPIRED: 'Price expired',
 };
 const HTTP_REASON: Record<number, string> = { 401: 'No valid token', 403: 'Agents can’t do that', 404: 'Not their allowance', 422: 'Agents can’t set prices' };
+/** Web purchases have no wallet HTTP route; the lab records those wallet calls as `CALL wallet.<method>`. */
+const WEB_CARD_ISSUE = 'wallet.authorize_web_purchase';
+const WEB_CARD_SETTLE = 'wallet.settle_web_purchase';
 export const reason = (code: string | undefined) => (code && REASON[code]) || code || 'Refused';
 
 export type PacketKind = 'agent' | 'swarm' | 'owner' | 'stranger';
@@ -75,26 +78,30 @@ function whoForActor(actor: string) {
 /** One recorded lab request → one packet. */
 export function packetForStep(step: AttackStep, id: string, burst: boolean): Packet {
   const base = { id, who: whoForActor(step.actor), kind: kindForActor(step.actor), burst, note: step.title };
-  const response = step.response as { violations?: { code: string }[]; receipt?: { amount_minor?: number }; total_minor?: number; error?: { code?: string } };
+  const response = step.response as { violations?: { code: string }[]; receipt?: { amount_minor?: number }; total_minor?: number; error?: { code?: string; reason_code?: string } };
   if (step.http_status === 401 || step.http_status === 403 || step.http_status === 404) {
     return { ...base, stopAt: 0, result: 'block', tag: HTTP_REASON[step.http_status] };
   }
   if (step.http_status === 422) return { ...base, stopAt: 1, result: 'block', tag: HTTP_REASON[422] };
+  if (response.error?.reason_code === 'WEB_PURCHASES_OFF') return { ...base, stopAt: 2, result: 'block', tag: 'Web purchases off' };
+  if (step.http_status === 409 && step.path === 'wallet.web_card_details') return { ...base, stopAt: 4, result: 'block', tag: 'Card already used' };
   if (step.http_status >= 400) return { ...base, stopAt: 0, result: 'block', tag: `HTTP ${step.http_status}` };
   if (step.outcome.startsWith('refused') || step.outcome.startsWith('requires_review')) {
     const code = response.violations?.[0]?.code;
     return { ...base, stopAt: gateForCode(code), result: step.outcome.startsWith('refused') ? 'block' : 'review', tag: reason(code) };
   }
-  if (step.path === '/payments' && step.outcome.startsWith('completed')) {
+  if ((step.path === '/payments' || step.path === WEB_CARD_SETTLE) && step.outcome.startsWith('completed')) {
     const amount = response.receipt?.amount_minor;
     const replay = step.outcome.includes('replayed');
     return { ...base, stopAt: RAIL, result: replay ? 'info' : 'pass', tag: replay ? 'Replay: same receipt, no charge' : amount !== undefined ? `Paid ${money(amount)}` : 'Paid' };
   }
+  if (step.path === WEB_CARD_ISSUE) return { ...base, stopAt: 4, result: 'pass', tag: 'Single-use card held' };
   if (step.path === '/authorizations') return { ...base, stopAt: 4, result: 'pass', tag: 'Approved + reserved' };
   if (step.path === '/quotes') {
     return { ...base, stopAt: 1, result: 'pass', tag: response.total_minor !== undefined ? `Priced ${money(response.total_minor)}` : 'Priced' };
   }
   if (step.path.endsWith('/revoke')) return { ...base, stopAt: 2, result: 'info', tag: 'Owner revoked access' };
+  if (step.path.endsWith('/card/freeze')) return { ...base, stopAt: 2, result: 'info', tag: 'Owner froze the card' };
   return { ...base, stopAt: 0, result: 'info', tag: step.outcome };
 }
 

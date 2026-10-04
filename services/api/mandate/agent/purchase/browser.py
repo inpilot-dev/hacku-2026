@@ -36,6 +36,8 @@ CARD_FIELD = re.compile(r"card\s*number|card\s*no|cc-?number|cvc|cvv|security\s*
 PAGE_JS = """JSON.stringify({url: location.href, title: document.title,
   text: document.body ? document.body.innerText : '',
   ld: [...document.querySelectorAll('script[type="application/ld+json"]')].map(s => s.textContent),
+  image: (() => { const m = document.querySelector('meta[property="og:image"], meta[name="og:image"], meta[name="twitter:image"]');
+    try { return m && m.content ? new URL(m.content, location.href).href : null; } catch (e) { return null; } })(),
   links: [...document.querySelectorAll('a[href]')].map(a => ({href: a.href,
     text: (a.innerText || a.title || a.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim()}))
     .filter(l => l.href.startsWith('http') && l.text)})"""
@@ -207,7 +209,7 @@ def load_env() -> None:
     if os.environ.get("OPENROUTER_KEY"):
         os.environ.setdefault("TEXT_MODEL_API_KEY", os.environ["OPENROUTER_KEY"])
     os.environ.setdefault("TEXT_MODEL_BASE_URL", "https://openrouter.ai/api/v1")
-    os.environ.setdefault("TEXT_MODEL", "inception/mercury-2.5")
+    os.environ.setdefault("TEXT_MODEL", "deepseek/deepseek-v4-flash")
     os.environ.setdefault("TEXT_MODEL_REASONING", "none")
     os.environ.setdefault("BU_CDP_WS", os.environ.get("MANDATE_STEEL_CDP_URL", "ws://127.0.0.1:3000/"))
     os.environ.setdefault("BH_TELEMETRY", "0")

@@ -782,7 +782,7 @@ export type CartSyncResult = {
 export type AttackSummary = {
   "id": string;
   "title": string;
-  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "web_checkout" | "scale";
   "threat": string;
   "defence": string;
 };
@@ -820,7 +820,7 @@ export type AttackSandbox = {
 export type AttackResult = {
   "id": string;
   "title": string;
-  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "scale";
+  "category": "control" | "spending_limits" | "policy" | "integrity" | "concurrency" | "revocation" | "access_control" | "web_checkout" | "scale";
   "threat": string;
   "defence": string;
   "expected": string;
@@ -891,6 +891,7 @@ export type PurchaseCandidate = {
   "title": string;
   "price_minor": number | null;
   "price_text": string | null;
+  "image_url": string | null;
   "currency": string | null;
   "in_stock": boolean | null;
   "matches": boolean;
