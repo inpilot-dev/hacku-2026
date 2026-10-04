@@ -26,8 +26,8 @@ from .auth import Actor
 from .catalog import Catalog, CatalogError
 from .clock import SystemClock, iso, parse, period_bounds
 from .drafts import DraftLookup, InMemoryDrafts
-from .errors import ApiError, conflict, invalid, not_found
-from .issuing import CardIssuer, SandboxCardIssuer
+from .errors import ApiError, conflict, forbidden, invalid, not_found
+from .issuing import CardIssuanceError, CardIssuer, SandboxCardIssuer
 from .rails import PaymentRail, RailDeclined, default_rails, rail_info
 from .routing import RULE as ROUTE_RULE, RouteBook
 from .signing import AUDIENCE, Signer, TokenExpired, TokenInvalid
@@ -573,7 +573,9 @@ class Wallet:
 
     # ----------------------------------------------------------- authorization
 
-    def authorize(self, actor: Actor, key: str, req: dict) -> tuple[int, dict]:
+    def authorize(self, actor: Actor, key: str, req: dict, *, owner_present: bool = False) -> tuple[int, dict]:
+        """``owner_present``: the mandate's owner is approving this exact purchase themselves right now (web
+        purchases), so review reasons are answered by them; hard rules still refuse."""
         def op(conn, now):
             prior = conn.execute("SELECT * FROM auth_decisions WHERE transaction_id = ?",
                                  (req["transaction_id"],)).fetchone()
@@ -612,6 +614,8 @@ class Wallet:
             ev = rules.evaluate(chain, quote, budgets, now,
                                 recent_purchases=self._recent_purchases(conn, chain, now),
                                 risk=assessment.reasons, waived=waived)
+            if owner_present and actor.role == "user" and leaf["owner_id"] == actor.actor_id:
+                ev.review = []
             self._ensure_cards(conn, chain, now)
             frozen = self._frozen_card_violation(conn, chain)
             if frozen:
@@ -889,16 +893,20 @@ class Wallet:
             if quote["basket_hash"] != r["basket_hash"] or quote["total_minor"] != r["amount_minor"]:
                 return refuse("QUOTE_CHANGED", "quote", "The stored quote no longer matches the reservation.", True)
             # The trusted adapter re-prices the basket: a changed fee or catalog revision needs a new quote.
-            original = json.loads(qrow["request_json"])
-            try:
-                fresh = self.catalog.price(quote["merchant_id"], original["items"], original["delivery_context_id"])
-            except CatalogError as exc:
-                return refuse("QUOTE_CHANGED", "quote", f"The basket can no longer be priced: {exc}", True)
-            fields = ("revision", "items", "charges", "subtotal_minor", "total_minor")
-            if any(fresh[f] != quote[f] for f in fields):
-                return refuse("QUOTE_CHANGED", "quote",
-                              f"The shop's price changed from {rules.money(quote['total_minor'])} to "
-                              f"{rules.money(fresh['total_minor'])}; a new quote is needed.", True)
+            # A web checkout has no catalog entry; its total was re-read from the page before the card was issued,
+            # and the single-use card cannot be charged more than it.
+            if quote.get("source") != rules.WEB_CHECKOUT:
+                original = json.loads(qrow["request_json"])
+                try:
+                    fresh = self.catalog.price(quote["merchant_id"], original["items"],
+                                               original["delivery_context_id"])
+                except CatalogError as exc:
+                    return refuse("QUOTE_CHANGED", "quote", f"The basket can no longer be priced: {exc}", True)
+                fields = ("revision", "items", "charges", "subtotal_minor", "total_minor")
+                if any(fresh[f] != quote[f] for f in fields):
+                    return refuse("QUOTE_CHANGED", "quote",
+                                  f"The shop's price changed from {rules.money(quote['total_minor'])} to "
+                                  f"{rules.money(fresh['total_minor'])}; a new quote is needed.", True)
 
             # Commit: reserved -> paid in every period, exactly once.
             cur = conn.execute("UPDATE reservations SET status = 'paid', closed_at = ? WHERE id = ? AND status = 'reserved'",
@@ -967,6 +975,105 @@ class Wallet:
         if row is None or not self._can_see_mandate(actor, {"owner_id": row["owner_id"], "delegatee_id": row["delegatee_id"]}):
             raise not_found("Payment")
         return json.loads(row["receipt_json"])
+
+    # ----------------------------------------------------------- web purchases
+    #
+    # A one-time web purchase (agent/purchase) pays with a single-use card from the wallet. The owner approves the
+    # exact total read from the shop's checkout page; the wallet turns that total into a quote, authorizes it
+    # against the owner's allowance (every hard rule applies) and holds a card locked to the shop and the total.
+
+    def _web_mandate(self, conn, actor: Actor, now: datetime) -> dict | None:
+        """The owner's newest active allowance that opted in to web purchases, with every ancestor opted in too."""
+        for row in conn.execute("SELECT * FROM mandates WHERE owner_id = ? AND status = 'active' "
+                                "ORDER BY created_at DESC", (actor.actor_id,)).fetchall():
+            m = self._mandate_row(row)
+            if parse(m["expires_at"]) > now and all(c["policy"].get("web_purchases") for c in self._chain(conn, m)):
+                return m
+        return None
+
+    def _web_reservation(self, conn, actor: Actor, transaction_id: str) -> dict:
+        row = conn.execute("SELECT r.*, m.owner_id, m.delegatee_id FROM reservations r "
+                           "JOIN mandates m ON m.id = r.mandate_id WHERE r.transaction_id = ?",
+                           (transaction_id,)).fetchone()
+        if row is None or not self._can_see_mandate(actor, dict(row)):
+            raise not_found("Web purchase")
+        return dict(row)
+
+    def authorize_web_purchase(self, actor: Actor, *, purchase_id: str, merchant_id: str, amount_minor: int,
+                               title: str, url: str) -> dict:
+        """Authorize a web purchase its owner is approving now; on approval a single-use card is held for it.
+
+        Returns the authorization body: ``approved`` carries ``payment_credential`` (the card's id and last4) and
+        ``authorization_token``; ``refused`` carries ``violations``.
+        """
+        if actor.role != "user":
+            raise forbidden("Only the allowance's owner can approve a web purchase.")
+        with self.db.write_tx() as conn:
+            now = self._now()
+            leaf = self._web_mandate(conn, actor, now)
+            if leaf is None:
+                raise conflict("No allowance allows web purchases. Turn them on for an allowance in the wallet.",
+                               reason_code="WEB_PURCHASES_OFF")
+            line = {"product_id": f"web:{url}", "title": title, "quantity": 1, "unit_price_minor": amount_minor,
+                    "line_total_minor": amount_minor, "category": "unknown", "category_status": "unknown",
+                    "evidence_ids": []}
+            quote = {"id": _id("q"), "merchant_id": merchant_id, "revision": rules.WEB_CHECKOUT, "currency": "HKD",
+                     "items": [line], "subtotal_minor": amount_minor, "charges": [], "total_minor": amount_minor,
+                     "delivery_context_id": None, "data_mode": "observed_checkout", "evidence_ids": [],
+                     "source": rules.WEB_CHECKOUT, "checkout_url": url,
+                     "created_at": iso(now), "expires_at": iso(now + self.quote_ttl)}
+            quote["basket_hash"] = sha256_hex(quote)
+            conn.execute(
+                "INSERT INTO quotes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (quote["id"], actor.family_id, actor.actor_id, merchant_id, quote["revision"], amount_minor,
+                 quote["basket_hash"], json.dumps({"source": rules.WEB_CHECKOUT, "checkout_url": url}),
+                 json.dumps(quote), quote["expires_at"], quote["created_at"]),
+            )
+            self._event(conn, actor.family_id, "quote_created", {
+                "quote_id": quote["id"], "merchant_id": merchant_id, "revision": quote["revision"],
+                "total_minor": amount_minor, "basket_hash": quote["basket_hash"], "data_mode": quote["data_mode"],
+            }, actor=actor, now=now)
+            options = self.routes.rank(amount_minor, self._spent_by_route(conn, leaf["owner_id"], now))
+        # A shop's payment form takes a card number, so only routes that issue a card can pay.
+        cards = [o for o in options if getattr(self.rails[o["rail"]], "issuer", None) is not None]
+        eligible = [o for o in cards if o["eligible"]]
+        if not eligible:
+            reasons = "; ".join(f"{o['label']}: {o['ineligible_reason']}" for o in cards)
+            raise conflict(f"No card can pay {rules.money(amount_minor)} ({reasons}).", reason_code="NO_CARD_ROUTE")
+        _, body = self.authorize(actor, f"web-authorize:{purchase_id}", {
+            "transaction_id": f"web_{purchase_id}", "mandate_id": leaf["id"], "quote_id": quote["id"],
+            "payment_route_id": eligible[0]["route_id"],
+        }, owner_present=True)
+        return body
+
+    def web_card_details(self, actor: Actor, transaction_id: str) -> dict:
+        """The held card's number, expiry and CVV, only while its reservation is open. Never returned by the API."""
+        with self.db.read() as conn:
+            r = self._web_reservation(conn, actor, transaction_id)
+            if r["status"] != "reserved" or iso(self._now()) >= r["expires_at"]:
+                raise conflict(f"The card's authorization is {r['status']}.", reservation_status=r["status"])
+            held = conn.execute("SELECT credential_id FROM rail_payments WHERE reservation_id = ?",
+                                (r["id"],)).fetchone()
+            try:
+                return self.issuer.checkout_details(conn, held["credential_id"])
+            except CardIssuanceError as exc:
+                raise conflict(str(exc)) from None
+
+    def settle_web_purchase(self, actor: Actor, transaction_id: str, authorization_token: str) -> dict:
+        """The shop confirmed the order: capture the single-use card and record the payment and receipt."""
+        with self.db.read() as conn:
+            r = self._web_reservation(conn, actor, transaction_id)
+        _, body = self.pay(actor, f"web-pay:{transaction_id}", {
+            "transaction_id": transaction_id, "quote_id": r["quote_id"], "authorization_token": authorization_token,
+        })
+        return body
+
+    def release_web_purchase(self, actor: Actor, transaction_id: str, reason: str) -> None:
+        """Nothing was ordered: cancel the card and release the reserved amount. A closed reservation is left as is."""
+        with self.db.read() as conn:
+            r = self._web_reservation(conn, actor, transaction_id)
+        if r["status"] == "reserved":
+            self.cancel_reservation(actor, f"web-release:{transaction_id}", r["id"], {"reason": reason})
 
     # ------------------------------------------------------------ cancellation
 

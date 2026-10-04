@@ -51,6 +51,7 @@ export type Policy = {
   "approval_above_minor": number | null;
   "velocity_limit"?: VelocityLimit | null;
   "risk_review"?: boolean;
+  "web_purchases"?: boolean;
 };
 
 export type DraftRequest = {
