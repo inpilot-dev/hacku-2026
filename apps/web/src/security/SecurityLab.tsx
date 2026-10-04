@@ -1,7 +1,7 @@
 import BrandLogo from '../components/BrandLogo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Ban, Bot, CircleAlert, Crown, FlaskConical, KeyRound, Loader2, Network, Play, Radio, Receipt, Repeat, RotateCcw, ShieldCheck, ShieldX, ShoppingBasket, Shuffle, Store, Tag, Timer, Users, Volume2, VolumeX, Wine, Zap } from 'lucide-react';
+import { Ban, Bot, CircleAlert, CopyX, CreditCard, Crown, FlaskConical, Gauge, Globe, KeyRound, Loader2, MessageSquareWarning, Network, Play, Radio, Receipt, ReceiptText, Repeat, RotateCcw, ShieldCheck, ShieldX, ShoppingBasket, Shuffle, Snowflake, Split, Store, Tag, Timer, UserX, Users, Volume2, VolumeX, Wine, X, Zap } from 'lucide-react';
 import type { AttackResult, AttackSummary, AttackStep } from '../../../../contracts/types';
 import { ApiError, api } from '../lib/api';
 import { money } from '../lib/format';
@@ -24,8 +24,19 @@ const ATTACK_ICONS: Record<string, LucideIcon> = {
   control: ShoppingBasket, 'over-order-cap': Receipt, 'blocked-category': Wine, 'blocked-merchant': Store,
   'price-injection': Tag, 'forged-token': KeyRound, 'quote-swap': Shuffle, 'double-spend': Zap, replay: Repeat,
   'revoked-mid-flight': Ban, 'expired-capability': Timer, 'privilege-escalation': Crown, 'cross-family': Users,
-  'sibling-agent': Bot, 'agent-swarm': Network,
+  'sibling-agent': Bot, 'agent-swarm': Network, 'checkout-swap': ReceiptText, 'listing-injection': MessageSquareWarning,
+  'split-orders': Split, velocity: Gauge, 'frozen-card': Snowflake, 'web-off': Globe, 'web-agent-approves': UserX,
+  'web-over-cap': CreditCard, 'web-card-reuse': CopyX,
 };
+
+/** Display grouping only: the wallet's own attack categories, folded into a few plain-English sections. */
+const GROUPS: { id: string; title: string; blurb: string; categories: AttackSummary['category'][] }[] = [
+  { id: 'money', title: 'Spending limits', blurb: 'Caps, budgets, split orders and races for the last dollar.', categories: ['spending_limits', 'concurrency', 'scale'] },
+  { id: 'rules', title: 'Owner’s rules', blurb: 'Blocked shops and items, revoked access and frozen cards.', categories: ['policy', 'revocation'] },
+  { id: 'tamper', title: 'Tampering', blurb: 'Forged approvals, swapped baskets, invented prices and hijacked listings.', categories: ['integrity'] },
+  { id: 'access', title: 'Who’s asking', blurb: 'Agents and outsiders reaching for authority they were never given.', categories: ['access_control'] },
+  { id: 'web', title: 'Web checkout', blurb: 'One-time purchases on the open web, paid with single-use cards.', categories: ['web_checkout'] },
+];
 
 type RunState = { status: 'idle' } | { status: 'running' } | { status: 'done'; result: AttackResult } | { status: 'failed'; message: string };
 
@@ -49,6 +60,7 @@ export default function SecurityLab() {
   const [loadError, setLoadError] = useState('');
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [filter, setFilter] = useState('all');
   const [runningAll, setRunningAll] = useState(false);
   const [tab, setTab] = useState<'live' | 'lab'>(() => new URLSearchParams(window.location.search).get('security') === 'lab' ? 'lab' : 'live');
   // Each tab has its own stage so live counters only ever count real wallet decisions.
@@ -134,6 +146,9 @@ export default function SecurityLab() {
   const onStage = pending.current.values().next().value?.id as string | undefined;
   const queued = new Set([...pending.current.values()].map((entry) => entry.id).filter((id) => id !== onStage));
   const current = selected ? attacks?.find((attack) => attack.id === selected) ?? null : null;
+  const controlAttack = attacks?.find((attack) => attack.category === 'control');
+  const groups = GROUPS.map((group) => ({ group, list: attacks?.filter((attack) => group.categories.includes(attack.category)) ?? [] }))
+    .filter(({ list }) => list.length > 0);
 
   return <div className="sl">
     <section className="sl-dark" data-theme="dark">
@@ -186,7 +201,7 @@ export default function SecurityLab() {
       <div className="sl-board-head">
         <div>
           <h2>{attackTotal} ways to try to break it</h2>
-          <p>Each attack hits a brand-new throwaway wallet that is deleted afterwards. Your real wallet is never touched. Click any tile to see exactly what happened.</p>
+          <p>Each attack runs against a throwaway wallet. Tap one to see every request and the wallet’s answer.</p>
         </div>
         <button className="sl-cta" onClick={() => void runAll()} disabled={!attacks || runningAll}>
           {runningAll ? <><Loader2 size={17} className="sl-spin" />Running…</> : results.length ? <><RotateCcw size={17} />Run all again</> : <><Play size={17} />Run all</>}
@@ -196,13 +211,32 @@ export default function SecurityLab() {
       {loadError && <div className="sl-alert"><CircleAlert size={18} />{loadError}</div>}
       {!attacks && !loadError && <div className="sl-loading"><Loader2 size={18} className="sl-spin" />Loading attacks…</div>}
 
-      <div className="sl-tiles">
-        {attacks?.map((attack) => <AttackTile key={attack.id} attack={attack} state={runs[attack.id] ?? { status: 'idle' }} queued={queued.has(attack.id)}
-          selected={selected === attack.id} onSelect={() => setSelected(selected === attack.id ? null : attack.id)} />)}
-      </div>
+      {attacks && <>
+        {controlAttack && <AttackTile attack={controlAttack} state={runs[controlAttack.id] ?? { status: 'idle' }} queued={queued.has(controlAttack.id)}
+          selected={selected === controlAttack.id} onSelect={() => setSelected(controlAttack.id)} hint="A real, in-policy purchase. It must still go through." />}
 
-      {current && <AttackDetail attack={current} state={runs[current.id] ?? { status: 'idle' }} disabled={runningAll}
-        onRun={() => { stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); void run(current.id); }} />}
+        <div className="sl-filters" role="tablist" aria-label="Attack groups">
+          <button role="tab" aria-selected={filter === 'all'} className={filter === 'all' ? 'on' : ''} onClick={() => setFilter('all')}>All <span>{attackTotal}</span></button>
+          {groups.map(({ group, list }) => <button key={group.id} role="tab" aria-selected={filter === group.id} className={filter === group.id ? 'on' : ''} onClick={() => setFilter(group.id)}>{group.title} <span>{list.length}</span></button>)}
+        </div>
+
+        {groups.filter(({ group }) => filter === 'all' || filter === group.id).map(({ group, list }) => {
+          const done = list.flatMap((attack) => { const state = runs[attack.id]; return state?.status === 'done' ? [state.result] : []; });
+          return <section key={group.id} className="sl-group">
+            <header>
+              <div><h3>{group.title}</h3><p>{group.blurb}</p></div>
+              {done.length > 0 && <span className={`sl-group-score ${done.every((result) => result.held) ? 'good' : 'bad'}`}>{done.filter((result) => result.held).length}/{list.length} blocked</span>}
+            </header>
+            <div className="sl-tiles">
+              {list.map((attack) => <AttackTile key={attack.id} attack={attack} state={runs[attack.id] ?? { status: 'idle' }} queued={queued.has(attack.id)}
+                selected={selected === attack.id} onSelect={() => setSelected(attack.id)} />)}
+            </div>
+          </section>;
+        })}
+      </>}
+
+      {current && <AttackDetail attack={current} state={runs[current.id] ?? { status: 'idle' }} disabled={runningAll} onClose={() => setSelected(null)}
+        onRun={() => { setSelected(null); stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); void run(current.id); }} />}
     </section>}
 
     <footer className="sl-foot">
@@ -211,7 +245,7 @@ export default function SecurityLab() {
   </div>;
 }
 
-function AttackTile({ attack, state, queued, selected, onSelect }: { attack: AttackSummary; state: RunState; queued: boolean; selected: boolean; onSelect: () => void }) {
+function AttackTile({ attack, state, queued, selected, onSelect, hint }: { attack: AttackSummary; state: RunState; queued: boolean; selected: boolean; onSelect: () => void; hint?: string }) {
   const Icon = ATTACK_ICONS[attack.id] ?? ShieldCheck;
   const isControl = attack.category === 'control';
   const result = state.status === 'done' ? state.result : null;
@@ -220,15 +254,22 @@ function AttackTile({ attack, state, queued, selected, onSelect }: { attack: Att
     : result ? (result.held ? (isControl ? 'Allowed' : 'Blocked') : (isControl ? 'Wrongly refused' : 'Breached')) : isControl ? 'Normal purchase' : 'Ready';
   const StatusIcon = tone === 'running' ? Loader2 : tone === 'good' ? ShieldCheck : tone === 'bad' ? ShieldX : null;
   return <button className={`sl-tile ${tone} ${selected ? 'selected' : ''} ${isControl ? 'control' : ''}`} onClick={onSelect} aria-pressed={selected}>
-    <span className="sl-tile-icon"><Icon size={20} /></span>
-    <strong>{attack.title}</strong>
+    <span className="sl-tile-icon"><Icon size={18} /></span>
+    <span className="sl-tile-text"><strong>{attack.title}</strong>{hint && <small>{hint}</small>}</span>
     <span className="sl-tile-status">{StatusIcon && <StatusIcon size={14} className={tone === 'running' ? 'sl-spin' : ''} />}{label}</span>
   </button>;
 }
 
-function AttackDetail({ attack, state, disabled, onRun }: { attack: AttackSummary; state: RunState; disabled: boolean; onRun: () => void }) {
+function AttackDetail({ attack, state, disabled, onRun, onClose }: { attack: AttackSummary; state: RunState; disabled: boolean; onRun: () => void; onClose: () => void }) {
   const result = state.status === 'done' ? state.result : null;
-  return <article className="sl-detail">
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return <div className="sl-drawer-wrap" onClick={onClose}>
+  <article className="sl-detail" role="dialog" aria-modal="true" aria-label={attack.title} onClick={(event) => event.stopPropagation()}>
+    <button className="sl-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
     <div className="sl-detail-head">
       <div>
         <h3>{attack.title}</h3>
@@ -242,7 +283,8 @@ function AttackDetail({ attack, state, disabled, onRun }: { attack: AttackSummar
     {state.status === 'failed' && <div className="sl-alert"><CircleAlert size={16} />{state.message}</div>}
     {result && <Trace result={result} />}
     {state.status === 'idle' && <p className="sl-hint">Run it to see every request the attacker sends and what the wallet answers.</p>}
-  </article>;
+  </article>
+  </div>;
 }
 
 function Trace({ result }: { result: AttackResult }) {
