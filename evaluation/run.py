@@ -1,6 +1,7 @@
-"""Run C1 (live HTTP), C2 (20 deterministic scenarios) and the extra §11 items; write results/latest.json; print a summary.
+"""Run C1 (live HTTP), C2 (20 deterministic scenarios), the extra §11 items and the 10 model-dependent scenarios;
+write results/latest.json; print a summary.
 
-    .venv/bin/python -m evaluation.run          (from the repo root)
+    .venv/bin/python -m evaluation.run          (from the repo root; the model section needs TYPESAFE_API_KEY)
 
 Every number is measured in this run. Nothing is estimated or carried over.
 """
@@ -9,27 +10,16 @@ from __future__ import annotations
 
 import json
 import platform
-import statistics
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from mandate.payments.clock import HKT, iso
 
-from . import extra, live, scenarios
-from .common import POLICY, hkd
+from . import extra, live, model_eval, scenarios
+from .common import POLICY, hkd, pct, rate
 
 OUT = Path(__file__).with_name("results") / "latest.json"
-
-
-def pct(xs: list[float], p: int) -> float | None:
-    if len(xs) < 2:
-        return round(xs[0], 2) if xs else None
-    return round(statistics.quantiles(xs, n=100, method="inclusive")[p - 1], 2)
-
-
-def rate(n: int, d: int) -> dict:
-    return {"count": n, "denominator": d, "rate": round(n / d, 4) if d else None}
 
 
 def metrics(results: list[dict], auth_ms: list[float], pay_ms: list[float]) -> dict:
@@ -71,6 +61,7 @@ def _weekly(results: list[dict]) -> dict:
 def main() -> dict:
     c1 = live.run()
     results, auth_ms, pay_ms = scenarios.run_all()
+    model = model_eval.run()
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
                             cwd=Path(__file__).parent).stdout.strip()
     out = {
@@ -91,7 +82,9 @@ def main() -> dict:
         "route_costs": extra.route_costs(),
         "formal": extra.formal(),
         "audit": extra.audit(),
-        "not_run": "10 model-dependent scenarios (incl. prompt injection) are not run yet",
+        "model_dependent": model,
+        "not_run": ([f"model_dependent: {model['reason']}"] if model["status"] != "run" else [])
+        + ["participant study (existing manual steps, timed task completion) is not run"],
     }
     OUT.parent.mkdir(exist_ok=True)
     OUT.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
@@ -123,6 +116,7 @@ def summary(out: dict) -> str:
                             f"{f['runtime_ms']} ms)" for f in out["formal"]),
         f"[audit] {out['audit']['detected']}/{out['audit']['of']} edits caught: "
         + ", ".join(f"{c['case']} {c['status']}" for c in out["audit"]["cases"]),
+        model_eval.report(out["model_dependent"]),
         f"  wrote {OUT.relative_to(OUT.parents[2])}",
     ]
     return "\n".join(lines)

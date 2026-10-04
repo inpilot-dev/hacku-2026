@@ -10,6 +10,10 @@ ARTIFICIAL DELAY: ``race_delay_s`` (default 0.05s) sleeps between the read and
 the write so the interleaving reproduces on every run. Results label it.
 Without it the race still exists but only shows up intermittently.
 
+``enforce_caps=False`` (prompt-only baseline of the model-dependent scenarios) also drops the
+order-cap and weekly checks: the simulator still prices the basket from the catalog, but nothing
+enforces the mandate. ``catalog`` swaps in the evaluation catalog.
+
 State is in memory; payments are fake records ("payment_mode": "unsafe_baseline").
 """
 
@@ -27,9 +31,9 @@ from mandate.payments.catalog import Catalog
 from mandate.payments.clock import HKT, iso
 
 
-def create_app(race_delay_s: float = 0.05) -> FastAPI:
+def create_app(race_delay_s: float = 0.05, catalog: Catalog | None = None, enforce_caps: bool = True) -> FastAPI:
     app = FastAPI(title="UNSAFE baseline wallet (evaluation only)")
-    catalog = Catalog.load()
+    catalog = catalog or Catalog.load()
     mandates: dict[str, dict] = {}
     quotes: dict[str, dict] = {}
     reservations: dict[str, dict] = {}
@@ -66,7 +70,7 @@ def create_app(race_delay_s: float = 0.05) -> FastAPI:
         amount = q["total_minor"]
         available = m["weekly_limit"] - m["paid"] - m["reserved"]  # 1) read
         time.sleep(race_delay_s)                                     # ARTIFICIAL DELAY between read and write
-        if amount > m["policy"]["per_order_limit_minor"] or amount > available:  # 2) decide on the stale read
+        if enforce_caps and (amount > m["policy"]["per_order_limit_minor"] or amount > available):  # 2) stale read
             return {"status": "refused", "transaction_id": body["transaction_id"],
                     "violations": [{"code": "PERIOD_BUDGET_EXCEEDED", "rule_id": f"{m['id']}/v1/period:calendar_week",
                                     "actual_minor": amount, "limit_minor": available}]}

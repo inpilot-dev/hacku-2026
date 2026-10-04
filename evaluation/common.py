@@ -7,6 +7,7 @@ The unsafe baseline exposes the same paths, so one client drives both.
 
 from __future__ import annotations
 
+import statistics
 import time
 import uuid
 
@@ -104,3 +105,13 @@ class Api:
 def hkd(minor: int) -> str:
     sign = "-" if minor < 0 else ""
     return f"{sign}HK${abs(minor) // 100:,}.{abs(minor) % 100:02d}"
+
+
+def pct(xs: list[float], p: int) -> float | None:
+    if len(xs) < 2:
+        return round(xs[0], 2) if xs else None
+    return round(statistics.quantiles(xs, n=100, method="inclusive")[p - 1], 2)
+
+
+def rate(n: int, d: int) -> dict:
+    return {"count": n, "denominator": d, "rate": round(n / d, 4) if d else None}
