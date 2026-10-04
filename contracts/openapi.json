@@ -8478,6 +8478,7 @@
               "concurrency",
               "revocation",
               "access_control",
+              "web_checkout",
               "scale"
             ]
           },
@@ -8668,6 +8669,7 @@
               "concurrency",
               "revocation",
               "access_control",
+              "web_checkout",
               "scale"
             ]
           },

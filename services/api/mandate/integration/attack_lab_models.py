@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 AttackCategory = Literal["control", "spending_limits", "policy", "integrity", "concurrency", "revocation",
-                         "access_control", "scale"]
+                         "access_control", "web_checkout", "scale"]
 
 
 class AttackSummary(BaseModel):

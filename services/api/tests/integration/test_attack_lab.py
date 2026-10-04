@@ -30,8 +30,23 @@ def test_trace_never_contains_a_usable_capability():
 
 
 def test_refused_attacks_move_no_money():
-    for attack_id in ("over-order-cap", "forged-token", "quote-swap", "revoked-mid-flight", "privilege-escalation"):
+    for attack_id in ("over-order-cap", "forged-token", "quote-swap", "revoked-mid-flight", "privilege-escalation",
+                      "checkout-swap", "listing-injection", "frozen-card", "web-off", "web-agent-approves",
+                      "web-over-cap"):
         assert run_attack(attack_id)["ledger"]["paid_total_minor"] == 0, attack_id
+
+
+def test_review_attacks_are_caught_by_the_intended_signal():
+    for attack_id, check in (("split-orders", "risk:split_order"), ("listing-injection", "risk:listing_text:p_a_rice")):
+        last = [step for step in run_attack(attack_id)["steps"] if step["phase"] == "attack"][-1]
+        assert [v["rule_id"].rsplit("/", 1)[1] for v in last["response"]["violations"]] == [check], attack_id
+
+
+def test_single_use_card_is_charged_once_and_never_shown():
+    result = run_attack("web-card-reuse")
+    assert (result["ledger"]["completed_payments"], result["ledger"]["paid_total_minor"]) == (1, 19900)
+    for step in result["steps"]:
+        assert not {"pan", "cvv"} & set(step["response"]), step
 
 
 def test_swarm_never_overspends_the_shared_budget():
