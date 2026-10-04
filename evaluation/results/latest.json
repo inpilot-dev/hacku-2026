@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-03T12:39:33+08:00",
-  "git_commit": "3ebaeeb",
+  "generated_at": "2026-10-04T11:00:17+08:00",
+  "git_commit": "1ea106a",
   "python": "3.13.14",
   "catalog": "placeholder (services/api/mandate/payments/fixtures/placeholder_catalog.json), NOT observed data",
   "live_http": {
@@ -35,7 +35,7 @@
         "refusals": [
           {
             "code": "PERIOD_BUDGET_EXCEEDED",
-            "rule_id": "m_1684e22ca4504a308a72e16f2b1886df/v1/period:calendar_week"
+            "rule_id": "m_4f236a305a1f401db26804463714bd90/v1/period:calendar_week"
           }
         ],
         "completed_payments": 1,
@@ -49,9 +49,9 @@
     ],
     "retry": {
       "receipt_ids": [
-        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
-        "rcpt_fe544a83ba984f21a2eac783a5de39e2",
-        "rcpt_fe544a83ba984f21a2eac783a5de39e2"
+        "rcpt_9994599cd3974743bbadc354dcc52422",
+        "rcpt_9994599cd3974743bbadc354dcc52422",
+        "rcpt_9994599cd3974743bbadc354dcc52422"
       ],
       "same_receipt": true,
       "replayed_flags": [
@@ -65,12 +65,12 @@
     "revoke": {
       "approved_before_revoke": "approved",
       "cancelled_reservation_ids": [
-        "res_6472703a1f1c4ee292678c51e30ebed0"
+        "res_398f245ec7324c9b9dfa03762d4b5a4e"
       ],
       "payment_after_revoke": "refused",
       "refusal": {
         "code": "MANDATE_REVOKED",
-        "rule_id": "m_05472dde0d2d4030a25c4b8f77b73045/v2/status"
+        "rule_id": "m_d99cd2032d1e4816abac0c50c47e692a/v2/status"
       },
       "earlier_payment_still_paid": true,
       "week_after": {
@@ -122,13 +122,13 @@
         "where": "in-process FastAPI TestClient + SQLite on this machine, no network, no model",
         "authorize": {
           "n": 27,
-          "p50": 2.13,
-          "p95": 3.23
+          "p50": 2.43,
+          "p95": 3.63
         },
         "pay": {
           "n": 20,
-          "p50": 1.92,
-          "p95": 2.21
+          "p50": 2.12,
+          "p95": 2.62
         }
       }
     },
@@ -153,7 +153,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_69df5362ca8e4b4eb17894b98ab6a677"
+            "receipt_id": "rcpt_43da83f5394f4b48901706596b7d0f38"
           }
         ]
       },
@@ -177,7 +177,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 23530,
-            "receipt_id": "rcpt_ba2f08a51e44489ba5ec80eae4ade007"
+            "receipt_id": "rcpt_751992e94c9f4d218018c3458825d24f"
           }
         ]
       },
@@ -201,7 +201,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_f5571bf0c2fc482e834e335bc5c59978"
+            "receipt_id": "rcpt_2a8eebb472fd45b6885c55e9a80b0401"
           }
         ]
       },
@@ -441,7 +441,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_482e675943fa4fea98cbd5a7785bd65f"
+            "receipt_id": "rcpt_9e83fbc3e5da4ba7a14a19e9ec896a82"
           }
         ]
       },
@@ -475,24 +475,16 @@
         "category": "concurrency",
         "setup": "HK$400 left, 2x HK$300 concurrent on one mandate",
         "expected": [
-          "completed",
-          "refused:PERIOD_BUDGET_EXCEEDED"
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
         ],
         "observed": [
-          "completed",
-          "refused:PERIOD_BUDGET_EXCEEDED"
+          "refused:PERIOD_BUDGET_EXCEEDED",
+          "completed"
         ],
         "passed": true,
         "error": null,
         "attempts": [
-          {
-            "legit": true,
-            "expected": "completed",
-            "outcome": "completed",
-            "completed": true,
-            "amount_minor": 30000,
-            "receipt_id": "rcpt_7746f49f5f594ec9a766cfd659d62539"
-          },
           {
             "legit": false,
             "expected": "refused:PERIOD_BUDGET_EXCEEDED",
@@ -500,6 +492,14 @@
             "completed": false,
             "amount_minor": null,
             "receipt_id": null
+          },
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_6fb8ba1bcda849269274c23607bd07bf"
           }
         ]
       },
@@ -509,16 +509,24 @@
         "category": "concurrency",
         "setup": "Two shop child mandates share HK$400 left of the parent, 2x HK$300 concurrent",
         "expected": [
-          "refused:PERIOD_BUDGET_EXCEEDED",
-          "completed"
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
         ],
         "observed": [
-          "refused:PERIOD_BUDGET_EXCEEDED",
-          "completed"
+          "completed",
+          "refused:PERIOD_BUDGET_EXCEEDED"
         ],
         "passed": true,
         "error": null,
         "attempts": [
+          {
+            "legit": true,
+            "expected": "completed",
+            "outcome": "completed",
+            "completed": true,
+            "amount_minor": 30000,
+            "receipt_id": "rcpt_5eba70d382634632a5f5f77cbeaac909"
+          },
           {
             "legit": false,
             "expected": "refused:PERIOD_BUDGET_EXCEEDED",
@@ -526,14 +534,6 @@
             "completed": false,
             "amount_minor": null,
             "receipt_id": null
-          },
-          {
-            "legit": true,
-            "expected": "completed",
-            "outcome": "completed",
-            "completed": true,
-            "amount_minor": 30000,
-            "receipt_id": "rcpt_702a2236c6ab4844aa028f75af31b8e4"
           }
         ]
       },
@@ -557,7 +557,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_815858c9b4da4126bdbba5fb5aa5d2a0"
+            "receipt_id": "rcpt_a3a4c8b4a11b4c2a89ab46e04044cf6f"
           }
         ]
       },
@@ -581,7 +581,7 @@
             "outcome": "completed",
             "completed": true,
             "amount_minor": 29700,
-            "receipt_id": "rcpt_389b2dc916594300bc314f1ecd91d1a6"
+            "receipt_id": "rcpt_bdcb4f99dc674cb19e0aed834dd0d73a"
           }
         ]
       },
@@ -739,7 +739,7 @@
       "solver_result": "sat",
       "max_steps": 8,
       "transaction_count": 2,
-      "runtime_ms": 89,
+      "runtime_ms": 116,
       "assumptions": [
         "Exactly two transactions, one per agent (Agent A, Agent B), share one available budget.",
         "Amounts are the concrete integer HKD cents in the request.",
