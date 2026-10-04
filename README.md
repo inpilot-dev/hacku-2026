@@ -80,6 +80,11 @@ Prices come from a timestamped Wellcome capture (3 Oct 2026, 6:13 pm). The owner
 
 ### Attack lab
 
+<p align="center">
+  <a href="docs/media/attack-lab.mp4"><img src="docs/media/attack-lab.gif" width="720" alt="Attack lab: attacks run one by one against a throwaway wallet, money moved stays HK$0.00"></a><br>
+  <sub>▶ <a href="docs/media/attack-lab.mp4">Attack lab clip (28 s, from the demo)</a> · recorded on the earlier 14-attack version; the lab now runs 23.</sub>
+</p>
+
 Mandate is an agent harness: Jev, an MCP client or any HTTP agent plugs in with only a scoped token. The attack lab (`?security`, `POST /demo/attacks/{id}/runs`) replays **23 attacks plus one legitimate control purchase** against the real wallet code, each on a fresh, isolated wallet, and shows the redacted request trace and ledger. The live wallet is never touched. `services/api/tests/integration/test_attack_lab.py` checks that every attack is held and no money moves.
 
 <details>
