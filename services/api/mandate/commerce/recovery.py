@@ -39,52 +39,55 @@ class Recovery:
         configured = self.provider_factory()
         if hasattr(configured, 'close'):
             configured.close()
+        with self.wallet.db.write_tx() as conn:
+            return self.create_in_transaction(conn, actor, key, body)
+
+    def create_in_transaction(self, conn, actor, key, body):
         request_hash = digest(body)
         now = self.wallet.clock.now()
-        with self.wallet.db.write_tx() as conn:
-            prior = conn.execute('SELECT * FROM commerce_jobs WHERE owner_id=? AND operation_key=?', (actor.actor_id, key)).fetchone()
-            if prior:
-                if prior['request_hash'] != request_hash:
-                    raise conflict('Operation key already belongs to a different purchase.')
-                return json.loads(prior['body_json'])
-            if conn.execute("SELECT 1 FROM commerce_jobs WHERE owner_id=? AND json_extract(body_json,'$.status') IN ('unknown','needs_operator') LIMIT 1", (actor.actor_id,)).fetchone():
-                raise conflict('Resolve the existing provider operation before another sandbox purchase.')
-            mandate = self.wallet._load_mandate(conn, body['mandate_id'])
-            if not mandate or mandate['owner_id'] != actor.actor_id:
-                raise not_found('Mandate')
-            row = self.wallet._load_quote(conn, body['quote_id'], actor)
-            if not row:
-                raise not_found('Quote')
-            quote = json.loads(row['body_json'])
-            if digest(quote) != body['approved_quote_hash']:
-                raise conflict('Approve the exact current quote before starting sandbox checkout.')
-            chain = self.wallet._chain(conn, mandate)
-            budgets = self.wallet._ensure_periods(conn, chain, now)
-            assessment = self.wallet._risk(conn, chain, quote, budgets, now)
-            ev = rules.evaluate(chain, quote, budgets, now, recent_purchases=self.wallet._recent_purchases(conn, chain, now), risk=assessment.reasons)
-            if ev.hard:
-                raise invalid('The purchase is outside its mandate.', violations=ev.hard)
-            frozen = self.wallet._frozen_card_violation(conn, chain)
-            if frozen:
-                raise invalid('A card in the mandate chain is frozen.', violations=[frozen])
-            # This user-only API is explicit owner approval for THIS exact quote,
-            # not a grant of greater authority to an agent.
-            job = {'id': 'ext_' + uuid.uuid4().hex, 'owner_id': actor.actor_id, 'mandate_id': mandate['id'],
-                   'mandate_version': mandate['version'], 'quote': quote, 'quote_hash': digest(quote),
-                   'amount_minor': quote['total_minor'], 'currency': 'HKD', 'provider': 'local_sandbox',
-                   'status': 'queued', 'payment_state': 'not_started', 'order_state': 'not_created',
-                   'recovery_state': 'none', 'budget_state': 'held', 'period_ids': [b['id'] for b in budgets],
-                   'created_at': iso(now), 'approved_at': iso(now), 'attempts': 0,
-                   'owner_approved_review_reasons': ev.review, 'risk_assessment': assessment.summary(),
-                   'scenario': body['scenario'], 'session_id': None, 'payment_id': None, 'refund_id': None,
-                   'checkout_url': None, 'cancel_requested': False, 'events': [],
-                   'boundary': 'Local simulated payment and synthetic order. No real funds or retailer integration.'}
-            for b in budgets:
-                conn.execute('UPDATE budget_periods SET reserved_minor=reserved_minor+?, version=version+1 WHERE id=?', (job['amount_minor'], b['id']))
-            self.event(job, 'Exact quote approved and budget reserved; provider has not been called.')
-            conn.execute('INSERT INTO commerce_jobs(id,owner_id,mandate_id,operation_key,request_hash,body_json) VALUES(?,?,?,?,?,?)',
-                         (job['id'], actor.actor_id, mandate['id'], key, request_hash, json.dumps(job)))
-            self.audit(conn, job, 'sandbox.reserved')
+        prior = conn.execute('SELECT * FROM commerce_jobs WHERE owner_id=? AND operation_key=?', (actor.actor_id, key)).fetchone()
+        if prior:
+            if prior['request_hash'] != request_hash:
+                raise conflict('Operation key already belongs to a different purchase.')
+            return json.loads(prior['body_json'])
+        if conn.execute("SELECT 1 FROM commerce_jobs WHERE owner_id=? AND json_extract(body_json,'$.status') IN ('unknown','needs_operator') LIMIT 1", (actor.actor_id,)).fetchone():
+            raise conflict('Resolve the existing provider operation before another sandbox purchase.')
+        mandate = self.wallet._load_mandate(conn, body['mandate_id'])
+        if not mandate or mandate['owner_id'] != actor.actor_id:
+            raise not_found('Mandate')
+        row = self.wallet._load_quote(conn, body['quote_id'], actor)
+        if not row:
+            raise not_found('Quote')
+        quote = json.loads(row['body_json'])
+        if digest(quote) != body['approved_quote_hash']:
+            raise conflict('Approve the exact current quote before starting sandbox checkout.')
+        chain = self.wallet._chain(conn, mandate)
+        budgets = self.wallet._ensure_periods(conn, chain, now)
+        assessment = self.wallet._risk(conn, chain, quote, budgets, now)
+        ev = rules.evaluate(chain, quote, budgets, now, recent_purchases=self.wallet._recent_purchases(conn, chain, now), risk=assessment.reasons)
+        if ev.hard:
+            raise invalid('The purchase is outside its mandate.', violations=ev.hard)
+        frozen = self.wallet._frozen_card_violation(conn, chain)
+        if frozen:
+            raise invalid('A card in the mandate chain is frozen.', violations=[frozen])
+        # This user-only API is explicit owner approval for THIS exact quote,
+        # not a grant of greater authority to an agent.
+        job = {'id': 'ext_' + uuid.uuid4().hex, 'owner_id': actor.actor_id, 'mandate_id': mandate['id'],
+               'mandate_version': mandate['version'], 'quote': quote, 'quote_hash': digest(quote),
+               'amount_minor': quote['total_minor'], 'currency': 'HKD', 'provider': 'local_sandbox',
+               'status': 'queued', 'payment_state': 'not_started', 'order_state': 'not_created',
+               'recovery_state': 'none', 'budget_state': 'held', 'period_ids': [b['id'] for b in budgets],
+               'created_at': iso(now), 'approved_at': iso(now), 'attempts': 0,
+               'owner_approved_review_reasons': ev.review, 'risk_assessment': assessment.summary(),
+               'scenario': body['scenario'], 'session_id': None, 'payment_id': None, 'refund_id': None,
+               'checkout_url': None, 'cancel_requested': False, 'events': [],
+               'boundary': 'Local simulated payment and synthetic order. No real funds or retailer integration.'}
+        for b in budgets:
+            conn.execute('UPDATE budget_periods SET reserved_minor=reserved_minor+?, version=version+1 WHERE id=?', (job['amount_minor'], b['id']))
+        self.event(job, 'Exact quote approved and budget reserved; provider has not been called.')
+        conn.execute('INSERT INTO commerce_jobs(id,owner_id,mandate_id,operation_key,request_hash,body_json) VALUES(?,?,?,?,?,?)',
+                     (job['id'], actor.actor_id, mandate['id'], key, request_hash, json.dumps(job)))
+        self.audit(conn, job, 'sandbox.reserved')
         return job
 
     def audit(self, conn, job, kind):
@@ -173,7 +176,7 @@ class Recovery:
         job = self.get(actor, job_id)
         provider = None
         try:
-            if job['status'] in ('confirmed', 'refunded', 'canceled'):
+            if job['status'] in ('refunded', 'canceled') or (job['status'] == 'confirmed' and not job.get('force_refund')):
                 return job
             provider = self.provider_factory()
             job['attempts'] += 1
@@ -215,8 +218,8 @@ class Recovery:
             if status == 'succeeded':
                 job['payment_state'] = 'captured'
                 self.money(job, 'spent')
-                if job['cancel_requested'] or job['scenario'] in ('order_failure', 'pending_refund', 'failed_refund'):
-                    job.update(order_state='canceled_after_capture' if job['cancel_requested'] else 'failed', recovery_state='refund_requested', status='recovering')
+                if job.get('force_refund') or job['cancel_requested'] or job['scenario'] in ('order_failure', 'pending_refund', 'failed_refund'):
+                    job.update(order_state='group_rolled_back' if job.get('force_refund') else 'canceled_after_capture' if job['cancel_requested'] else 'failed', recovery_state='refund_requested', status='recovering')
                     self.save(job)
                     if not job['refund_id']:
                         refund = provider.refund(job)

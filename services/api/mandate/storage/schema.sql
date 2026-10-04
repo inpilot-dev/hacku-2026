@@ -283,3 +283,8 @@ CREATE TABLE IF NOT EXISTS commerce_jobs (
 CREATE TABLE IF NOT EXISTS commerce_sandbox_objects (
     id TEXT PRIMARY KEY, body_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS commerce_groups (
+    id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, operation_key TEXT NOT NULL,
+    request_hash TEXT NOT NULL, body_json TEXT NOT NULL, lease_until REAL NOT NULL DEFAULT 0,
+    UNIQUE(owner_id, operation_key)
+);

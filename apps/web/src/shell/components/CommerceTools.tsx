@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { request } from '@/lib/api';
-import { commerce, type Operation, type Plans, type Study } from '@/lib/commerce';
+import { commerce, type Operation, type Plans, type Study, type BasketGroup } from '@/lib/commerce';
 import { useLocale } from '@/lib/locale';
 import { money } from '@/lib/format';
 import { TOKEN, useAccount } from '../data/account';
@@ -24,6 +24,8 @@ export default function CommerceTools({ quote = null }: { quote?: Quote | null }
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [plans, setPlans] = useState<Plans | null>(null);
+  const [reviewedPlan, setReviewedPlan] = useState<Array<{ quote: Quote; quote_hash: string }>>([]);
+  const [groups, setGroups] = useState<BasketGroup[]>([]);
   const [studies, setStudies] = useState<Study[]>([]);
   const [participant, setParticipant] = useState('P01');
   const [mode, setMode] = useState<'manual' | 'agent'>('manual');
@@ -38,10 +40,10 @@ export default function CommerceTools({ quote = null }: { quote?: Quote | null }
   const [scenario, setScenario] = useState<'happy' | 'order_failure' | 'lost_capture_response' | 'pending_refund' | 'failed_refund'>('happy');
   const [credential, setCredential] = useState('');
   const [credentialResult, setCredentialResult] = useState('');
-  useEffect(() => { setQuoteId(quote?.id ?? ''); setSelected(quote); setHash(''); setPlans(null); }, [quote]);
+  useEffect(() => { setQuoteId(quote?.id ?? ''); setSelected(quote); setHash(''); setPlans(null); setReviewedPlan([]); }, [quote]);
   async function refresh() {
-    const [s, o, p] = await Promise.all([commerce.studies(TOKEN), commerce.operations(TOKEN), commerce.provider(TOKEN)]);
-    setStudies(s.runs); setOperations(o.operations); setConfigured(p.configured);
+    const [s, o, p, g] = await Promise.all([commerce.studies(TOKEN), commerce.operations(TOKEN), commerce.provider(TOKEN), commerce.groups(TOKEN)]);
+    setStudies(s.runs); setOperations(o.operations); setConfigured(p.configured); setGroups(g.groups);
   }
   async function perform(action: () => Promise<void>) {
     setBusy(true); setError('');
@@ -53,6 +55,16 @@ export default function CommerceTools({ quote = null }: { quote?: Quote | null }
     const catalog = await request<{ evidence: Array<{ id: string; source_url: string; observed_at: string }> }>('/catalog', TOKEN);
     const evidence = catalog.evidence.find((e) => result.quote.evidence_ids.includes(e.id));
     setSourceUrl(evidence?.source_url ?? 'snapshot:' + result.quote.id); setObservation(evidence?.observed_at ?? '');
+  }
+  async function reviewPlan(plan: Plans['plans'][number]) {
+    const reviewed = [];
+    for (const order of plan.orders) {
+      const current = await request<Quote>('/quotes', TOKEN, { method: 'POST', body: JSON.stringify({ merchant_id: order.merchant_id, items: order.items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })), delivery_context_id: order.delivery_context_id }) });
+      reviewed.push(await commerce.approval(TOKEN, current.id));
+    }
+    if (reviewed.length === 1) {
+      setSelected(reviewed[0].quote); setQuoteId(reviewed[0].quote.id); setHash(reviewed[0].quote_hash); setReviewedPlan([]);
+    } else setReviewedPlan(reviewed);
   }
   const active = studies.find((s) => !s.finished_at);
   const canStart = selected && hash && account.active;
@@ -67,13 +79,25 @@ export default function CommerceTools({ quote = null }: { quote?: Quote | null }
 
       <section className="space-y-2" aria-label="Basket planning">
         <h3 className="font-medium">{t('Compare complete basket plans', '比較整個購物籃方案')}</h3>
-        <p className="text-xs text-muted-foreground">{t('Exact title and pack only. Quantities stay fixed. Shipping comes from captured rules. Plans require separate review; nothing is purchased.', '只比較相同名稱及包裝，數量不變，運費來自已記錄規則。方案須另行審核，不會購買。')}</p>
+        <p className="text-xs text-muted-foreground">{t('Exact title and pack only. Quantities stay fixed. Shipping comes from captured rules. Review current store quotes before approving any plan.', '只比較相同名稱及包裝，數量不變，運費來自已記錄規則。批准方案前須檢視現行商店報價。')}</p>
         <Button variant="outline" disabled={busy || !selected || !account.mandateId} onClick={() => void perform(async () => {
           setPlans(await commerce.plans(TOKEN, { mandate_id: account.mandateId, items: selected!.items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })) }));
         })}>{t('Find basket combinations', '尋找購物籃組合')}</Button>
         {plans && <><p className="text-xs">{plans.reason} · {plans.evaluated} {t('combinations checked', '個組合已檢查')}{plans.truncated ? t(' · search limit reached', ' · 已達搜尋上限') : ''}</p>
           {!plans.plans.length && <p>{t('No feasible observed plan. Change your list or explicitly revise your allowance.', '沒有可行的觀測方案。請修改清單或明確修改授權。')}</p>}
-          {plans.plans.map((p, i) => <div key={i} className="rounded-lg bg-muted p-3 text-sm"><strong>{money(p.total_minor)} · {p.store_count} {t('stores', '間商店')}</strong>{p.orders.map((q) => <div key={q.merchant_id}><p>{storeName(q.merchant_id)}: {money(q.total_minor)}</p><ul>{q.items.map((item) => <li key={item.product_id}>{item.title} × {item.quantity}</li>)}{q.charges.map((charge, n) => <li key={n}>{charge.label}: {money(charge.amount_minor)}</li>)}</ul></div>)}</div>)}</>}
+          {plans.plans.map((p, i) => <div key={i} className="rounded-lg bg-muted p-3 text-sm"><strong>{money(p.total_minor)} · {p.store_count} {t('stores', '間商店')}</strong>{p.orders.map((q) => <div key={q.merchant_id}><p>{storeName(q.merchant_id)}: {money(q.total_minor)}</p><ul>{q.items.map((item) => <li key={item.product_id}>{item.title} × {item.quantity}</li>)}{q.charges.map((charge, n) => <li key={n}>{charge.label}: {money(charge.amount_minor)}</li>)}</ul></div>)}<Button variant="outline" disabled={busy} onClick={() => void perform(() => reviewPlan(p))}>{t('Review this plan', '檢視此方案')}</Button></div>)}</>}
+        {reviewedPlan.length > 1 && <div className="space-y-2 rounded-lg border p-3">
+          <h4 className="font-medium">{t('Current split basket for approval', '待批准的現行分店購物籃')} · {money(reviewedPlan.reduce((n, r) => n + r.quote.total_minor, 0))}</h4>
+          {reviewedPlan.map((r) => <div key={r.quote.id}><strong>{storeName(r.quote.merchant_id)} · {money(r.quote.total_minor)}</strong><p className="text-sm">{r.quote.items.map((i) => `${i.title} × ${i.quantity}`).join(', ')}</p><p className="text-xs">{r.quote.charges.map((c) => `${c.label}: ${money(c.amount_minor)}`).join(', ')}</p></div>)}
+          <p className="text-xs">{t('All store budgets reserve together. A partial failure triggers cancellation/refunds; unresolved money stays accounted. The selected failure scenario applies to the last store.', '所有商店額度會一同預留。部分失敗會觸發取消／退款，未確認款項會保留帳目。所選失敗場景適用於最後一家商店。')}</p>
+          <Button disabled={busy || !account.active} onClick={() => void perform(async () => {
+            const input = { purchases: reviewedPlan.map((r, i) => ({ mandate_id: account.mandateId, quote_id: r.quote.id, approved_quote_hash: r.quote_hash, scenario: i === reviewedPlan.length - 1 ? scenario : 'happy' as const })) };
+            const keyName = `mandate-group-${reviewedPlan.map((r) => r.quote.id).join('-')}-${scenario}`;
+            const key = localStorage.getItem(keyName) ?? crypto.randomUUID(); localStorage.setItem(keyName, key);
+            const group = await commerce.startGroup(TOKEN, input, key); await commerce.advanceGroup(TOKEN, group.id); await refresh(); await account.refresh();
+          })}>{t('Approve all stores in sandbox', '在沙盒批准所有商店')}</Button>
+        </div>}
+        {groups.map((g) => <div key={g.id} className="space-y-2 rounded-lg border p-3 text-sm"><strong>{t('Split basket', '分店購物籃')} · {money(g.total_minor)} · {g.status}</strong><p>{g.boundary}</p>{g.operations.map((o) => <p key={o.id}>{storeName(o.quote.merchant_id)} · {o.payment_state} / {o.order_state} / {o.recovery_state} · {o.budget_state}</p>)}<div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await commerce.advanceGroup(TOKEN, g.id); await refresh(); await account.refresh(); })}>{t('Retrieve same basket group', '核對同一購物籃組合')}</Button>{g.status !== 'refunded' && <Button variant="outline" disabled={busy} onClick={() => void perform(async () => { await commerce.cancelGroup(TOKEN, g.id); await refresh(); await account.refresh(); })}>{t('Cancel group and recover', '取消組合及復原')}</Button>}</div></div>)}
       </section>
 
       <section className="space-y-2" aria-label="Participant comparison">

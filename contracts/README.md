@@ -426,4 +426,4 @@ No real payment integration or merchant acceptance is established by this behavi
 
 ## Commerce extensions
 
-Owner-only `/commerce` inputs and agent candidate comparisons are included in OpenAPI and generated types. Commerce responses are currently extensible objects with frontend types; see [the feature map and response boundaries](../docs/commerce-improvements.md). Planning proposals are not executable quotes. Durable recovery uses a local sandbox and never moves real funds.
+Owner-only `/commerce` inputs and agent candidate comparisons are included in OpenAPI and generated types. Commerce responses are currently extensible objects with frontend types; see [the feature map and response boundaries](../docs/commerce-improvements.md). Planning proposals become fresh exact one-store quotes before owner approval; sandbox split groups reserve all store quotes atomically and compensate partial failures. Durable recovery uses a local sandbox and never moves real funds.

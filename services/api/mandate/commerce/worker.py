@@ -11,17 +11,18 @@ from mandate.payments.auth import Actor
 from mandate.payments.dev_app import create_app
 from mandate.payments.errors import ApiError
 from .recovery import Recovery
+from .groups import Groups
 
 
 def sweep(recovery, limit=20):
     with recovery.wallet.db.read() as conn:
-        rows = conn.execute("SELECT id,owner_id FROM commerce_jobs WHERE lease_until<=? AND json_extract(body_json,'$.status') NOT IN ('confirmed','refunded','canceled','needs_operator') ORDER BY rowid LIMIT ?", (time.time(), limit)).fetchall()
+        rows = conn.execute("SELECT id,owner_id FROM commerce_jobs WHERE json_extract(body_json,'$.group_id') IS NULL AND lease_until<=? AND json_extract(body_json,'$.status') NOT IN ('confirmed','refunded','canceled','needs_operator') ORDER BY rowid LIMIT ?", (time.time(), limit)).fetchall()
     for row in rows:
         try:
             recovery.advance(Actor(row['owner_id'], 'user'), row['id'])
         except ApiError:
             pass  # another worker owns the lease, or configuration is unavailable
-    return len(rows)
+    return len(rows) + Groups(recovery.wallet, recovery).sweep()
 
 
 if __name__ == '__main__':

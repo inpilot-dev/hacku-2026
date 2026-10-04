@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, Header, Request
 from pydantic import Field, StrictInt, StrictStr
 from mandate.payments.auth import Actor, current_actor, require_role
 from mandate.payments.models import Strict, Policy, QuoteItemRequest
-from mandate.payments.errors import invalid
+from mandate.payments.errors import invalid, conflict
 from mandate.payments.clock import iso
 from .planning import preview, optimize
 from .study import Studies
 from .recovery import Recovery, digest
 from .credentials import Credentials
+from .groups import Groups
 
 
 def user(actor: Actor = Depends(current_actor)):
@@ -56,6 +57,10 @@ class SandboxStart(Strict):
     scenario: Literal['happy', 'order_failure', 'lost_capture_response', 'pending_refund', 'failed_refund'] = 'happy'
 
 
+class GroupStart(Strict):
+    purchases: list[SandboxStart] = Field(min_length=2, max_length=3)
+
+
 class CredentialTemplate(Strict):
     mandate_id: Text
     public_x: Annotated[StrictStr, Field(min_length=43, max_length=43)]
@@ -70,6 +75,7 @@ def build_commerce_router(wallet, recovery=None):
     studies = Studies(wallet)
     recovery = recovery or Recovery(wallet)
     credentials = Credentials(wallet)
+    groups = Groups(wallet, recovery)
 
     @router.post('/commerce/preview')
     def policy_preview(actor: User, body: PreviewInput):
@@ -109,7 +115,7 @@ def build_commerce_router(wallet, recovery=None):
 
     @router.get('/commerce/operations')
     def operations(actor: User):
-        return {'operations': recovery.list(actor)}
+        return {'operations': [j for j in recovery.list(actor) if not j.get('group_id')]}
 
     @router.post('/commerce/operations', status_code=201)
     def start_operation(actor: User, key: Key, body: SandboxStart):
@@ -121,11 +127,31 @@ def build_commerce_router(wallet, recovery=None):
 
     @router.post('/commerce/operations/{operation_id}/advance')
     def advance_operation(actor: User, operation_id: str):
+        if recovery.get(actor, operation_id).get('group_id'):
+            raise conflict('Retrieve the basket group to preserve partial-failure recovery.')
         return recovery.advance(actor, operation_id)
 
     @router.post('/commerce/operations/{operation_id}/cancel')
     def cancel_operation(actor: User, operation_id: str):
+        if recovery.get(actor, operation_id).get('group_id'):
+            raise conflict('Cancel the basket group so every store is recovered together.')
         return recovery.cancellation(actor, operation_id)
+
+    @router.get('/commerce/groups')
+    def list_groups(actor: User):
+        return {'groups': groups.list(actor)}
+
+    @router.post('/commerce/groups', status_code=201)
+    def start_group(actor: User, key: Key, body: GroupStart):
+        return groups.create(actor, key, body.model_dump())
+
+    @router.post('/commerce/groups/{group_id}/advance')
+    def advance_group(actor: User, group_id: str):
+        return groups.advance(actor, group_id)
+
+    @router.post('/commerce/groups/{group_id}/cancel')
+    def cancel_group(actor: User, group_id: str):
+        return groups.cancel(actor, group_id)
 
     @router.post('/commerce/credentials/template')
     def credential_template(actor: User, body: CredentialTemplate):

@@ -46,15 +46,19 @@ class Credentials:
         if mandate['status'] != 'active':
             raise conflict('Only an active owned mandate can be exported.')
         with self.wallet.db.write_tx() as conn:
+            chain = self.wallet._chain(conn, self.wallet._load_mandate(conn, mandate_id))
+            if any(m['status'] != 'active' or parse(m['policy']['expires_at']) <= self.wallet.clock.now() for m in chain):
+                raise conflict('Every ancestor must be active for credential export or verification.')
             row = conn.execute('SELECT public_x FROM commerce_owner_keys WHERE owner_id=?', (actor.actor_id,)).fetchone()
             if row and row[0] != public_x:
                 raise conflict('Owner key is pinned. Key rotation requires a separate authorized migration.')
             conn.execute('INSERT OR IGNORE INTO commerce_owner_keys VALUES (?,?)', (actor.actor_id, public_x))
-        return {'@context': ['https://www.w3.org/ns/credentials/v2', {'AgentDelegationCredential': 'urn:mandate:AgentDelegationCredential', 'mandate_id': 'urn:mandate:mandateId', 'version': 'urn:mandate:version', 'policy': {'@id': 'urn:mandate:policy', '@type': '@json'}}], 'type': ['VerifiableCredential', 'AgentDelegationCredential'],
+        return {'@context': ['https://www.w3.org/ns/credentials/v2', {'AgentDelegationCredential': 'urn:mandate:AgentDelegationCredential', 'mandate_id': 'urn:mandate:mandateId', 'version': 'urn:mandate:version', 'authorityChain': {'@id': 'urn:mandate:authorityChain', '@type': '@json'}, 'policy': {'@id': 'urn:mandate:policy', '@type': '@json'}}], 'type': ['VerifiableCredential', 'AgentDelegationCredential'],
                 'id': 'urn:mandate:' + mandate_id + ':v' + str(mandate['version']), 'issuer': issuer,
                 'validFrom': mandate['created_at'], 'validUntil': mandate['policy']['expires_at'],
                 'credentialSubject': {'id': 'urn:mandate:agent:' + quote(mandate['delegatee_id'], safe=''),
-                                      'mandate_id': mandate_id, 'version': mandate['version'], 'policy': mandate['policy']}}
+                                      'mandate_id': mandate_id, 'version': mandate['version'], 'policy': mandate['policy'],
+                                      'authorityChain': [{'mandate_id': m['id'], 'version': m['version'], 'policy': m['policy']} for m in chain]}}
 
     def verify(self, actor, token):
         with self.wallet.db.read() as conn:

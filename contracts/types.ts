@@ -1015,3 +1015,7 @@ export type SandboxStart = {
   "approved_quote_hash": string;
   "scenario"?: "happy" | "order_failure" | "lost_capture_response" | "pending_refund" | "failed_refund";
 };
+
+export type GroupStart = {
+  "purchases": Array<SandboxStart>;
+};
